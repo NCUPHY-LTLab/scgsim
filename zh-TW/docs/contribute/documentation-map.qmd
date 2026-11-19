@@ -1,0 +1,19 @@
+---
+title: "文件導覽圖"
+description: "網站的哪一區放哪一類頁面，以及每一區所在的資料夾。"
+sidebar: contribute
+---
+
+網站分成五區，每區對應導覽列的一個項目，各有一個側欄。每一頁只屬於一區，也就是它在 `docs/` 下所在的資料夾。中文頁面位於 `zh-TW/docs/` 下的相同路徑；SGB 設計頁只有中文版。
+
+## 網站的區域 {#areas}
+
+| 區域 | 內容 | 資料夾 |
+| --- | --- | --- |
+| 開始 | 首頁（`README.md`，由 `index.qmd` 顯示）、安裝、第一個模擬與選擇模擬 | `docs/start/` |
+| 使用指南 | 每頁一項工作：準備與檢查版圖、用一種求解器計算一個量、讀取結果、在其他電腦執行、執行完成後的處理、覆晶 Xmon 完整範例，以及升級 | `docs/guides/` |
+| 概念 | 每種計算背後的物理問題與模型 | `docs/concepts/` |
+| 參考 | 支援的範圍、術語與單位、API 索引，以及詳細規格 | `docs/reference/` |
+| 貢獻 | 本導覽圖、程式碼地圖、架構、責任歸屬、來源沿革、筆記本契約、研究與歷史；中文版另有 SGB 設計 | `docs/contribute/` |
+
+頁面移動後，舊網址會以 Quarto 的 `aliases:` 保留，因此舊版本的連結仍能抵達，舊的章節定位點也會保留；頁面之間的連結一律使用目前的路徑。若某頁的各節移到其他頁面，它的舊網址會是一個轉址頁，把每個舊章節送到它現在的位置（`scripts/build_bilingual_docs.py` 的 `SPLIT_PAGES`）。移動頁面旁的圖表與圖片在新資料夾中保留原檔名，網站的找不到頁面會把舊的檔案網址送到那裡。每種計算的 PDK 筆記本列在[選擇模擬](../start/choose-a-simulation.qmd)。<span id="orcapen-to-scgsim-topics"></span>OrcaPen 頁面需要 SCGSim 的某個主題時，請連結[參考總覽](../reference/index.qmd)中涵蓋該主題的一節。

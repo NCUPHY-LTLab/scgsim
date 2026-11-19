@@ -26,17 +26,19 @@ def source_tree(tmp_path):
         'description = "A backend fixture."\n',
         encoding="utf-8",
     )
-    (root / "docs").mkdir()
-    (root / "docs/architecture.qmd").write_text(
+    # The pages sit where the site has them; their IDs are older than those paths.
+    (root / "docs/contribute").mkdir(parents=True)
+    (root / "docs/start").mkdir()
+    (root / "docs/contribute/architecture.qmd").write_text(
         '---\ntitle: "Architecture"\ndescription: "Fixture page."\n'
         'scgsim-kind: "reference"\nscgsim-status: "CONVERGING"\n'
         'scgsim-id: "docs/architecture"\n---\n\nArchitecture text.\n',
         encoding="utf-8",
     )
-    (root / "docs/examples.qmd").write_text(
+    (root / "docs/start/choose-a-simulation.qmd").write_text(
         '---\ntitle: "Examples"\ndescription: "Start here."\n'
         'scgsim-kind: "start"\nscgsim-status: "CONVERGING"\n'
-        'scgsim-id: "docs/examples"\n---\n',
+        'scgsim-id: "docs/examples"\naliases:\n  - ../examples.html\n---\n',
         encoding="utf-8",
     )
     asset = root / "docs/assets/figure.svg"
@@ -124,7 +126,7 @@ def test_invalid_page_fails_before_any_output_changes(
     source_tree, backend, content, message
 ):
     """Preserve installed outputs when authored page metadata is invalid."""
-    (source_tree / "docs/architecture.qmd").write_bytes(content)
+    (source_tree / "docs/contribute/architecture.qmd").write_bytes(content)
     before = _bundle_state(source_tree)
     with pytest.raises(ValueError, match=message):
         backend.generate_knowledge()
@@ -150,7 +152,7 @@ def test_readme_error_precedes_missing_project_description(source_tree, backend)
 
 def test_duplicate_ids_precede_project_name_access(source_tree, backend):
     """Reject duplicate resources before reading manifest distribution fields."""
-    page = source_tree / "docs/architecture.qmd"
+    page = source_tree / "docs/contribute/architecture.qmd"
     page.write_text(
         page.read_text().replace(
             'scgsim-id: "docs/architecture"', 'scgsim-id: "readme"'
@@ -176,7 +178,7 @@ def test_duplicate_ids_precede_project_name_access(source_tree, backend):
 )
 def test_examples_is_the_only_start_resource(source_tree, backend, identifier, kind):
     """Require the stable examples entry point as the sole start resource."""
-    page = source_tree / "docs/examples.qmd"
+    page = source_tree / "docs/start/choose-a-simulation.qmd"
     page.write_text(
         page.read_text(encoding="utf-8")
         .replace('scgsim-kind: "start"', f'scgsim-kind: "{kind}"')
@@ -190,7 +192,7 @@ def test_examples_is_the_only_start_resource(source_tree, backend, identifier, k
 
 
 @pytest.mark.parametrize(
-    "source_name", ["README.md", "docs/architecture.qmd", "asset", "docs"]
+    "source_name", ["README.md", "docs/contribute/architecture.qmd", "asset", "docs"]
 )
 def test_symlink_sources_are_rejected_before_writing(source_tree, backend, source_name):
     """Keep source symlinks from becoming installed knowledge content."""
@@ -287,7 +289,7 @@ def test_other_pep517_hooks_retain_setuptools_identity(backend):
 
 
 def _add_include_page(source_tree, target):
-    page = source_tree / "docs/architecture.qmd"
+    page = source_tree / "docs/contribute/architecture.qmd"
     page.write_text(
         page.read_text(encoding="utf-8") + "\n{{< include " + target + " >}}\n",
         encoding="utf-8",
@@ -297,10 +299,10 @@ def _add_include_page(source_tree, target):
 def test_included_file_is_bundled_once_for_two_pages(source_tree, backend):
     """Ship an include target at its repository path, as an auxiliary file."""
     (source_tree / "docs/_table.md").write_text("| a |\n", encoding="utf-8")
-    _add_include_page(source_tree, "_table.md")
-    page = source_tree / "docs/examples.qmd"
+    _add_include_page(source_tree, "../_table.md")
+    page = source_tree / "docs/start/choose-a-simulation.qmd"
     page.write_text(
-        page.read_text(encoding="utf-8") + "\n{{< include _table.md >}}\n",
+        page.read_text(encoding="utf-8") + "\n{{< include ../_table.md >}}\n",
         encoding="utf-8",
     )
     backend.generate_knowledge()
@@ -314,15 +316,19 @@ def test_missing_include_target_names_page_and_target(source_tree, backend):
     """Refuse a page whose include resolves to nothing, before any output."""
     _add_include_page(source_tree, "_absent.md")
     before = _bundle_state(source_tree)
-    with pytest.raises(ValueError, match=r"docs/architecture\.qmd.*_absent\.md"):
+    with pytest.raises(
+        ValueError, match=r"docs/contribute/architecture\.qmd.*_absent\.md"
+    ):
         backend.generate_knowledge()
     assert _bundle_state(source_tree) == before
 
 
 def test_include_target_outside_docs_is_refused(source_tree, backend):
     """Keep files outside docs/ from entering the installed bundle."""
-    _add_include_page(source_tree, "../README.md")
+    _add_include_page(source_tree, "../../README.md")
     before = _bundle_state(source_tree)
-    with pytest.raises(ValueError, match=r"docs/architecture\.qmd.*outside docs/"):
+    with pytest.raises(
+        ValueError, match=r"docs/contribute/architecture\.qmd.*outside docs/"
+    ):
         backend.generate_knowledge()
     assert _bundle_state(source_tree) == before

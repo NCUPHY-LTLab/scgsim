@@ -1,0 +1,59 @@
+---
+title: "Project scope and derivation"
+description: "Understand SCGSim’s relationship to gsim and its supported research workflows."
+scgsim-kind: "project"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/goals-and-upstream"
+aliases:
+  - ../goals-and-upstream.html
+---
+
+SCGSim is an independent downstream toolkit derived from
+[gsim](https://github.com/gdsfactory/gsim). The current package maintains its own
+in-tree semantic geometry builder, supported solver adapters and result readers.
+External gsim and historical SGB sources are derivation provenance, not runtime
+fallbacks or an automatic promise of API compatibility.
+
+The package connects geometry and material facts to explicit computations,
+then preserves the returned quantity's units, source and model context.
+See [supported calculations](../reference/supported-calculations.qmd) and the [tutorials](../start/choose-a-simulation.qmd).
+
+The source model includes explicit authored curve boundaries
+and caller-selected GDS boundary reconstruction. Curves remain bound to source
+Entities and placed occurrences; polygon-only inputs retain their polygon
+boundaries. Palace and AEDT get line and circular-arc curves through
+`scgsim.geometry.sgb`: Palace meshes them, and AEDT imports them as exact arcs
+in the model's STEP; spline curves are refused. Palace also
+separates Gmsh geometric order from finite-element order and exposes
+mesh-generation records through a detached summary. The
+[GeometryPlan contract](../reference/specs/geometry-plan.qmd) owns exact
+curve records and the [Palace contracts](../reference/specs/palace-electrostatic-sgb.qmd)
+own mesh-control and summary meaning.
+
+## Scope
+
+Palace Electrostatic/Eigenmode and AEDT HFSS Eigenmode/Driven, Q3D and Q2D are
+implemented. Public component notebooks remain with OrPen. Palace Driven and
+Magnetostatic are not implemented; Meep is outside the package scope.
+
+SCGSim does not install a native solver, submit a prepared handoff implicitly,
+or treat a result as universally accurate because a calculation completed.
+The study author chooses physical assumptions and interprets the quantities.
+
+## Derivation history {#starting-source-identities}
+
+Historical starting-source identities are listed in the
+[repository maintainer record](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md#implementation-and-project-references).
+They describe origin, not additional supported APIs. Palace builds source
+geometry with the in-tree `scgsim.geometry.sgb`, which sits below the supported
+entry: a layout enters
+through `GeometryPlan` and the simulation classes, and a direct call with an
+input built by hand assumes what that entry guarantees; see
+[the supported entry](../reference/supported-scope.qmd#supported-entry). No external SGB is
+used.
+
+## Contributor references {#v1-acceptance-and-delivery}
+
+Current implementation references and documentation-build procedures are
+available through that secondary maintainer entry. It is separate from the
+current tutorials and capability reference.

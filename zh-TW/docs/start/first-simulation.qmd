@@ -14,7 +14,7 @@ Capacitance matrix (fF): pad
      pad     112.54
 ```
 
-開始前，你需要一個研究專案，裝好 SCGSim `3.0.0rc4`（含 `palace` extra）以及負責畫出版圖的元件庫 OrcaPen SC PDK，做法見[安裝 SCGSim](../course/installation.qmd)；同一台電腦上也要裝好 Palace 0.18.1，見 [Palace 安裝說明](https://awslabs.github.io/palace/stable/install/)。整個過程不需要 AEDT 授權。
+開始前，你需要一個研究專案，裝好 SCGSim `3.0.0rc4`（含 `palace` extra）以及負責畫出版圖的元件庫 OrcaPen SC PDK，做法見[安裝 SCGSim](install.qmd)；同一台電腦上也要裝好 Palace 0.18.1，見 [Palace 安裝說明](https://awslabs.github.io/palace/stable/install/)。整個過程不需要 AEDT 授權。
 
 ## 版圖 {#the-layout}
 
@@ -132,7 +132,7 @@ Capacitance matrix (fF): pad
      pad     112.54
 ```
 
-Palace 的記錄中會有一則警告，說部分外部邊界沒有設定邊界條件，因此假設為「ZeroCharge」。這是刻意的：真空盒的外表面不設條件，電場就不會穿出這些面。
+Palace 的記錄中會有一則警告，說部分外部邊界沒有設定邊界條件，因此假設為「ZeroCharge」。這是刻意的：真空區域的外表面不設條件，電場就不會穿出這些面。
 
 ## 讀懂結果 {#read-the-result}
 
@@ -140,10 +140,10 @@ Palace 的記錄中會有一則警告，說部分外部邊界沒有設定邊界�
 
 這個模擬只有一個端子，所以矩陣只有一列一行。其中的 112.54 fF，是焊墊與所有 0 V 導體之間的電容，在這裡就是焊墊與接地金屬之間的電容：兩者之間每 1 V 電壓，焊墊上會累積多少電荷。Palace 回報的是 Maxwell 電容矩陣。有兩個以上端子時，對角元素是各端子對其他所有導體的電容；非對角元素 C[a][b] 為負值，其絕對值就是端子 a 與 b 之間的電容。
 
-這個數值來自初始網格上的一次求解，沒有做自適應細化（由 Palace 在誤差估計最大的地方加密網格，再解一次）。`Convergence: not_declared` 表示腳本沒有指定哪些數值在細化之間必須停止變化，所以目前沒有任何依據說 112.54 fF 已經穩定。宣告方式見[宣告細化何時已收斂](../course/palace-electrostatic.qmd#declare-when-refinement-has-converged)；能接受多小的變化，取決於你要拿這個電容做什麼。
+這個數值來自初始網格上的一次求解，沒有做自適應細化（由 Palace 在誤差估計最大的地方加密網格，再解一次）。`Convergence: not_declared` 表示腳本沒有指定哪些數值在細化之間必須停止變化，所以目前沒有任何依據說 112.54 fF 已經穩定。宣告方式見[宣告細化何時已收斂](../guides/capacitance-palace.qmd#declare-when-refinement-has-converged)；能接受多小的變化，取決於你要拿這個電容做什麼。
 
 ## 下一步 {#next}
 
-- [Palace：共振模態](../course/palace-eigenmode.qmd)：計算版圖中各共振模態的頻率與 Q 值。
-- [版圖建模檢查](../layout-modeling-check.qmd)：說明檢查會回報什麼，以及怎麼修正它找到的問題。
-- [支援範圍](../supported-scope.qmd)：模擬你自己的版圖之前，版圖必須保證哪些條件。
+- [Palace：共振模態](../guides/modes-palace.qmd)：計算版圖中各共振模態的頻率與 Q 值。
+- [檢查版圖](../guides/check-a-layout.qmd)：說明檢查會回報什麼，以及怎麼修正它找到的問題。
+- [支援範圍](../reference/supported-scope.qmd)：模擬你自己的版圖之前，版圖必須保證哪些條件。

@@ -1,3 +1,4 @@
+# long-file: the publisher is one standalone script: the Pages workflow runs it with a bare Python, and tests load it with runpy, so it imports nothing beside it.
 """Render immutable documentation sources into one versioned Pages publication.
 
 Published content comes from frozen Git archives. An explicit clean export is
@@ -12,6 +13,7 @@ import hashlib
 import html
 import json
 import os
+import posixpath
 import re
 import shutil
 import subprocess
@@ -235,8 +237,9 @@ def presentation_blocks(config: str) -> dict[str, str]:
     return {name: blocks[name] for name in ("website", "format")}
 
 
-def historical_website(website: str, source: Path) -> str:
+def historical_website(website: str, source: Path, presentation: Path) -> str:
     """Apply the publisher menu only to pages owned by this historical source."""
+    website = _older_pages(website, source, presentation)
     # Area landings follow the first available entry in that same current sidebar.
     # The publisher configuration remains the sole maintained navigation authority.
     sidebars = list(re.finditer(r"(?m)^[ ]+- id: ([^\n]+)\n", website))
@@ -280,10 +283,80 @@ def historical_website(website: str, source: Path) -> str:
     )
 
 
+def _older_pages(website: str, source: Path, presentation: Path) -> str:
+    """Name each moved page of the menu by the path an older release has it at.
+
+    A page that moved keeps its old URL as a Quarto alias, and the older release has that page under the
+    old URL, so the current menu still reaches the older release's own page.
+    """
+
+    def older(match: re.Match[str]) -> str:
+        page = match["page"]
+        if (source / page).is_file():
+            return match[0]
+        for alias in _aliases(presentation / page):
+            old = posixpath.normpath(posixpath.join(posixpath.dirname(page), alias))
+            old = old.removesuffix(".html") + ".qmd"
+            if (source / old).is_file():
+                return match["lead"] + old
+        return match[0]
+
+    menu_page = r"(?m)^(?P<lead>[ ]+(?:- |href: ))(?P<page>\S+\.qmd)(?=[ ]*$)"
+    return re.sub(menu_page, older, website)
+
+
+def _aliases(page: Path) -> list[str]:
+    """The ``aliases:`` of a page's front matter, each a URL relative to the page; none if it has none."""
+    front = re.match(
+        r"---\n(.*?\n)---\n", page.read_text() if page.is_file() else "", re.S
+    )
+    block = re.search(r"(?m)^aliases:\n((?:  - .*\n)+)", front[1]) if front else None
+    return re.findall(r"(?m)^  - (\S+)", block[1]) if block else []
+
+
+def moved_folders(presentation: Path) -> dict[str, str]:
+    """Old folder -> new folder, for each folder whose aliased pages all moved to one folder under their names.
+
+    Paths are below a version root and end in ``/``; a longer folder comes first, as the missing page takes
+    the first that matches. A folder with a page that moved anywhere else, or under another name, has none.
+    """
+    targets: dict[str, set[str]] = {}
+    for page in sorted(presentation.glob("docs/**/*.qmd")) + sorted(
+        presentation.glob("zh-TW/docs/**/*.qmd")
+    ):
+        folder = page.parent.relative_to(presentation).as_posix()
+        for alias in _aliases(page):
+            old = posixpath.normpath(posixpath.join(folder, alias))
+            kept = posixpath.basename(old) == page.stem + ".html"
+            new = folder + "/" if kept else ""
+            targets.setdefault(posixpath.dirname(old) + "/", set()).add(new)
+    moved = {
+        old: new.pop()
+        for old, new in targets.items()
+        if len(new) == 1 and "" not in new and old not in new
+    }
+    return dict(sorted(moved.items(), key=lambda item: -len(item[0])))
+
+
+def _moved_folder_routes(sources: _SourceCatalog) -> dict[str, str]:
+    """The missing page's route from each moved folder to its new one, under each version root that moved it.
+
+    A moved page keeps its old URL as a Quarto alias, but the charts, figures and data beside it moved with
+    it under the same names and have none, so a request for one reaches the missing page.
+    """
+    routes = {}
+    for entry in sources.entries:
+        source = sources.sources[entry["slug"]]
+        for old, new in moved_folders(sources.presentation).items():
+            if (source / new).is_dir() and not (source / old).exists():
+                routes[entry["root"] + old] = entry["root"] + new
+    return routes
+
+
 def overlay_presentation(source: Path, presentation: Path) -> None:
     """Replace publisher-owned navigation and theme while retaining historical bodies."""
     current = presentation_blocks((presentation / "_quarto.yml").read_text())
-    current["website"] = historical_website(current["website"], source)
+    current["website"] = historical_website(current["website"], source, presentation)
     original = (source / "_quarto.yml").read_text()
     blocks = presentation_blocks(original)
     for name in ("website", "format"):
@@ -492,6 +565,7 @@ def _stage_publication(sources: _SourceCatalog, work: Path, quarto: str) -> Path
         PREFIX + "main/": latest["root"],
         **_retired_development_aliases(sources, development),
     }
+    folders = _moved_folder_routes(sources)
     menus = {
         language: version_menu(sources, latest, language)
         for language in LANGUAGE_PROJECTS
@@ -499,7 +573,7 @@ def _stage_publication(sources: _SourceCatalog, work: Path, quarto: str) -> Path
     site = work / "site"
     site.mkdir()
     _render_versions(sources, site, menus, quarto)
-    _write_routes(site, sources.entries, latest, aliases)
+    _write_routes(site, sources.entries, latest, aliases, folders)
     _write_build_manifest(site, sources, latest)
     return site
 
@@ -608,15 +682,20 @@ def _write_routes(
     entries: list[_VersionEntry],
     latest: _VersionEntry,
     aliases: dict[str, str],
+    folders: dict[str, str],
 ) -> None:
-    """Write the stable landing page, branch aliases and version-aware missing page."""
+    """Write the stable landing page, branch aliases and version-aware missing page.
+
+    A moved folder is a route of the missing page only: its old path holds the redirects of its pages.
+    """
     (site / "index.html").write_text(redirect_page(latest["root"]))
     for alias, destination in aliases.items():
         target = site / alias.removeprefix(PREFIX)
         target.mkdir()
         (target / "index.html").write_text(redirect_page(destination))
+    roots = [item["root"] for item in entries]
     (site / "404.html").write_text(
-        missing_page([item["root"] for item in entries], aliases, latest["root"])
+        missing_page(roots, {**aliases, **folders}, latest["root"])
     )
 
 

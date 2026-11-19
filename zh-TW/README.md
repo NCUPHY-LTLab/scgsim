@@ -3,140 +3,52 @@
 **使用 Python 模擬超導電路版圖。**
 
 [![License: Apache-2.0](../docs/assets/badges/license.svg)](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/LICENSE)
-[![Python: 3.12–3.13](../docs/assets/badges/python.svg)](docs/course/installation.qmd)
-[![Tutorial: Layout EM](../docs/assets/badges/tutorial.svg)](docs/examples.qmd)
-[![AEDT: HFSS / Q3D / Q2D](../docs/assets/badges/aedt.svg)](docs/backend-support.qmd)
-[![Palace: Electrostatic / Eigenmode](../docs/assets/badges/palace.svg)](docs/course/palace-eigenmode.qmd)
+[![Python: 3.12–3.13](../docs/assets/badges/python.svg)](docs/start/install.qmd)
+[![Tutorial: Layout EM](../docs/assets/badges/tutorial.svg)](docs/start/choose-a-simulation.qmd)
+[![AEDT: HFSS / Q3D / Q2D](../docs/assets/badges/aedt.svg)](docs/reference/supported-calculations.qmd)
+[![Palace: Electrostatic / Eigenmode](../docs/assets/badges/palace.svg)](docs/guides/modes-palace.qmd)
 [![Gmsh: Meshing](../docs/assets/badges/gmsh.svg)](docs/concepts/geometry.qmd)
-[![gsim: Unofficial Downstream](../docs/assets/badges/gsim.svg)](docs/goals-and-upstream.qmd)
+[![gsim: Unofficial Downstream](../docs/assets/badges/gsim.svg)](docs/contribute/goals-and-upstream.qmd)
 
 ![SCGSim 虎鯨與企鵝，介紹晶片版圖、有限元素網格與電磁場示意。](../docs/assets/scgsim-overview-orca-penguin.png)
 
-SCGSim 會準備 Palace 與 Ansys AEDT 模擬，並回傳具單位的電容、共振模態、S 參數及單位長度線路結果。
+SCGSim 會把超導晶片的版圖、層堆疊與材料，連同你指定的導體，建成一個 3D 模型，再寫出你選擇的求解器的輸入：開源的 Palace，或 Ansys AEDT（HFSS、Q3D、Q2D）。執行結束後，SCGSim 會讀回附有單位的結果：電容矩陣、共振模態的頻率、Q 值與能量參與率、S 參數，以及單位長度的線路參數。
 
 ## 安裝
 
-先安裝 [uv](https://docs.astral.sh/uv/getting-started/installation/) 與 Git，再建立研究專案。以下指令會安裝本頁範例使用的 SCGSim 與公開 OrPen SC PDK 元件庫；兩者都固定到明確的來源版本。
+先安裝 [uv](https://docs.astral.sh/uv/getting-started/installation/) 與 Git，再建立研究專案，加入 SCGSim `3.0.0rc4` 與 OrcaPen SC PDK（範例用來繪製版圖的元件庫）；兩者都固定到明確的修訂版本：
 
 ```bash
 uv init --python 3.12 scgsim-study
 cd scgsim-study
-uv add 'scgsim[aedt] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@v3.0.0rc4' \
+uv add 'scgsim[palace] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@v3.0.0rc4' \
   'orcapen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@49e539fd59f3224ecda965d777c7ec3aadcc3b85'
 ```
 
-`uv` 會建立 `.venv`，並將解析後的版本寫入 `uv.lock`。把 `pyproject.toml` 和 `uv.lock` 留在研究專案中，其他電腦即可用 `uv sync` 重建環境。
+`palace` extra 用來準備 Palace 的執行。若要使用 AEDT，請一併列出它的 extra：`scgsim[palace,aedt]`。[安裝 SCGSim](docs/start/install.qmd) 列出所有 extra，以及執行 Palace 與 AEDT 的電腦需要什麼。
 
-> **執行條件：** 下列範例需要本機已安裝 AEDT Q3D 2024.2 並具有可用授權。Python 套件不包含原生求解器；其他後端的設定見[安裝指南](docs/course/installation.qmd)。
+## 從這裡開始
 
-## 使用範例：用一支腳本完成 SimplePad 電容抽取
+[第一個模擬](docs/start/first-simulation.qmd)只用一支腳本，以 Palace 計算一個 200 µm 方形焊盤（周圍間隙 20 µm）的電容；在你自己的電腦上就能執行，不需要 AEDT 授權。腳本最後會印出：
 
-本例採用公開 PDK 的標稱 100 nm 鋁層，並以 200 µm 方形金屬焊盤、20 µm 間隙及周圍接地配置在 1000 µm 方形晶片上。元件庫提供版圖、材料與層堆疊；腳本明確宣告 `pad` 與 `ground` 的電氣歸屬，再交給 Q3D 抽取電容與電導矩陣。
-
-![SimplePad 版圖：方形焊盤、周圍接地與已繪製定位片。](../docs/assets/simple-pad-layout.png)
-
-將以下完整程式存成 `simplepad_q3d.py`。四個區塊依序完成「建立來源 → 準備求解器輸入 → 執行 → 讀取」，不需要先執行其他頁面的程式。
-
-```python
-from pathlib import Path
-from uuid import uuid4
-import argparse
-import subprocess
-import sys
-
-import gdsfactory as gf
-import orcapen_sc_pdk
-from orcapen_sc_pdk import get_material_records
-from orcapen_sc_pdk.tech import get_single_die_layer_stack
-from scgsim.geometry import GeometryPlan
-from scgsim.aedt import (
-    AedtResources,
-    MatrixRunControl,
-    prepare_q3d_from_geometry,
-    resolve_results,
-)
-
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--handoff-only", action="store_true")
-    args = parser.parse_args()
-
-    # 1. Build the layout and declare electrical ownership.
-    orcapen_sc_pdk.activate()
-    component = gf.get_component(
-        "square_pad_capacitor",
-        pad_side_um=200.0,
-        gap_um=20.0,
-        die_side_um=1000.0,
-        junction_width_um=2.0,
-    )
-    records = get_material_records()
-    plan = GeometryPlan(
-        component=component,
-        root_id="chip",
-        layer_stack=get_single_die_layer_stack(),
-        material_records=records,
-        coupon_padding_um=0.0,
-    )
-    plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
-    plan.set_vacuum_region(padding=(250.0, 250.0, 1000.0))
-    snapshot = plan.prepare()
-
-    # 2. Prepare a new, portable Q3D input directory.
-    handoff = prepare_q3d_from_geometry(
-        snapshot,
-        aedt_version="2024.2",
-        modeling="solid",
-        output_dir=Path(".artifacts/simplepad-q3d") / uuid4().hex[:12],
-        project_name="SimplePad",
-        design_name="Capacitance",
-        net_types={"pad": "Signal", "ground": "Signal"},
-        physical_ground_nets=("ground",),
-        run_control=MatrixRunControl(
-            setup_name="Setup1", frequency_ghz=5.0,
-            maximum_passes=10, convergence_percent=1.0,
-        ),
-        resources=AedtResources(cores=4, ram_limit_percent=80),
-    )
-    print("Inputs:", handoff.run_dir)
-    if args.handoff_only:
-        return
-
-    # 3. Run AEDT on this licensed host using the current Python environment.
-    subprocess.run(
-        [sys.executable, "-m", "scgsim.aedt.run",
-         "--handoff", str(handoff.metadata_path), "--execute"],
-        cwd=handoff.run_dir,
-        check=True,
-    )
-
-    # 4. Read the returned matrix entries with their names and exported units.
-    result = resolve_results(handoff.run_dir)
-    for row in result.physics_results():
-        print(row)
-
-
-if __name__ == "__main__":
-    main()
+```text
+Capacitance matrix (fF): pad
+     pad     112.54
 ```
 
-在上述研究專案資料夾執行：
+## 你想計算什麼？
 
-```bash
-uv run simplepad_q3d.py
-```
+<div id="選擇下一個模擬目標"></div>
 
-每次執行都會在 `.artifacts/simplepad-q3d/` 建立新的結果資料夾。終端機列出的矩陣項目包含物理量、列名、欄名、數值與原生匯出單位；使用結果時，請一起保留這些欄位。
+| 想計算的量 | 使用 Palace | 使用 AEDT |
+|---|---|---|
+| 焊盤與電極的電容矩陣 | [Palace：端子電容](docs/guides/capacitance-palace.qmd) | [AEDT：Q3D 擷取](docs/guides/capacitance-q3d.qmd) |
+| 共振模態的頻率、Q 值與能量參與率 | [Palace：共振模態](docs/guides/modes-palace.qmd) | [AEDT：HFSS Eigenmode](docs/guides/modes-hfss.qmd) |
+| 雙埠元件的 S 參數 | SCGSim 未提供 | [AEDT：HFSS Driven Terminal](docs/guides/s-parameters-hfss.qmd) |
+| 線路橫截面的單位長度 C、G、L、R | SCGSim 未提供 | [AEDT：Q2D 橫截面擷取](docs/guides/line-parameters-q2d.qmd) |
 
-若要先檢視輸入，執行 `uv run simplepad_q3d.py --handoff-only`。此選項只準備輸入與可攜套件，不會開啟 AEDT；完整模式則在同一主機執行並讀回結果。
+[選擇模擬](docs/start/choose-a-simulation.qmd)為每一項補上 OrcaPen SC PDK 的筆記本。<span id="使用範例用一支腳本完成-simplepad-電容抽取"></span>[AEDT：Q3D 擷取](docs/guides/capacitance-q3d.qmd)一開始就是第一個模擬的 AEDT 版本：一支腳本完成 Q3D 電容計算的準備、執行與讀取。
 
-本例把兩個 Net 都設為 Q3D 的 `Signal`，讓兩者保留在矩陣中；`physical_ground_nets` 另外記錄接地的物理角色。[Q3D 教學](docs/course/aedt-q3d.qmd)說明本體、Net 與擷取選擇，[讀取回傳結果](docs/course/returned-results.qmd)說明如何讀取矩陣。
+## 模擬自己的版圖之前
 
-## 選擇下一個模擬目標
-
-想不用 AEDT 授權、改用 Palace 計算電容，請從[第一個模擬](docs/start/first-simulation.qmd)開始。
-
-[模擬目標選擇頁](docs/examples.qmd#getting-started)連結 OrcaPen SC PDK 的完整筆記本，涵蓋電容、共振模態與能量參與率，以及單位長度傳輸線參數。Driven S 參數請使用 [Driven Terminal](docs/course/aedt-driven-terminal.qmd) 教學；版圖需要兩片集總埠片，每個埠一片。此版本尚未提供 Driven Modal 與波埠。
-
-模擬自己的版圖之前，請先閱讀[支援範圍](docs/supported-scope.qmd)：版圖必須保證什麼、SCGSim 反過來保證什麼，以及失敗由誰負責。
+模擬自己的版圖之前，請先閱讀[支援範圍](docs/reference/supported-scope.qmd)：版圖必須保證什麼、SCGSim 反過來保證什麼，以及失敗由誰負責。

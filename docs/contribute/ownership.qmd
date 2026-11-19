@@ -1,0 +1,106 @@
+---
+title: "Maintainer guide"
+description: "Secondary implementation, project and documentation-build references for contributors."
+scgsim-kind: "project"
+scgsim-status: "ACCEPTED"
+scgsim-id: "docs/ownership"
+aliases:
+  - ../ownership.html
+---
+
+SCGSim owns the reusable geometry, solver preparation, handoff, result and
+report APIs. [OrPen SC PDK](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk) owns public
+component geometry, material/stack facts and executable component notebooks.
+A Python script or notebook can call SCGSim; no parent workspace is required.
+
+The site uses native Askr presentation. Overview introduces the package,
+Tutorial walks through calculations, Concept explains the models, and Contract
+provides exact interface references. Existing document URLs remain available.
+
+Repository layout, implementation responsibilities, documentation builds and
+release procedures belong to the secondary
+[maintainer entry](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md).
+
+## SCGSim 3.0 ownership {#scgsim-2.0-ownership}
+
+Each SCGSim 3.0 package area owns the responsibilities below and must not take
+over those of another area. The [code map](code-map.qmd) shows which stage each
+folder is and the order the work flows through them. The
+[migration reference](../guides/upgrade.qmd) maps the v1 names to their 3.0
+owners.
+
+| Target area | Owns | Must not take ownership of |
+|---|---|---|
+| `scgsim.geometry` | Source-facing component/occurrence and stack adaptation, GeometryPlan/snapshot, normalized inputs, vacuum/curve preparation and detached summaries | Model construction, Palace/AEDT physics or execution state |
+| `scgsim.geometry.sgb` | The SGB core Palace and AEDT build geometry with: arrangement, XAO, the AEDT STEP and its guard, sidecar, bands | Meshing, solver state or component source ownership |
+| `scgsim.meshing` | Sizing recipes, the quality audit, the repair loop and the meshing report over SGB's XAO | Palace attributes, solver state or physical convergence judgments |
+| `scgsim.geometry.models` and `scgsim.geometry.grid` | One canonical model/type definition, and the grid engine (noding, tagged regions, overlays, loops, polygon operations) that source, interpretation and junctions call, and the entity reads more than one stage makes | Duplicate definitions or dependency cycles between stages |
+| `scgsim.semantics` | Stdlib-only immutable, revision-bound facts | Mutable backend objects, solver tags interpreted as source truth |
+| `scgsim.palace.simulation` | Separate Electrostatic and Eigenmode setup objects on one shared core, mutable state/invalidation and the lifecycle | Palace submission or merged state owners |
+| `scgsim.palace.source` | The geometry request: a bound plan's ports, vacuum region and Surface-EPR specs prepared as the input of the geometry build | Meshing, `config.json` or solver state |
+| `scgsim.palace.mesh` | The SGB build and meshing call for a run, group lowering to solver attributes, and native mesh summaries | Result receipt custody or physical convergence judgments |
+| `scgsim.palace.config` | `config.json` and the index map built from the mesh's physical groups, ports or terminals, materials and numerical controls | Meshing or result interpretation |
+| `scgsim.palace.run` | Manual handoffs (the run script, metadata and archive of a run folder) and standalone host receipt recording | Automatic solver submission or result interpretation |
+| `scgsim.palace.results` | Returned artifact/custody validation, result data, and detached EPR | Solver execution or plotting state |
+| `scgsim.palace.reports` | Palace trust, physics and cost projections and report figures | A common cross-solver physical quantity model |
+| `scgsim.aedt.specs` | Canonical request declarations, shared electrical records, and explicit parser dispatch | Runtime/Desktop state or Q3D input-v1/v2 |
+| `scgsim.aedt.preparation` | The plan's SGB model for AEDT (`PreparedSgbModel`), the portable handoff that carries it, canonical cohort membership | Desktop lifetime, mutable EigenmodeSim state, or solve results |
+| `scgsim.aedt.runtime` | Sole transaction/receipt coordinator and Desktop lifecycle for preparation, direct runs, and batch collection; dispatches the family flow, which imports the model's STEP and assigns from its sidecar | Shared geometry source ownership or family-crossing physics |
+| `scgsim.aedt.batch` | One-model native EPR package, standalone solver-only attempt and return validation; delegates full native collection to the runtime transaction | Desktop/model construction, scheduler submission, or a combined multi-model solver project |
+| `scgsim.aedt.runtime.native` | Shared native material, setup, resource and saved-design calls below the families | Geometry construction, EPR analysis requests or source preparation |
+| `scgsim.aedt.epr` | Analysis selections, fields/cache, EPR analysis and saved-field composition of the HFSS family flow | Generic Eigenmode construction/solve/export, Desktop lifecycle, or general result custody |
+| `scgsim.aedt.results` | Strict run/EPR resolution, provenance readers, convergence and matrix observations | Solver execution or display state |
+| `scgsim.aedt.presentation` | Display-only projections and plotting with lazy optional imports | Native calculations or result validation |
+| `scgsim.visualization` | Backend-bound source/receipt loaders, detached scene/preview objects, and rendering | Solver state, simulation status or physical acceptance |
+| `scgsim.presentation` | Shared, solver-physics-neutral notebook formatting | Domain projections or scientific calculations |
+
+`scgsim.geometry.sgb` sits below the supported
+entry: a layout enters through `GeometryPlan` and the simulation classes, and a
+direct call with an input built by hand assumes what that entry guarantees; see
+[the supported entry](../reference/supported-scope.qmd#supported-entry).
+
+Source-backed Eigenmode preparation, solve and export belong to the HFSS
+family even when no EPR analysis is requested. Declared junctions and generic
+RLC loads are constructed independently of that request. EPR adds its analysis
+selections and field/cache work to the same native model and solve lifecycle.
+Pure RLC unit/topology interpretation is shared by native writers and offline readers through stdlib-only private
+helpers; shared interpretation does not replace independent native receipt
+and source-attribution checks.
+
+The baseline facade and direct-submodule symbol maps for geometry, AEDT, Palace
+and visualization, with their current owners, are in the
+[API migration reference](../guides/upgrade.qmd).
+Publicness comes from documented facades/contracts and declared exports, not
+from whether a Python module happens to be importable. The v2 change
+intentionally does not preserve `scgsim.sgb` compatibility wrappers or Q3D
+input-v1/v2 paths; the public AEDT command `python -m scgsim.aedt.run` remains
+a supported entry and delegates to the transaction owner.
+
+State boundaries remain observable. Palace Electrostatic and Eigenmode
+preparation retain separate mutable state and invalidation/failure ordering;
+the Gmsh worker is a process boundary, and its mesh observer is not the offline
+quality reader. AEDT `EigenmodeSim` retains mutable configuration and
+invalidation state, while one transaction owns receipt transitions and Desktop
+release precedence. Geometry snapshots remain detached, and backend tags remain observations rather than source
+authority. Relocation must preserve these ownership and failure contracts.
+
+Palace and AEDT backend implementations, tests and technical documentation
+remain distinct source responsibilities as described in the repository
+[root guide](../../AGENTS.md). Native observations and solver-specific result
+interpretation retain their technical boundaries; a directory reorganization
+does not imply that those activities are complete. Follow the shared
+[$github-flow](https://github.com/arfiligol/agent-skills/tree/main/github-flow)
+for contributor coordination and delivery.
+
+## Implementation and project references
+
+| Reference | Purpose |
+|---|---|
+| [Architecture](architecture.qmd) | Module and state boundaries, preparation and runtime flow |
+| [Provenance](provenance.qmd) | Source/result identities and public data boundaries |
+| [Goals and derivation](goals-and-upstream.qmd) | Current scope and upstream relationship |
+| [Repository maintenance](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md) | Build, version catalogue and publication procedure |
+
+These secondary references retain implementation detail outside the researcher
+learning sequence. Contract pages specify public APIs and physical result
+meaning; they are not a release checklist.

@@ -17,7 +17,7 @@ scgsim-id: "docs/concepts/problems"
 
 本徵模計算會找出指定模型的共振頻率與場。線性化接面可用電感支路表示；該支路會參與模態，不能只靠圖中的焊盤表示。理想集總 LC 模型的 $f_0=1/(2\pi\sqrt{LC})$ 可作為解讀參考；電磁模型則包含分布場與所選邊界。
 
-Palace 與 HFSS 提供已實作的本徵模途徑。可選的 EPR 分析會詢問模態中的能量分布，以及指定損耗假設代表什麼。解讀這些比例前，請先閱讀[能量參與](../eigenmode-epr.qmd)。
+Palace 與 HFSS 提供已實作的本徵模途徑。可選的 EPR 分析會詢問模態中的能量分布，以及指定損耗假設代表什麼。解讀這些比例前，請先閱讀[能量參與](surface-epr.qmd)。
 
 ## 驅動響應：以特定頻率激發端口 {#driven-response-excite-a-port-at-a-frequency}
 
@@ -28,7 +28,7 @@ Palace 與 HFSS 提供已實作的本徵模途徑。可選的 EPR 分析會詢�
 Q3D 會為有限三維模型萃取導體矩陣。Q2D 會為明確定義的截面萃取每單位長度性質。兩者不能自動互相取代；僅憑每單位長度矩陣，無法還原有限長度、端部幾何與端口處理方式。
 
 ::: {.callout-tip title="先選擇物理量，再選擇求解器"}
-先寫下所需的導體配對、模態或端口響應、單位，以及預定的電路模型用途，再從[能力表](../backend-support.qmd)選擇支援的工作流程。
+先寫下所需的導體配對、模態或端口響應、單位，以及預定的電路模型用途，再從[能力表](../reference/supported-calculations.qmd)選擇支援的工作流程。
 :::
 
 原生公式說明請參閱 [Palace 問題類型](https://awslabs.github.io/palace/stable/guide/problem/)與 [PyAEDT 使用者指南](https://aedt.docs.pyansys.com/version/stable/User_guide/index.html)。

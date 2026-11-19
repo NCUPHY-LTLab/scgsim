@@ -4,7 +4,7 @@ Every package folder under ``src/scgsim`` opens its ``__init__.py`` with one sen
 three lines, ``In:`` (what it takes, from whom), ``Out:`` (what it produces) and ``Next:`` (who reads that).
 ``AREAS`` lists every folder once, in the order the work flows, and says which folders are stages. This
 script reads the docstrings (it never imports SCGSim) and writes one Markdown table per area for each
-language edition of the site, which ``docs/code-map.qmd`` and its Chinese copy include. The English rows
+language edition of the site, which ``docs/contribute/code-map.qmd`` and its Chinese copy include. The English rows
 are the docstrings; the Traditional Chinese rows are the authored translations in ``code_map_zh_tw.toml``
 beside this script, each entry recording the English text it translates.
 
@@ -167,7 +167,7 @@ class Edition:
 
 EDITIONS = (
     Edition(
-        "docs/_code-map-stages.md",
+        "docs/contribute/_code-map-stages.md",
         ("Folder", "What it is", "In", "Out", "Next"),
         "Shared by every area",
         {
@@ -178,7 +178,7 @@ EDITIONS = (
         "en",
     ),
     Edition(
-        "zh-TW/docs/_code-map-stages.md",
+        "zh-TW/docs/contribute/_code-map-stages.md",
         ("資料夾", "它是什麼", "In", "Out", "Next"),
         "各區共用",
         {

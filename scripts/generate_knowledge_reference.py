@@ -23,14 +23,17 @@ NAMESPACES = (
     "semantics",
     "visualization",
 )
-INDEX_PATH = "docs/api/input-index.qmd"
-DETAIL_PATH = "docs/api/analyze_epr.qmd"
-CHINESE_INDEX_PATH = "zh-TW/docs/api/input-index.qmd"
-CHINESE_DETAIL_PATH = "zh-TW/docs/api/analyze_epr.qmd"
+INDEX_PATH = "docs/reference/api-index.qmd"
+DETAIL_PATH = "docs/reference/api/analyze-epr.qmd"
+CHINESE_INDEX_PATH = "zh-TW/docs/reference/api-index.qmd"
+CHINESE_DETAIL_PATH = "zh-TW/docs/reference/api/analyze-epr.qmd"
 USAGE_PATHS = (
-    "docs/api/analyze-epr-usage.md",
-    "zh-TW/docs/api/analyze-epr-usage.md",
+    "docs/reference/api/analyze-epr-usage.md",
+    "zh-TW/docs/reference/api/analyze-epr-usage.md",
 )
+# The URLs each page had before it moved, relative to the page; Quarto writes a redirect at each.
+INDEX_ALIAS = "../api/input-index.html"
+DETAIL_ALIAS = "../../api/analyze_epr.html"
 WORKFLOW_PATH = "src/scgsim/aedt/epr/workflow.py"
 ResourcePath: TypeAlias = str
 
@@ -183,17 +186,15 @@ def _render_index(
     *,
     chinese: bool,
 ) -> str:
-    title = (
-        "公開參考輸入與匯出清單"
-        if chinese
-        else "Public reference inputs and export inventory"
-    )
+    title = "API 索引" if chinese else "API index"
     description = (
         "完整列出公開匯出名稱，以及未收錄於離線套件的來源文件。"
         if chinese
         else "Declared public facade names and source documents outside the offline bundle."
     )
-    parts = [_header(title, description, "docs/api/input-index", "reference")]
+    parts = [
+        _header(title, description, "docs/api/input-index", "reference", INDEX_ALIAS)
+    ]
     if chinese:
         parts.append(
             "本頁由 `scripts/generate_knowledge_reference.py` 產生；請修改正式來源後重建。\n\n"
@@ -254,7 +255,11 @@ def _render_detail(usage: str, page: _DetailPage) -> str:
         else "Saved-field EPR parameters, a minimal call and the current function signature."
     )
     identifier = "docs/api/scgsim-aedt/analyze_epr"
-    parts = [_header(title, description, identifier, "api"), usage.rstrip(), "\n\n"]
+    parts = [
+        _header(title, description, identifier, "api", DETAIL_ALIAS),
+        usage.rstrip(),
+        "\n\n",
+    ]
     parts.append(
         "## 函式簽章\n\n```python\n" if page.chinese else "## Signature\n\n```python\n"
     )
@@ -262,7 +267,7 @@ def _render_detail(usage: str, page: _DetailPage) -> str:
     label = "完整產生索引" if page.chinese else "Complete generation index"
     index_path = CHINESE_INDEX_PATH if page.chinese else INDEX_PATH
     index_hash = hashlib.sha256(page.index.encode("utf-8")).hexdigest()
-    parts.append(f"[{label}]({Path(index_path).name}).\n\n")
+    parts.append(f"[{label}](../{Path(index_path).name}).\n\n")
     # The hashes bind the page to its sources in the offline bundle; the rendered page leaves them out.
     parts.append("::: {.content-hidden}\n\n")
     parts.append(
@@ -280,7 +285,9 @@ def _render_detail(usage: str, page: _DetailPage) -> str:
     return "".join(parts)
 
 
-def _header(title: str, description: str, identifier: str, kind: str) -> str:
+def _header(
+    title: str, description: str, identifier: str, kind: str, alias: str
+) -> str:
     fields = (
         ("title", title),
         ("description", description),
@@ -291,7 +298,7 @@ def _header(title: str, description: str, identifier: str, kind: str) -> str:
     values = "".join(
         f"{key}: {json.dumps(value, ensure_ascii=False)}\n" for key, value in fields
     )
-    return f"---\n{values}---\n\n"
+    return f"---\n{values}aliases:\n  - {alias}\n---\n\n"
 
 
 def _digest(root: Path, path: str) -> str:

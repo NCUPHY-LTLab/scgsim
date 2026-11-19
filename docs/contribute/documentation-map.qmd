@@ -1,0 +1,34 @@
+---
+title: "Documentation map"
+description: "Which area of the site holds which kind of page, and the folder each area lives in."
+sidebar: contribute
+scgsim-id: "docs/documentation-map"
+scgsim-kind: "contribution"
+scgsim-status: "CONVERGING"
+---
+
+The site has five areas, one per navbar item, and each area has one sidebar.
+A page belongs to exactly one area: the folder it lives in under `docs/`. The
+Chinese pages have the same paths under `zh-TW/docs/`; the SGB design pages
+exist in Chinese only.
+
+## Areas of the site {#areas}
+
+| Area | What it holds | Folder |
+| --- | --- | --- |
+| Get started | The home page (`README.md`, shown by `index.qmd`), installing, the first simulation and choosing a simulation | `docs/start/` |
+| Guides | One task per page: preparing and checking a layout, computing a quantity with one solver, reading results, running elsewhere, working with a finished run, the flip-chip Xmon worked example and upgrading | `docs/guides/` |
+| Concepts | The physical problem and the model behind each calculation | `docs/concepts/` |
+| Reference | What is supported, terms and units, the API index and the detailed specifications | `docs/reference/` |
+| Contribute | This map, the code map, architecture, ownership, provenance, the notebook contract, research and history; in Chinese also the SGB design | `docs/contribute/` |
+
+A page that moves keeps its old URL as a Quarto `aliases:` entry, so links from
+earlier releases still arrive, and its old section anchors; links between pages
+always use the current path. When a page's sections go to other pages, its old
+URL is a redirect that sends each old section to its new place (`SPLIT_PAGES`
+in `scripts/build_bilingual_docs.py`). The charts and figures beside a moved
+page keep their names in its new folder, and the site's missing page sends an
+old file URL there. The PDK notebook for each calculation is listed on
+[Choose a simulation](../start/choose-a-simulation.qmd).
+<span id="orcapen-to-scgsim-topics"></span>An OrcaPen page that needs an SCGSim topic links the section of the
+[Reference overview](../reference/index.qmd) that covers it.

@@ -31,10 +31,10 @@ def source_tree(tmp_path):
     public_documents = sorted(
         [
             "README.md",
-            "docs/reference.qmd",
-            "docs/api/analyze-epr-usage.md",
+            "docs/reference/index.qmd",
+            "docs/reference/api/analyze-epr-usage.md",
             "zh-TW/README.md",
-            "zh-TW/docs/api/analyze-epr-usage.md",
+            "zh-TW/docs/reference/api/analyze-epr-usage.md",
         ]
     )
     for relative in public_documents:
@@ -64,8 +64,8 @@ def source_tree(tmp_path):
         encoding="utf-8",
     )
     for relative, content in {
-        "docs/api/analyze-epr-usage.md": "## Required parameters\n\nMinimal call.\n",
-        "zh-TW/docs/api/analyze-epr-usage.md": "## 必要參數\n\n最小呼叫。\n",
+        "docs/reference/api/analyze-epr-usage.md": "## Required parameters\n\nMinimal call.\n",
+        "zh-TW/docs/reference/api/analyze-epr-usage.md": "## 必要參數\n\n最小呼叫。\n",
     }.items():
         destination = root / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -80,15 +80,15 @@ def test_render_reads_ast_and_authored_text_without_importing_facades(source_tre
     outputs = module.render(source_tree)
 
     assert set(outputs) == {
-        "docs/api/input-index.qmd",
-        "docs/api/analyze_epr.qmd",
-        "zh-TW/docs/api/input-index.qmd",
-        "zh-TW/docs/api/analyze_epr.qmd",
+        "docs/reference/api-index.qmd",
+        "docs/reference/api/analyze-epr.qmd",
+        "zh-TW/docs/reference/api-index.qmd",
+        "zh-TW/docs/reference/api/analyze-epr.qmd",
     }
-    index = outputs["docs/api/input-index.qmd"]
+    index = outputs["docs/reference/api-index.qmd"]
     assert "### scgsim.geometry" in index
     assert "`PublicName`" in index
-    detail = outputs["docs/api/analyze_epr.qmd"]
+    detail = outputs["docs/reference/api/analyze-epr.qmd"]
     assert "Minimal call." in detail
     assert "saved_solution: SavedSolution" in detail
     assert "geometry_workers: int | None = None" in detail
@@ -100,7 +100,7 @@ def test_check_mode_fails_stale_without_creating_or_rewriting_outputs(source_tre
     script = source_tree / "scripts/generate_knowledge_reference.py"
     command = [sys.executable, "-I", "-B", str(script), "--check"]
     result = subprocess.run(command, capture_output=True, text=True, check=False)
-    expected = source_tree / "docs/api/input-index.qmd"
+    expected = source_tree / "docs/reference/api-index.qmd"
     assert result.returncode == 1
     assert "Generated reference is stale" in result.stderr
     assert not expected.exists()

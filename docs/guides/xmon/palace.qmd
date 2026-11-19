@@ -1,0 +1,153 @@
+---
+title: "Flip-chip Xmon: Palace Route B Eigenmode"
+description: "Add attributed films and a source-linked inductive port to Palace Eigenmode."
+scgsim-kind: "course"
+scgsim-status: "STABILIZED"
+scgsim-id: "docs/tutorial-xmon-palace"
+execute:
+  enabled: false
+aliases:
+  - ../../tutorial-xmon-palace.html
+---
+
+Run the [shared Xmon input tutorial](inputs.qmd) first in the
+same Python session. It defines `plan`, `snapshot` and `port_name` from public component and coupon inputs. This extends [ordinary Palace Eigenmode](../modes-palace.qmd) with
+attributed films and a source-linked inductive port. Configure these before
+meshing. The documentation build does not mesh or run Palace.
+
+## Configure Eigenmode and EPR outputs
+
+The immutable snapshot already contains the GDS, prepared stack, final Net
+map, and shared outer vacuum envelope. Palace uses that envelope as supplied.
+Surface EPR is part of the geometry too, so the films below are set on the
+plan with `plan.set_surface_epr` and the plan is prepared again.
+The coupon's eight ground shorts are bumps drawn in its layout. The source port is the prepared
+`chip/device/o_junction_lumped` sheet; its qualified name and target layer come
+from the component annotation.
+
+```python
+from pathlib import Path
+
+from orcapen_sc_pdk import (
+    get_interface_preset_records,
+    validate_interface_preset_records,
+)
+from scgsim.palace import EigenmodeSim
+
+palace_run_dir = Path.cwd() / ".artifacts" / "public-xmon-palace-route-b"
+port_inductance_h = 11.78e-9  # Public OrPen model input; not a measured value.
+records = validate_interface_preset_records(get_interface_preset_records())
+preset_names = {
+    kind: f"LiteratureCentral_{kind}" for kind in ("MA", "MS", "SA")
+}
+interface_presets = {kind: records[name] for kind, name in preset_names.items()}
+for kind, record in interface_presets.items():
+    if record["interface_type"] != kind:
+        raise ValueError(f"{preset_names[kind]} is not an {kind} preset")
+
+plan.set_surface_epr(
+    {
+        kind: {
+            "thickness": record["thickness"],
+            "permittivity": record["permittivity"],
+            "loss_tangent": record["loss_tangent"],
+            "source": record["source"],
+            "preset": preset_names[kind],
+            "inset_margins_um": (0.5, 1.0),
+        }
+        for kind, record in interface_presets.items()
+    }
+)
+snapshot = plan.prepare()
+
+sim = EigenmodeSim()
+sim.set_plan(snapshot)
+sim.set_output_dir(palace_run_dir)
+sim.add_port(
+    port_name,
+    layer="D1_BOTTOM_M1",
+    layout_sheet=True,
+    inductance=port_inductance_h,
+)
+sim.set_epr_request(
+    surface_interfaces=("MA", "MS", "SA"),
+    bulk_domain_ids=None,
+    port_names=(port_name,),
+)
+sim.set_eigenmode(num_modes=2, target=2e9, tolerance=1e-6, save=0)
+sim.set_numerical(
+    order=2,
+    tolerance=1e-6,
+    max_iterations=2000,
+    solver_type="Default",
+    preconditioner="Default",
+    device="CPU",
+    amr_max_passes=20,
+    amr_nonconformal=False,
+    amr_tolerance=2e-2,
+    amr_update_fraction=0.15,
+    save_adapt_iterations=True,
+    estimator_mg=False,
+    output_paraview=False,
+    output_grid_function=False,
+)
+```
+
+The example requests margin rows through `inset_margins_um`. Each margin adds a
+row for the part of the surface at least that many micrometres from the nearest
+gap edge, next to the whole-surface baseline row. The specs are set on the plan,
+before `prepare()`, because SGB cuts the margins into the geometry; the
+[Eigenmode contract](../../reference/specs/palace-eigenmode.qmd#surface-epr-margins) lists the
+keys and limits. Omit `inset_margins_um` when only the baseline is needed. The
+example sets no mesh controls, so `mesh()` uses the default `FeatureRecipe` and
+quality threshold described in the
+[Palace mesh controls](../../reference/specs/palace-electrostatic-sgb.qmd#palace-mesh-controls).
+
+The MA/MS/SA records are the OrPen `LiteratureCentral` modeling presets, not
+material measurements. Replace them only with source-attributed records for
+your study. The two requested margins are separate alternatives to the
+baseline row. `bulk_domain_ids=None` selects all configured bulk energy
+entries, and the selection does not remove physical domains or change the
+normalization. Palace's external Region surface remains natural PMC when left
+unspecified; see the [EPR methods guide](../../concepts/surface-epr.qmd#workflow-and-state-contract)
+for the boundary comparison and interpretation limits.
+
+## Review normalized inputs before meshing
+
+`input_summary()` displays the input `mesh()` will build from and the current
+Palace settings: the bound plan with its vacuum region, requested ports and
+route applied. It does not mesh or start a solver. A model needs a vacuum
+region: this call and `mesh()` refuse a plan with none, so a stack without its
+own takes `plan.set_vacuum_region(...)` before `prepare()`.
+
+```python
+from IPython.display import display
+
+display(sim.input_summary())
+```
+
+To learn that SCGSim can model a layout before setting up a simulation, the
+layout repository can run the [layout modeling check](../check-a-layout.qmd),
+which stops before meshing.
+
+## Build inputs, execute and read the return
+
+```python
+mesh_path = sim.mesh()
+config_path = sim.write_config()
+print(mesh_path, config_path)
+```
+
+These are real local preparation operations. The written index binds each
+surface baseline/margin and configured port to its mesh identity; it is not a
+field result. [Inspect the backend](../inspect-the-prepared-model.qmd) if useful,
+then [prepare and execute its handoff](../run-elsewhere.qmd). Retain the Palace
+handoff ID on the preparation side, outside the transferred package.
+
+After full retrieval, [restart and strictly resolve](../convergence-and-reports.qmd).
+The report presents identity/numerical/cost evidence before available physics.
+`resolved.epr_result()` detaches available final Eigenmode EPR. Follow
+[offline EPR](../offline-loss.qmd) to retain it, select a recorded mode and
+change attributed assumptions without solving again. The
+[Palace Eigenmode contract](../../reference/specs/palace-eigenmode.qmd) owns exact selections;
+[EPR concepts](../../concepts/surface-epr.qmd) explain normalization and signed port meaning.

@@ -1,7 +1,7 @@
 """The code map's stage tables are the package folders' docstrings and their translations, and the generator
 refuses a folder it cannot state.
 
-``docs/code-map.qmd`` and its Chinese copy include the tables ``scripts/generate_code_map.py`` writes; a
+``docs/contribute/code-map.qmd`` and its Chinese copy include the tables ``scripts/generate_code_map.py`` writes; a
 docstring edited without regenerating them or without translating it again fails here, as does a new
 package folder the generator does not list.
 """

@@ -1,0 +1,546 @@
+---
+title: "Palace Electrostatic + SGB"
+description: "Electrostatic Net binding, the mesh controls both Palace facades share, Surface-EPR margin bands and detached mesh summaries."
+scgsim-kind: "contract"
+scgsim-status: "ACCEPTED"
+scgsim-id: "docs/specs/palace-electrostatic-sgb"
+aliases:
+  - ../../specs/palace-electrostatic-sgb.html
+---
+
+This contract covers the Palace Electrostatic backend: Route A/B lowering,
+handoff, Slurm execution, strict result resolution and report summaries, and
+the mesh controls both Palace facades share.
+
+## Public surface {#candidate-surface}
+
+The public backend object is `scgsim.palace.ElectrostaticSim`. Staged calls
+expose geometry, terminals, solver configuration, mesh, config, handoff, and
+result processing instead of hiding the workflow in one orchestration cell.
+
+The intended visible sequence is:
+
+```text
+prepare shared GeometryPlan snapshot
+-> set_plan
+-> add exact-net terminals and physical grounds
+-> configure Electrostatic
+-> mesh / config
+-> common handoff
+-> resolve / results / report
+```
+
+Handoff preparation does not submit Palace. Generated local or Slurm scripts
+execute explicitly and write a receipt that the resolver verifies. Slurm
+scripts bind `#SBATCH --output` and `--error` to `logs/palace-%j.log` so the
+scheduler does not also write `slurm-%j.out`.
+
+Before a generated script starts the solve, the exact copied `config.json` is
+passed to the selected Palace executable with its native `--dry-run` option.
+Only a successful dry-run of those exact bytes establishes config/runtime
+compatibility. The compatibility artifact and returned receipt preserve the
+config hash and observed native GitTag. When the configured executable is
+directly and truthfully resolvable as the Palace binary, its basename and
+SHA-256 are also retained. SCGSim does not inspect behind a wrapper to discover
+its hidden binary. GitTag, commit, and any available binary hash are provenance
+for reproducibility and diagnosis; their presence or value is not a
+runtime-eligibility Gate.
+
+If this preflight fails, the returned receipt records
+`execution_stage="config_compatibility"`, `solver_invoked=false`, its separate
+preflight and pipeline exit codes, and `solver_exit_code=null`. Receipts use
+`execution_stage="solver"` only after the solver command was actually invoked.
+
+| Stage | Public method | Intended responsibility |
+|---|---|---|
+| Shared source | `set_plan` | Bind the immutable shared source snapshot. |
+| Terminal binding | `add_terminal` | Select a terminal by exact SGB net identity. |
+| Physical Ground binding | `add_ground` | Select conductor components for Palace Ground by exact SGB net identity. |
+| Problem controls | `set_electrostatic` | Declare Electrostatic-specific config controls. |
+| Output identity | `set_output_dir` | Bind the mesh/config/handoff output location. |
+| Route | `set_route` | Route B when never called; `set_route("A")` uses the `thin_film` profile, or pass an `approximation_profile`. Run it before `mesh()`. |
+| Mesh controls | `set_mesh(...)` | Select the sizing recipe, mesher options, repair budgets and quality threshold. |
+| Source/settings view | `input_summary()` | Return the detached input `mesh()` builds from (the plan with its vacuum region and route applied) plus the settings, with no file or native I/O. |
+| Mesh | `mesh` | Build the SGB geometry, check it for fine structure, mesh it with `scgsim.meshing` and lower its groups to Palace attributes. |
+| Convergence | `set_convergence` | Declare the criteria that decide when adaptive refinement has converged; see [the convergence declaration](#convergence-declaration). |
+| Config | `write_config` | Write the Palace Electrostatic configuration for the reviewed mesh identities. |
+
+These methods are public APIs. Surface films and their inset margins are the
+plan's: `GeometryPlan.set_surface_epr(specs)` before `prepare()`, read from the
+bound snapshot ([Surface-EPR margins](#surface-epr-margins)).
+
+Configuration setters are atomic with respect to this staged state. Route,
+mesh and Eigenmode controls validate every supplied value before changing any
+field. A validation failure therefore preserves the prior
+configuration together with cached mesh, resolved-port, config, and handoff
+state. A successful change retains the existing mesh/config invalidation
+boundary; this does not change operational failures inside `mesh()` or
+`write_config()`.
+
+## Palace mesh controls {#palace-mesh-controls}
+
+A model needs a vacuum region, and the vacuum is the plan's: `mesh()` raises
+`ValueError` before writing any file when the plan declares none (the stack's
+`VACUUM_REGION`, or `plan.set_vacuum_region(...)` before `prepare()`).
+
+`mesh()` builds the geometry with SGB, meshes it with `scgsim.meshing` and
+writes the Palace mesh, so the mesh controls are the controls of that module.
+Both Palace facades accept them through `set_mesh(...)`, with the same defaults.
+Omitted arguments retain their current settings. A change that alters a setting
+invalidates the mesh, config and handoff; an invalid proposed value leaves the
+prior state intact.
+
+::: {.callout-note title="SCGSim's meshing is not required"}
+The XAO that SGB writes (in `geometry/`) can be meshed with another tool, and
+plain Gmsh has been tried on SCGSim's single-die and flip-chip test models and
+meshes them. This is not an officially supported flow, and this page does not
+describe how such a mesh connects to the rest of SCGSim.
+:::
+
+Before the mesher starts, `mesh()` runs the meshing stage of `simulation_drc` on
+the geometry it built. A refusing finding raises `scgsim.palace.SimulationDrcError`,
+carrying the report with each finding's location, owner and fix, and no mesh is
+made; warnings do not stop `mesh()`. The classes and limits are in
+[What the meshing stage reports](../../guides/check-a-layout.qmd#what-the-meshing-stage-reports).
+The mesh controls below apply to a model that passed.
+
+::: {.askr-table-compact}
+| Control | Default | Meaning |
+|---|---|---|
+| `recipe` | `FeatureRecipe()` | Chooses the initial element sizes: `FeatureRecipe`, `GlobalSizeRecipe`, `UniformBoundaryRecipe` or `GmshDefaultRecipe`. |
+| `mesher` | `MesherOptions()` | Gmsh algorithms and the order of the delivered mesh: `algorithm_2d` (Gmsh's default when `None`), `algorithm_3d` (Delaunay), `geometry_order` (1) and `high_order_optimize` (`True`). |
+| `budgets` | `Budgets()` | When the repair loop gives up: `max_rounds` (8 refinement rounds), `max_tetrahedra` (2,000,000) and a time limit of `time_limit_seconds` (180 s) for a model of at most `time_reference_area_mm2` (4 mm²) in x by y, growing in proportion above that area. The limit decides whether a round may start and how long its worker may run; writing the round's request and reading its result are not counted, so a result can arrive later than the limit by that much. `time_target_seconds` (60 s, scaled the same way) is reported, not enforced. |
+| `quality_threshold` | `0.01` | The minimum signed inverse condition number (minSICN) every tetrahedron must reach. |
+:::
+
+Import `FeatureRecipe`, `GlobalSizeRecipe`, `UniformBoundaryRecipe`,
+`GmshDefaultRecipe`, `MesherOptions`, `Budgets` and the `DELAUNAY` and `HXT`
+algorithm constants from
+`scgsim.meshing`. The repair policy is not a Palace control: Palace always uses
+the module's default `RepairPolicy`.
+
+::: {.callout-important title="A mesh below the quality threshold stops the run"}
+`mesh()` raises `scgsim.meshing.MeshRepairError`, carrying the quality report,
+when the repair loop cannot bring every tetrahedron to `quality_threshold`
+within `budgets`; only `GmshDefaultRecipe` delivers such a mesh. It also raises when the mesh needs more than
+`max_tetrahedra`, when the time limit is reached (a round still running is
+stopped), when the count of bad elements has not fallen below its lowest for
+two rounds in a row (`stalled`), when the accepted mesh cannot be raised to
+`geometry_order`, or when Gmsh produces no mesh. No mesh path is returned, so
+config and handoff preparation cannot continue. The report names the stop
+reason, the time limit and the bad elements that remain; it is written to the
+run's `mesh` folder, and the last mesh, if a round made one, stays there as a
+`.rejected.msh` file.
+
+When this happens, read where the remaining elements are. A stall usually
+points at geometry the mesher cannot repair, such as an edge or a face one grid
+step wide; fix it in the layout. Otherwise choose a recipe that sizes the
+offending region finer, raise `Budgets.max_rounds` or the time limit, or lower
+`quality_threshold` and record the lower value with the study.
+`Budgets(max_rounds=0)` runs a recipe once without repair; it turns off repair
+only, so a first mesh below the threshold is still rejected.
+:::
+
+### Sizing recipes {#palace-mesh-recipes}
+
+A recipe decides only the initial element sizes. Repair, the threshold and the
+report are the same for every recipe except `GmshDefaultRecipe`, which reports
+the quality without enforcing it. Start with `FeatureRecipe`: it sizes the
+curves the geometry itself calls for, and its defaults were measured to reach the
+default threshold on 1 to 4 mm chips and, with Surface-EPR bands, on a flip-chip
+qubit and on Route A sheets.
+
+::: {.askr-table-compact}
+| Recipe | Sizes | Parameters (defaults) |
+|---|---|---|
+| `FeatureRecipe` | A coarse maximum size, the bounding-box diagonal over `max_size_divisor`, with finer elements at thin film sidewalls (a multiple of the film thickness when that is finer than half the coarse size) and on every Surface-EPR band boundary curve (a multiple of the narrowest band width of its face; see [Band boundary curves](#palace-mesh-band-edges)). An optional rule sizes the outlines of the conductors. | `max_size_divisor=20`, `gradation=1`, `film_sidewall_thickness_multiple=25`, `film_sidewall_ceiling_fraction=0.5`, `conductor_outline=False`, `conductor_edge_size_um=5`, `conductor_edge_grow_um=300`, `band_mesh_size_multiple=4` |
+| `GlobalSizeRecipe` | Only the coarse maximum size, the bounding-box diagonal over `max_size_divisor`. A cheap reference that leaves near-flat tetrahedra at thin metal sidewalls, so it relies on repair rounds. | `max_size_divisor=20`, `gradation=1` |
+| `UniformBoundaryRecipe` | Every curve of the model at `near_um`, growing to `far_um` over `far_um` micrometres. It ignores what each curve is. | `near_um=5`, `far_um=300` |
+| `GmshDefaultRecipe` | No size of its own: Gmsh meshes the model once with its own defaults, with no maximum element size and no repair. The mesh is delivered whatever its minSICN, which the report records, so it carries no quality guarantee; the tetrahedron and time budgets still apply. It is never the default: choose it with `set_mesh(recipe=GmshDefaultRecipe())`. | None |
+:::
+
+Each recipe has a name and a version, recorded with its parameters in the mesh
+manifest, so a run states which sizing rules produced its mesh. A recipe's
+version changes only when the sizes it asks for change; see
+[Version identities of a mesh](mesh-quality.qmd#version-identities).
+
+#### Band boundary curves {#palace-mesh-band-edges}
+
+With Surface-EPR margins, the largest mesh element on each Surface-EPR band
+boundary curve is `band_mesh_size_multiple` times the narrowest band width of
+its face. Like every size of `FeatureRecipe`, that size is rounded down to the
+coarse size over a power of two, so with margins of 0.5 and 1 µm (bands 0.5 µm
+wide) the default of 4 asks for 2 µm and gets 1.1 to 2.0 µm, depending on the
+model's extent. A model without bands has no band boundary curves, and the
+multiple changes nothing there.
+
+Bands of 0.5 µm next to elements tens of micrometres long leave near-flat
+tetrahedra that repair does not clear. On Route A no film wall is sized near a
+sheet's edge, so without a size on the band boundary curves a single-die pad on
+Route A stalls below the threshold. On Route B the film walls already set fine
+sizes beside the bands; there the rule left no bad element in the first mesh of
+the flip-chip qubit, which needed a repair round without it.
+
+Keep the default of 4: of the measured multiples it is the only one that meets
+the time target on the banded flip-chip qubit, and it meshes every measured case
+clean. Set another multiple with
+`set_mesh(recipe=FeatureRecipe(band_mesh_size_multiple=...))`:
+
+- **A smaller multiple** (2) gives better-shaped elements at the bands, with a
+  minSICN of 0.08 to 0.23 on the pad and the chips, but 1.8 to 2.4 times the
+  tetrahedra of 4. The banded flip-chip qubit then does not mesh within the time
+  limit.
+- **A larger multiple** (8) saves elements only where band boundary curves set the size.
+  On Route A it about halves them, but the minSICN of the pad falls to 0.014
+  to 0.019, close to the default threshold. Next to Route B film walls it saves
+  nothing:
+  the flip-chip qubit gets the mesh it would have without the rule, needs a
+  repair round and takes twice as long as with 4.
+
+Measured with Gmsh 4.15.2, the default threshold and budgets, one model at a
+time on an otherwise lightly loaded 64-core workstation (Gmsh uses one thread);
+the rows of 2 were measured beside other work. On a busy machine the same runs
+took up to half as long again:
+
+::: {.askr-table-compact}
+| Multiple | Flip-chip qubit with bands | Single-die pad on Route A with bands | 1 to 4 mm chips with bands |
+|---|---|---|---|
+| 2 | 1.39 million tetrahedra; stopped at the time limit | clean; 216,000 to 235,000 tetrahedra; 14 s | clean; 23,000 to 37,000 tetrahedra; 1.6 to 2.0 s |
+| 4 (default) | clean in the first mesh; 569,325 tetrahedra; 53 s | clean; 89,000 to 115,000 tetrahedra; 4.7 to 5.5 s | clean; 13,000 to 20,000 tetrahedra; 1.0 to 1.2 s |
+| 8 | clean after one repair round; 407,093 tetrahedra; 105 s | clean; 49,000 to 52,000 tetrahedra; 2.6 to 2.7 s | clean; 9,000 to 14,000 tetrahedra; 0.7 to 0.8 s |
+| No size on band boundary curves, for comparison | clean after one repair round; 407,093 tetrahedra; 83 s | stalls at minSICN 0.003 to 0.004 | clean; 9,600 to 13,500 tetrahedra; 0.7 to 0.8 s |
+:::
+
+The flip-chip qubit is the OrcaPen SC PDK `disk_flip_chip_qubit` under common
+ground planes, Route B; the pad is `square_pad_capacitor` (200 µm pad, 1 mm
+die). Bands are 0.5 and 1 µm on every metal-air, metal-substrate and
+substrate-air face. The cases, every run and the machine load of each are in the
+[band-edge measurement](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/experiments/meshing-benchmark/band_edge.md).
+
+### Mesher options {#palace-mesh-mesher}
+
+`MesherOptions` sets how Gmsh meshes whatever the sizes. Delaunay is the default
+3D algorithm; `scgsim.meshing.HXT` is the alternative. Meshing runs on one
+thread, and there are no thread controls.
+
+`geometry_order` is the polynomial order of the delivered mesh, independent of
+the finite-element order of `set_numerical(order=...)`. The audit, the threshold
+and the repair loop always see the linear mesh. When `geometry_order` is above
+1, the module raises the order of the mesh the loop accepted, optionally runs
+Gmsh's `HighOrder` optimisation once (`high_order_optimize`), and writes that
+mesh. A failure to fit curved elements raises an error; it is never replaced by
+a straight or lower-order mesh.
+
+## What `mesh()` writes {#palace-mesh-outputs}
+
+The run folder holds the SGB model (`geometry/`, with the XAO and its sidecar),
+the meshing report (`mesh/`, as JSON and text), `palace.msh` and the mesh
+manifest (`metadata/`). `palace.msh` is a Gmsh MSH 2.2 ASCII file, the format
+Palace reads. Palace lowers SGB's named groups to solver attributes from the
+sidecar alone: it splits a surface group only where its faces are integrated by
+different Surface-EPR rows or sides, so the attributes partition the faces and
+nothing is counted twice. Electrical identity is the Net; the Terminal and
+Ground bindings use the exact Net of the sidecar.
+
+The meshing report states that minSICN and the count of tetrahedra below the
+threshold were measured on the linear mesh before any elevation, and records
+the order of the delivered mesh. Its fields are listed in
+[The quality report](mesh-quality.qmd#quality-report).
+
+## Mesh manifest and detached summary {#mesh-manifest-and-detached-summary}
+
+The mesh manifest (`schema_version` 2) records the route and its policy, the
+sidecar schema and model identity digest, the Surface-EPR inset requests with
+the band families they produced and the faces SGB skipped, the recipe (name,
+version and parameters), repair policy, mesher options, budgets and threshold,
+the path and SHA-256 of the quality report, and one entry per solver attribute
+with the SGB group it came from. It also records the Gmsh version, node and
+element types, physical-region element counts and edge-length statistics. Edge
+lengths for high-order meshes are explicitly labeled as primary-corner chords
+and reported in micrometres; they are not curved-edge arc lengths.
+
+Both Palace facades and a resolved Palace run expose `mesh_summary()`. It returns
+a detached value bound to the mesh and manifest identities. The Palace report
+reads this same summary authority. Eigenmode includes an Nédélec topological
+degree-of-freedom estimate based on primary-corner tetrahedron topology and the
+configured FEM order. It is not an actual solver degree-of-freedom count;
+changing FEM order updates the estimate without remeshing. Electrostatic's
+H1 estimate is unavailable. No SCGSim record measures the quality of curved
+high-order elements.
+
+## Surface-EPR margins {#surface-epr-margins}
+
+Surface-EPR inset margins are cut into the geometry as bands, so the specs are
+the plan's: `plan.set_surface_epr(specs)` before `plan.prepare()`. The
+[Eigenmode contract](palace-eigenmode.qmd#surface-epr-margins) owns the margin
+keys, the face kinds and the rows they produce, and Electrostatic reads the same
+specs. Surface EPR is optional here as in Eigenmode: for a plan without specs,
+`mesh()` cuts no bands and the config has no Surface-EPR rows. Binding a plan
+prepared with other specs invalidates the mesh, config and handoff.
+
+## Source and geometry authority
+
+Read the [SGB geometry concept](../../concepts/geometry.qmd#source-stage) for the
+source-to-construction explanation. The contracts below define the supported
+preparation paths.
+
+The simulation takes its source from `set_plan(snapshot)`, a prepared
+`GeometryPlan`. The [GeometryPlan contract](geometry-plan.qmd) owns occurrence/Nets, generated
+vacuum, contact and Route-A/B semantics. The current source-facing geometry
+authority is `scgsim.geometry`. Palace builds its geometry with
+`scgsim.geometry.sgb` (`build_sgb_geometry`) and meshes it with
+`scgsim.meshing`. External SGB and gsim are derivation history only.
+
+The [Electrostatic lesson](../../guides/capacitance-palace.qmd) teaches exact Net
+terminals/ground and the real mesh/config sequence. The separate
+[Eigenmode contract](palace-eigenmode.qmd) defines mode and EPR output selection.
+Neither preparation path starts Palace or submits a job.
+
+## Convergence declaration {#convergence-declaration}
+
+`set_convergence(*criteria, minimum_converged_passes=1)` declares when an
+adaptive run has converged. Both Palace facades take it. A criterion is a
+quantity and a threshold; no threshold has a default:
+
+```python
+from scgsim.palace import Capacitance, ErrorIndicator, SurfaceEpr
+
+sim.set_numerical(order=2, amr_max_passes=12)
+sim.set_convergence(
+    Capacitance.diagonal().within(percent=0.1),
+    Capacitance.element("island", "resonator").within(percent=1),
+    SurfaceEpr.each("MA", "MS", "SA", margin_um=1.0).within(percent=2),
+    ErrorIndicator().below(1e-2),
+    minimum_converged_passes=2,
+)
+```
+
+The numbers above only show the form; the thresholds are the user's.
+
+| Quantity | On | Each pass reads |
+|---|---|---|
+| `Capacitance.element(a, b)`, `.diagonal()`, `.sub_diagonal(offset=1)`, `.off_diagonal()`, `.matrix()`, `.elements([(a, b), ...])` | `ElectrostaticSim` | Elements `C[a][b]` of the Maxwell matrix in `terminal-C.csv`, named by terminal. `sub_diagonal` pairs terminals `offset` apart in the order they were added; `off_diagonal` and `matrix` take each pair of different terminals once. |
+| `ModeFrequency(modes=None)` | `EigenmodeSim` | `Re{f}` of each selected mode in `eig.csv`, in GHz; None selects every computed mode. |
+| `SurfaceEpr(interface_kind, margin_um=None, modes=None, terminals=None)` | both | The participation of one interface kind: the sum over its whole-surface rows, or over its margin rows at `margin_um`. One number per mode (`modes=`, Eigenmode) or per excitation (`terminals=`, Electrostatic); None selects all. `SurfaceEpr.each("MA", "MS", "SA")` declares one criterion per kind with one threshold. |
+| `ErrorIndicator()` | both | The `Norm` Palace writes to `error-indicators.csv`. |
+
+`within(percent=...)` bounds the change from the previous pass as a percentage
+of the value, $100\,|q_k - q_{k-1}| / |q_k|$. It is the measure the AEDT side
+states its deltas in: `Delta %` of a Q3D matrix, `Max Delta Freq. %` of HFSS
+Eigenmode, `Max Percent Delta` of an HFSS expression; the report uses those
+names. When $q_k$ is zero the change is zero if $q_{k-1}$
+is zero too, and otherwise undefined, so the criterion does not hold. The
+absolute form names the unit the quantity is stored in: `absolute_f` for
+capacitance (farads), `absolute_ghz` for frequency, `absolute` for a
+participation, which has no unit. Give exactly one. `ErrorIndicator().below(value)`
+bounds the value itself: the indicator is at most `value`.
+
+A pass is one Palace solve: pass 1 solves the input mesh, and pass $k$ follows
+$k-1$ refinements. A change criterion compares pass $k$ with pass $k-1$, so it
+cannot hold at pass 1. A quantity with several numbers holds when each of them
+does; the run has converged at pass $k$ when every criterion holds at each of
+the `minimum_converged_passes` passes ending at $k$. The whole-surface rows and
+the margin rows of a kind are never added together: a margin row is a part of
+its whole-surface row.
+
+::: {.callout-note title="What a change criterion says"}
+A change criterion says that a quantity moved little between two passes, not
+how far it is from its limit. On the layouts measured so far, whole-surface
+participation grew at every pass, and no change criterion on it held, so such
+a run goes to its pass limit. Participation beyond a margin (`margin_um=`)
+did settle, though not steadily from pass to pass, which is what
+`minimum_converged_passes` is for. The measurements are recorded on
+[issue 248](https://github.com/NCUPHY-LTLab/scgsim/issues/248#issuecomment-6873586635).
+:::
+
+Another call replaces the whole declaration; `set_convergence(None)` removes it,
+and `set_convergence()` with no criterion is refused. The call keeps the mesh
+and discards the config and handoff, as `set_numerical` does.
+
+### Checks
+
+`set_convergence` refuses, naming the call to change:
+
+- a quantity the simulation does not take (a `Capacitance` on `EigenmodeSim`,
+  a `ModeFrequency` on `ElectrostaticSim`, `modes=` on Electrostatic or
+  `terminals=` on Eigenmode), with the quantities the class takes;
+- a threshold that is not positive and finite, or two thresholds, or none;
+- `minimum_converged_passes` that is not an integer of at least 1.
+
+`write_config()` refuses, before it writes anything:
+
+- a terminal name the simulation does not have, or a selection with no element;
+- a mode beyond `num_modes`;
+- an interface kind with no Surface EPR requested (`plan.set_surface_epr`), or one
+  `set_epr_request(surface_interfaces=...)` leaves out;
+- a `margin_um` its spec does not declare, naming the margins it does;
+- an `amr_max_passes` too small for the declaration to hold at all: a run of
+  `amr_max_passes` refinements solves `amr_max_passes + 1` times, and the
+  declaration needs `minimum_converged_passes` solves, plus one when a criterion
+  is on a change;
+- a stated `amr_tolerance`, with the `ErrorIndicator().below(...)` criterion to
+  declare instead;
+- `save_adapt_iterations=False`, since every pass is read.
+
+### What is written, and how it relates to the AMR controls
+
+With a declaration, the declared criteria take the place of Palace's own
+tolerance. `write_config()` writes `Model.Refinement.Tol` as the smallest normal
+double, so that only `amr_max_passes` ends the run, and
+`SaveAdaptIterations: true`, so that Palace keeps every pass in
+`results/palace/iteration<k>`. It writes the plan of the check to
+`metadata/palace_convergence_plan.json`: for each criterion its label as the
+report shows it, and for each number the result table, the row, the columns and
+how they combine (a participation sums the columns of its rows), the test, the
+threshold, and `minimum_converged_passes`. Which columns make up a quantity is
+decided there once, from the index map entries the same config writes.
+`prepare_handoff()` seals the plan with the other inputs, so a returned run with
+a changed plan is refused. Without a declaration nothing of this is written and
+the config is what the AMR controls alone give.
+
+### The stop at convergence {#convergence-stop}
+
+With a declaration, Palace is stopped once the declared criteria have
+converged, one to two seconds after the pass at which they hold is complete, so
+the solves after that pass are not run.
+The run script starts Palace through the convergence runner that
+`prepare_handoff()` copies into the run folder,
+`metadata/run_palace_until_converged.py`, which needs only Python's standard
+library ([execution profiles](execution-profiles.qmd#convergence-runner)).
+The runner:
+
+1. starts the solver command the script would have run, in a session of its
+   own; Palace's output reaches the log as before;
+2. looks at `results/palace` every second. A pass counts once its
+   `iteration<k>/` folder is unchanged between two looks, and after each new pass
+   the runner runs the same check that result reading runs;
+3. when the verdict is converged, writes
+   `metadata/palace_convergence_decision.json` first, then sends SIGTERM to the
+   solver's session and waits until all of it has ended: the command, the
+   launcher it started and the ranks the launcher ends. If any of it is still
+   running 60 s later, it sends SIGKILL;
+4. when the solver has ended, after the stop or by itself at `amr_max_passes`,
+   writes the decision record again with the passes `results/palace` then holds
+   and the solver's exit code.
+
+The runner does not leave the solver running unwatched. Told to end (SIGTERM,
+SIGINT or SIGHUP), it ends the solver first and records why. Ended without that
+chance (SIGKILL, to the runner or to the script's whole process group), it
+leaves the solver to its guard: a process the runner starts with the solver, in
+a session of its own, which ends the solver's session in the same way once the
+runner is gone.
+
+Palace 0.18.1 completes pass $k$ in `iteration<k>/` before it refines the mesh
+for pass $k+1$, so the stop comes during that refinement or at the start of the
+next solve; no file of a completed pass changes. The stop is requested one to
+two seconds after the folder appears (the runner looks every second and counts a
+pass at its second look), and Palace has ended within about a second of the
+request. The receipt is written only then, so no solver process writes a file
+after it.
+
+A pass that takes less than those one to two seconds still runs. The runner then
+counts it with the pass before it: the verdict names the pass at which the run
+converged and how many passes were read after it, Palace is stopped after the
+last of them, and the result is that last pass. A run whose passes are all that
+short has ended before the runner looked; it is complete as Palace ended it.
+What the stop saves is every pass longer than that, which is where the time
+goes: a pass has two to three times the elements of the one before.
+
+The receipt states how the solver ended (`ending`) and keeps the solver's own
+exit code:
+
+| `ending` | When | Receipt |
+|---|---|---|
+| `solver_ended` | Palace ended without a stop from SCGSim | `completed` when every exit code is 0, `failed` otherwise |
+| `stopped_at_convergence` | the runner stopped it after a pass at which the verdict is converged, and it ended within the wait | `completed`, with the exit code the stop gave: 143 for Palace's `palace` wrapper script, which the signal ends, 1 for `mpirun` started directly, and 137 for `srun`, which ends its step |
+| `stop_escalated` | it did not end on SIGTERM and was killed | `failed` |
+| `runner_terminated` | the runner itself was told to end and ended Palace for that reason. Told to end while Palace is already ending after the stop at convergence, the stop stands | `failed` |
+| `not_recorded` | the runner left no complete decision record | `failed` |
+
+The result of a run stopped at convergence is its last pass: result reading
+takes the tables and the cost from `iteration<k>/`, since the top level holds
+links into it or a solve under way. Palace can also complete its last solve in
+the moment the runner decides. If it has ended by itself by then (exit code 0,
+its last solve at the top level), nothing was stopped and the run is recorded
+as ended by itself. If the stop still reaches it, the run was stopped and its
+result is that last solve, at the top level.
+
+Result reading computes the check again from the returned files and refuses
+the run, naming what disagrees, when:
+
+- the passes or the verdict differ from the decision record, or the record is
+  not the one the receipt binds;
+- the decision record and the receipt state different endings, or different
+  exit codes of the solver;
+- the top level holds links or a solve under way, and the receipt says Palace
+  ended by itself;
+- a decision record is present without a plan, or a plan has none;
+- a table of the result, at the top level or in `iteration<k>/`, is not among
+  the outputs the receipt records.
+
+`ResolvedPalaceResult.convergence` and the
+[trust report](report-model.qmd#declared-convergence) say at which pass the
+run converged and where Palace stopped, or which criterion still fails at the
+pass limit and by how much. `ResolvedPalaceResult.solver_end` (a `SolverEnd`)
+holds the receipt's `ending`, the pass the runner stopped Palace after, and the
+passes the limit allows (`amr_max_passes + 1`).
+
+## Electrostatic defaults {#candidate-electrostatic-defaults}
+
+These are implementation defaults, not universal scientific
+recommendations or adequacy Gates:
+
+| Control | Default value |
+|---|---|
+| `save_fields` | `0` |
+| `unassigned_conductor_policy` | `"ground"` |
+| `exterior_boundary_policy` | `"none"` |
+| `Model.Refinement.Nonconformal` | `false` unless the notebook sets `amr_nonconformal=True` |
+| `Model.Refinement.SaveAdaptMesh` | omitted unless the notebook sets `save_adapt_mesh=True` or `False` |
+
+`sim.numerical` holds these controls as a `NumericalControls`: read a control
+as a field (`sim.numerical.amr_nonconformal`) and the whole record with
+`sim.numerical.to_payload()`, the dictionary
+`metadata/palace_numerical_controls.json` holds. `sim.surface_epr_specs` reads
+the bound plan's specs as a `SurfaceEprSpecs` (`sim.surface_epr_specs.by_type["MA"]`,
+or `to_payload()` for the normalized mapping), None when the plan has none. A `NumericalControls` given to
+`ElectrostaticSim(numerical=...)` gets the Electrostatic defaults above for the
+AMR controls it does not set (0 passes, conformal, tolerance 0.01), as
+`set_numerical(...)` does. With a [convergence declaration](#convergence-declaration)
+the default tolerance is set aside and a stated one is refused.
+
+Palace defaults `Nonconformal` to `true` when the key is omitted. SCGSim always
+writes the key and defaults it to `false` (conformal tet AMR). Notebooks opt
+into nonconformal AMR with `set_numerical(amr_nonconformal=True)`.
+
+`set_numerical(save_adapt_mesh=...)` accepts only `True`, `False`, or `None`.
+`None` (including omission) preserves the previous SCGSim numerical payload and
+config bytes by omitting `SaveAdaptMesh`; a Boolean writes that exact Boolean to
+`Model.Refinement.SaveAdaptMesh`. The control asks Palace whether to save its
+final adapted mesh. It does not guarantee that a file is produced for every
+solver run or private workflow.
+
+`add_ground(net_id=...)` is the explicit physical-conductor path. It is
+independent of `exterior_boundary_policy="ground"`, which adds the finite
+solution-domain exterior faces. With `unassigned_conductor_policy="error"`,
+every conductor component must be covered by exactly one Terminal or explicit
+Ground binding. The index map records physical-Ground and exterior-Ground
+attributes separately and their exact union must equal
+`Boundaries.Ground.Attributes`. Existing
+`exterior_boundary_policy="none"` plus
+`unassigned_conductor_policy="ground"` remains the implicit-ground path.
+Electrostatic authoring writes index-map schema v3, which carries the
+physical-versus-exterior Ground split. The resolver reads only the current index
+map and mesh manifest schemas; the
+[report contract](report-model.qmd#palace-run-schemas) states what happens to
+a run folder of an older schema.
+
+External gsim and historical SGB revisions are derivation evidence only. The
+runtime geometry authority is the in-tree `scgsim.geometry.sgb` and the
+current `scgsim.palace` implementation.
+
+See [GeometryPlan and SGB](geometry-plan.qmd),
+[Preview the geometry](../../guides/preview-the-geometry.qmd),
+[Execution Profiles and Local/Manual-HPC Handoff](execution-profiles.qmd),
+and [Provenance and Data Boundaries](../../contribute/provenance.qmd) for the surrounding
+contracts.

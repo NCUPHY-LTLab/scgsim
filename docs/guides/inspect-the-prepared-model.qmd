@@ -1,0 +1,131 @@
+---
+title: "Inspect the prepared model"
+description: "Read bound mesh or native assignments before interpreting a solver result."
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/solver-observations"
+aliases:
+  - ../course/solver-observations.html
+---
+
+A backend preparation lesson gives you a mesh/config or a portable AEDT
+handoff. Now ask a different question from the source summary: what geometry
+and assignments exist in the backend representation? This lesson is optional
+for execution, but useful when a source declaration and a rendered model appear
+to disagree. It needs the [visualization extra](../start/install.qmd).
+
+## Palace: inspect the mesh that will be transferred
+
+After the Palace lesson's `mesh()` and `write_config()` calls, bind the actual
+run folder. The preview reads the mesh tags, manifest and index mapping;
+it does not infer semantic assignment from colors or object names.
+
+```python
+from scgsim.visualization import inspect_palace_geometry
+
+preview = inspect_palace_geometry(sim.output_dir)
+preview.show_materials()
+preview.show_boundaries()
+preview.show_surface_epr()
+preview.show_mesh()
+```
+
+The Palace workflow preserves high-order mesh connectivity and curved
+boundary representation in the preview. After `mesh()`,
+`sim.mesh_summary()` returns detached generation evidence bound to the mesh and
+manifest. It records the sizing recipe, mesher options, quality threshold and
+result, and the native element/region counts; the edge-length statistics are
+labeled as primary-corner chords. The preview
+and summary describe prepared geometry, not a solved field or a curved-element
+quality metric.
+
+A resolved Palace report shows its mesh summary as cards: the sizing recipe,
+geometry/FEM order, native node/element counts, the 3D/2D algorithms,
+`HighOrder` optimization status, the quality threshold, the minimum SICN and the
+count of elements below the threshold, the repair loop's outcome, the
+tetrahedron count against its budget, and an ND topological DOF estimate.
+Minimum SICN and the count are measured on the linear mesh, before any
+elevation to the geometry order. Gmsh details and the per-region table are under
+the collapsed **Physical regions and mesh discretization** section. Its edge
+count and minimum/mean/maximum lengths in micrometres are unique straight chords
+between primary corners, not curved arc lengths. A point region has zero edges
+and no length extrema.
+
+For the full detached control record, read the recipe, repair policy, mesher
+options, budgets and quality report directly:
+
+```python
+summary = sim.mesh_summary()
+meshing = summary["meshing"]
+recipe, mesher = meshing["recipe"], meshing["mesher"]
+quality = meshing["linear_mesh"]
+```
+
+The summary also carries mesh/manifest identities; a resolved result and report
+expose the same data through their own `mesh_summary()` methods. The ND card
+estimates topology from primary-corner tetrahedra before boundary constraints;
+it is not the native solver DOF count. Electrostatic H1 estimation is
+unavailable.
+
+Read the legend's exact semantic IDs and counts against the prepared source.
+Unavailable modes are explicit. For interactive notebook inspection,
+`preview.explore("materials")` displays the bound scene with rotation and zoom.
+The fixed `show_*` views instead write portable contact sheets and a manifest.
+Producing these before `prepare_handoff()` includes them in the existing Palace
+archive; a later sidecar is not retroactively part of that archive.
+
+The quality of the mesh is the meshing step's audit: minSICN of every
+tetrahedron on the linear mesh before elevation, held to the mesh's quality
+threshold. Its report sits in the run's `mesh/` folder; the fields are defined
+by the [mesh contract](../reference/specs/mesh-quality.qmd#quality-report).
+
+## AEDT: source preparation and native preparation differ
+
+An ordinary `prepare_handoff()` writes files without opening AEDT. It therefore
+cannot provide native CAD readback. The EPR path offers a separate explicit
+native preparation operation on the AEDT host:
+
+```bash
+python -m scgsim.aedt.run --handoff metadata/aedt_handoff_metadata.json --execute --prepare-only
+```
+
+Use the handoff's actual metadata path (`handoff.metadata_path`), relative to the
+prepared run folder as in the command above. This operation requires the
+native runtime, builds and verifies the EPR model, saves and releases Desktop,
+and records `native_preparation_only` with `solver_invoked=false`. It is not a
+completed solve and it consumes the prepared run's execution state. Prepare a
+**separate new handoff** for the later solve; do not assume the prepared-only
+receipt can be executed again as pristine input.
+
+Inspect the sealed run folder; its bound spec supplies the requested AEDT
+version, so the preview does not accept a separate version override:
+
+```python
+import json
+from pathlib import Path
+from scgsim.aedt import parse_aedt_spec
+from scgsim.visualization import inspect_aedt_geometry
+
+native_run_dir = Path.cwd()  # Start this session in the prepared-only run folder.
+native_spec = parse_aedt_spec(json.loads(
+    (native_run_dir / "aedt_spec.json").read_text(encoding="utf-8")
+))
+receipt = json.loads(
+    (native_run_dir / "metadata/aedt_run_receipt.json").read_text(encoding="utf-8")
+)
+project_path = native_run_dir / receipt["project"]
+preview = inspect_aedt_geometry(native_run_dir)
+preview.show_materials()
+preview.show_boundaries()
+```
+
+`project_path` above identifies the actual saved `.aedt` file for reference.
+Passing the sealed run folder binds preview readback to its recorded spec
+and opens native AEDT; Surface-EPR or mesh views can remain unavailable. If you
+instead pass `project_path` directly, supply its design and an explicit
+`aedt_version` matching the target Desktop. It does not turn a screenshot into a
+completed run. The [preview contract](preview-the-geometry.qmd) specifies source
+hashes, manifest custody and unavailable modes.
+
+Next, [execute a fresh handoff](run-elsewhere.qmd) on its host, or return to the
+[course map](../start/choose-a-simulation.qmd) to choose a different backend model.

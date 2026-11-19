@@ -12,8 +12,9 @@ per-PR auto-merge; use the currently authorized merge path only after required
 CI passes.
 
 Read the task-relevant entry and smallest applicable contract. `README.md`,
-`docs/goals-and-upstream.qmd`, `docs/architecture.qmd`, `docs/geometry-sgb.qmd`
-and `docs/ownership.qmd` are reference entries, not a mandatory reading batch.
+`docs/contribute/goals-and-upstream.qmd`, `docs/contribute/architecture.qmd`,
+`docs/reference/specs/geometry-plan.qmd` and `docs/contribute/ownership.qmd` are
+reference entries, not a mandatory reading batch.
 Authorized implementation includes directly related documentation, tests and
 local checks under `$v1-lifecycle`; research and native execution follow the
 assigned task scope.
@@ -42,8 +43,8 @@ component-simulation notebooks; SCGSim owns no duplicate notebook source.
   valid inputs paired wrongly, two calls writing one output target, a result
   that passes quality but exceeds a limit the caller set). Then weigh each
   against the Issue, the public docs and the callers you can see.
-- The supported use is a calculation `docs/backend-support.qmd` lists, entered
-  through the public API with the input listed there: `GeometryPlan` and the
+- The supported use is a calculation `docs/reference/supported-calculations.qmd`
+  lists, entered through the public API with the input listed there: `GeometryPlan` and the
   simulation classes of `scgsim.palace` and `scgsim.aedt`, or an AEDT request
   spec passed to `prepare_handoff`. Inputs built by hand below that entry (a
   `GeometryBuildInput` built by hand for `build_sgb_geometry`, a prism

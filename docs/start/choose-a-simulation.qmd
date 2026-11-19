@@ -1,0 +1,61 @@
+---
+title: "Choose a simulation"
+description: "Find the guide and the PDK notebook for your question: a pad's capacitance, a resonator's frequency and Q, a two-port's S-parameters or a line's per-length parameters."
+scgsim-kind: "start"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/examples"
+aliases:
+  - ../examples.html
+---
+
+Start from the question you want answered. Each row names the guide that shows
+the SCGSim calls, then the complete notebook in the OrcaPen SC PDK, which owns
+the component, its settings and its environment. The quickest start is
+[First simulation](first-simulation.qmd): the capacitance of a pad with
+Palace, in one script.
+
+## Choose by your question {#getting-started}
+
+<div id="pdk-notebooks-by-goal"></div>
+
+| Your question | Guide | PDK notebook |
+|---|---|---|
+| What is the capacitance of a pad? | [Palace: terminal capacitance](../guides/capacitance-palace.qmd) · [AEDT: Q3D extraction](../guides/capacitance-q3d.qmd) | SimplePad: [Palace Electrostatic](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/palace_electrostatic.qmd) · [AEDT Q3D](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_q3d.qmd) |
+| What are the frequency and Q of a resonator, and how does its energy divide among surfaces, bulk and the junction? | [Palace: resonant modes](../guides/modes-palace.qmd) · [AEDT: HFSS Eigenmode](../guides/modes-hfss.qmd) | SimplePad: [Palace Eigenmode and EPR](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/palace_eigenmode.qmd) · [HFSS Eigenmode and surface EPR](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.qmd) |
+| What are the S-parameters of a two-port? | [AEDT: HFSS Driven Terminal](../guides/s-parameters-hfss.qmd) | [17-bridge CPW–meander coupon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/CpwMeanderAirbridge) (HFSS Driven Terminal) |
+| What are the per-length C, G, L and R of a line? | [AEDT: Q2D cross-section extraction](../guides/line-parameters-q2d.qmd) | Finite-ground CPW: [AEDT Q2D](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/CrossSectionSimulation/CpwFiniteGround/aedt_q2d.qmd) |
+
+The notebooks are those of PDK revision `49e539f`, the revision the
+[home page](../../index.qmd#install) installs; they were written for an earlier
+SCGSim and are being moved to this version, so where a notebook and a guide
+differ, follow the guide.
+
+S-parameters need a layout with a lumped-port sheet for each of the two ports;
+Driven Modal and wave ports are not available in this version.
+
+## A larger worked example {#public-inputs}
+
+The [flip-chip Xmon](../guides/xmon/inputs.qmd) example prepares one source for
+both [Palace](../guides/xmon/palace.qmd) and [AEDT](../guides/xmon/aedt.qmd).
+Its sources, and the other deeper examples, are in these PDK notebook groups
+at the same revision:
+
+| PDK notebook group | What it holds |
+|---|---|
+| [Kosen2024_Xmon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/ComponentSimulation/Kosen2024_Xmon) | Palace Electrostatic and Eigenmode studies of the Xmon |
+| [SCGSimExamples/ComponentSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/CpwFiniteGround) | HFSS Eigenmode, Q3D and Palace Eigenmode on the CPW coupon |
+| [ComponentSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/ComponentSimulation/CpwFiniteGround) | The HFSS Driven Terminal source |
+| [SCGSimExamples/CrossSectionSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/CrossSectionSimulation/CpwFiniteGround) | Q2D rectangles and conductor groups |
+
+The dimensions and presets in these notebooks are example inputs, not a
+recommendation for your design.
+
+## Before your own layout
+
+Read the [supported scope](../reference/supported-scope.qmd) first: what the
+layout must guarantee, what SCGSim guarantees in return, and who owns a
+failure. <span id="prepare-a-model-and-read-its-return"></span><span id="continue-with-a-focused-reference"></span>The Guides then cover the steps around a calculation:
+[preparing a layout](../guides/prepare-a-layout.qmd) and
+[checking it](../guides/check-a-layout.qmd), [running on another
+computer](../guides/run-elsewhere.qmd) and
+[reading the results](../guides/convergence-and-reports.qmd).

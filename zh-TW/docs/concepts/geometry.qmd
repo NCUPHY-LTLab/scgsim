@@ -1,5 +1,5 @@
 ---
-title: "SGB：從版圖來源到可建構幾何"
+title: "版圖如何變成模型"
 description: "以一個公開案例說明元件形狀、製程資料與組裝宣告如何成為 Gmsh 和 Palace 可建構的共用幾何。"
 lang: zh-TW
 toc-title: 本頁內容
@@ -17,7 +17,7 @@ SGB 將明確宣告的版圖與製程資料整理成求解器後端可建構的�
 本文以一個含孔洞、兩個 Net、基板與真空，並明確要求矩形接面的公開案例，逐步說明每個準備步驟為什麼存在，以及它交給下一步什麼資料。案例說明止於 CAD 建構，不代表已產生網格或場解結果。
 
 ::: {.callout-note title="本頁以 Gmsh 與 Palace 建構路徑為主"}
-本文描述的路徑把實體模型寫成 BREP 與 XAO 檔、由 Gmsh 產生網格，再交給 Palace。AEDT 在支援範圍內使用相同來源語意，但透過 AEDT 原生 Modeler 建立工程，因此建構步驟不同。共用語意與後端界線請參閱[物理表示契約](../specs/physical-representation.qmd)及[幾何契約](../geometry-sgb.qmd)。
+本文描述的路徑把實體模型寫成 BREP 與 XAO 檔、由 Gmsh 產生網格，再交給 Palace。AEDT 在支援範圍內使用相同來源語意，但透過 AEDT 原生 Modeler 建立工程，因此建構步驟不同。共用語意與後端界線請參閱[物理表示契約](../reference/specs/physical-representation.qmd)及[幾何契約](../reference/specs/geometry-plan.qmd)。
 :::
 
 ## 1. 先說清楚模型由哪些事實組成 {#source-stage}
@@ -87,7 +87,7 @@ PDK（process design kit，製程設計套件）提供**製程意義**。層堆�
 | 快照 | 一份已準備的來源事實副本 | 後續步驟讀取同一份固定輸入 |
 
 ::: {.callout-important title="不同 Net 的形狀接觸時，不會自動合併"}
-SCGSim 保留呼叫者宣告的 Net。依目前接觸規則，不同 Net 的導體若被辨認為共平面的面接觸或導體體積重疊，準備階段會以短路錯誤停止並保留原 Net 宣告；一般的純邊接觸或純點接觸也會被拒絕。同一 Net、有效薄膜內的側向接縫有明確接受條件。同一 Net 仍不能取代幾何接觸檢查。詳見[幾何契約中的接觸規則](../geometry-sgb.qmd#component-to-backend-geometry-contract)。
+SCGSim 保留呼叫者宣告的 Net。依目前接觸規則，不同 Net 的導體若被辨認為共平面的面接觸或導體體積重疊，準備階段會以短路錯誤停止並保留原 Net 宣告；一般的純邊接觸或純點接觸也會被拒絕。同一 Net、有效薄膜內的側向接縫有明確接受條件。同一 Net 仍不能取代幾何接觸檢查。詳見[幾何契約中的接觸規則](../reference/specs/geometry-plan.qmd#component-to-backend-geometry-contract)。
 :::
 
 ::: {.callout-note title="來源 DBU 與共用 XY 網格"}
@@ -210,17 +210,17 @@ SGB 把已規劃的點、線、環與面直接寫成 BREP 與 XAO 文字，再�
 
 Palace 以 SGB 建立幾何，並用 `scgsim.meshing` 模組在新的 Gmsh 程序中，為匯出的 XAO 與和它成對的 sidecar 產生網格。模組在求解體積中建立四面體、在每個壞元素周圍的球形區域給予更細的局部尺寸，若在預算內仍有四面體低於品質門檻就以錯誤中止。接著 Palace 把 SGB 的實體群組降階為求解器屬性，並寫出交給 Palace 的網格輸入。尺寸配方屬於網格化階段：它控制元素尺寸；來源 DBU 與組裝 XY 網格則控制幾何座標。加密網格無法補上缺少的來源語意，也不會改變接面所有權。
 
-網格控制項請見 [Palace 網格控制](../specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。
+網格控制項請見 [Palace 網格控制](../reference/specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。
 
 ## 4. 能力 {#distance-bands}
 
 目前 SGB 路徑會將來源形狀、材料與物理解讀、最終 Net 宣告、明確的埠與接面要求、介面所有權、共用平面歸屬及三維拓樸交給後端建構。Gmsh／Palace 與 AEDT 在各自支援範圍內共用來源事實，但原生建構與執行仍由各後端負責。
 
 ::: {.callout-note title="Surface EPR 條帶"}
-Palace 的 Surface EPR 邊距：`mesh()` 建立幾何時，`inset_margins_um` 會請 SGB 把內縮帶切進模型，Palace 再把它們當作普通屬性積分。鍵與限制請見[本徵模態契約](../specs/palace-eigenmode.qmd#surface-epr-margins)。
+Palace 的 Surface EPR 邊距：`mesh()` 建立幾何時，`inset_margins_um` 會請 SGB 把內縮帶切進模型，Palace 再把它們當作普通屬性積分。鍵與限制請見[本徵模態契約](../reference/specs/palace-eigenmode.qmd#surface-epr-margins)。
 :::
 
-一般多邊形輪廓即使近似圓弧，仍是多邊形。明確宣告的曲線是線段與圓弧，由 SGB 自行處理；其他曲線類型會引發 `UnsupportedCurveError`。詳見[曲線契約](../geometry-sgb.qmd#source-curves)。來源、物理表示及後端的正式契約請參閱[SGB 幾何契約](../geometry-sgb.qmd)。
+一般多邊形輪廓即使近似圓弧，仍是多邊形。明確宣告的曲線是線段與圓弧，由 SGB 自行處理；其他曲線類型會引發 `UnsupportedCurveError`。詳見[曲線契約](../reference/specs/geometry-plan.qmd#source-curves)。來源、物理表示及後端的正式契約請參閱[SGB 幾何契約](../reference/specs/geometry-plan.qmd)。
 
 ::: {.callout-note collapse="true" title="公開案例來源與範圍"}
 本文案例來自公開的矩形接面與孔洞測試：[`tests/test_rectangular_junction_geometry.py`](https://github.com/NCUPHY-LTLab/scgsim/blob/v3.0.0rc4/tests/test_rectangular_junction_geometry.py#L252) 中的 `physical_fixture()`。[案例索引](../images/sgb-concept/public-case-binding.json)記錄來源版本、單位、物理表示及各圖對應階段。本頁以來源、物理表示及接面圖解釋目前保留的流程。

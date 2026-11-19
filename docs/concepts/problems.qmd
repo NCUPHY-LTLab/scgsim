@@ -29,7 +29,7 @@ fields and its chosen boundaries.
 
 Palace and HFSS provide the implemented Eigenmode paths. Optional EPR analysis
 asks where the mode stores energy and what selected loss assumptions imply.
-Read [energy participation](../eigenmode-epr.qmd) before interpreting those fractions.
+Read [energy participation](surface-epr.qmd) before interpreting those fractions.
 
 ## Driven response: excite a port at a frequency
 
@@ -48,7 +48,7 @@ port treatment cannot be recovered from a per-length matrix alone.
 ::: {.callout-tip title="Choose a quantity before a solver"}
 Write down the conductor pair, mode or port response you need, its units and
 the intended circuit-model use. Then choose a supported workflow from the
-[capability table](../backend-support.qmd).
+[capability table](../reference/supported-calculations.qmd).
 :::
 
 For native formulations, see [Palace problem types](https://awslabs.github.io/palace/stable/guide/problem/)

@@ -2,11 +2,13 @@
 
 The roots must be the ones ``scripts/build_docs_site.py`` publishes, the package's own version must have one,
 and every page and section a message links to must exist in both language editions, or the link a user follows
-lands nowhere.
+lands nowhere.  A page that moved keeps its old URL as a Quarto alias, whose redirect keeps the section, so a
+message of a released version still lands on the section it names.
 """
 
 from __future__ import annotations
 
+import posixpath
 import re
 import runpy
 from importlib.metadata import version
@@ -82,10 +84,39 @@ def test_messages_link_to_sections_somewhere():
     } <= set(linked_sections())
 
 
+def aliases(page: Path) -> list[str]:
+    """The ``aliases:`` of a page's front matter, each a URL relative to the page."""
+    lines = page.read_text(encoding="utf-8").split("\n")
+    end = lines.index("---", 1)
+    found, inside = [], False
+    for line in lines[1:end]:
+        if line.startswith("aliases:"):
+            inside = True
+        elif inside and line.startswith("  - "):
+            found.append(line[4:].strip())
+        else:
+            inside = False
+    return found
+
+
+def page_at(edition: Path, url: str) -> Path | None:
+    """The page that renders at ``url``, or the moved page whose alias redirects from it."""
+    source = edition / (url.removesuffix(".html") + ".qmd")
+    if source.is_file():
+        return source
+    for page in (edition / "docs").rglob("*.qmd"):
+        folder = page.parent.relative_to(edition).as_posix()
+        if any(
+            posixpath.normpath(posixpath.join(folder, a)) == url for a in aliases(page)
+        ):
+            return page
+    return None
+
+
 @pytest.mark.parametrize("edition", [".", "zh-TW"])
 @pytest.mark.parametrize(("page", "anchor"), linked_sections())
 def test_every_linked_section_exists_in_both_editions(edition, page, anchor):
-    """The page renders to ``<page>.html`` and carries the section's ``{#anchor}`` in each language."""
-    source = ROOT / edition / f"{page}.qmd"
-    assert source.is_file(), source
+    """``<page>.html`` is a page, or an alias of one, that carries the section's ``{#anchor}`` in each language."""
+    source = page_at(ROOT / edition, f"{page}.html")
+    assert source is not None, f"{edition}/{page}.html"
     assert re.search(rf"\{{#{re.escape(anchor)}\}}", source.read_text()), anchor

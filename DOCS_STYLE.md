@@ -18,9 +18,9 @@ Python and are learning SCGSim. Contributor material belongs in
 | Content | Owning source |
 |---|---|
 | Homepage | Each language's README, included by its `index.qmd` |
-| Installation | [Install SCGSim](docs/course/installation.qmd) |
-| Solver execution and host prerequisites | [Run a prepared model](docs/course/execute.qmd) |
-| Returned-result loading and interpretation | [Read returned results](docs/course/returned-results.qmd) |
+| Installation | [Install SCGSim](docs/start/install.qmd) |
+| Solver execution and host prerequisites | [Run a prepared model](docs/guides/run-elsewhere.qmd) |
+| Returned-result loading and interpretation | [Read returned results](docs/guides/convergence-and-reports.qmd) |
 | Public component models and executable notebooks | OrcaPen SC PDK; link its source rather than copying it |
 | API index and signatures | Public Python declarations and authored usage Markdown; regenerate through `scripts/generate_knowledge_reference.py` |
 | Navigation and rendering | Root and `zh-TW/_quarto.yml`; `scripts/build_docs_site.py` owns versioned publication |
@@ -34,8 +34,13 @@ workflow; an example does not require a fixed number of pages.
 Keep the `scgsim-kind`, `scgsim-status` and `scgsim-id` frontmatter fields on
 packaged QMD pages. [build_backend.py](build_backend.py) reads them for the
 offline knowledge bundle; they describe packaging and are not reader-facing
-status labels. Preserve existing resource IDs and keep `docs/examples` as
-the sole resource whose kind is `start`.
+status labels. Preserve existing resource IDs, also when a page moves, and keep
+`docs/examples` (the page `docs/start/choose-a-simulation.qmd`) as the sole
+resource whose kind is `start`. A moved page keeps its old URL in `aliases:`
+and its old section anchors (an empty `<span id>` where a section's content
+now is); a page whose sections go to other pages gets a `SPLIT_PAGES` entry in
+[scripts/build_bilingual_docs.py](scripts/build_bilingual_docs.py) instead of
+an alias.
 
 Keep model prerequisites, physical assumptions, units and result meaning with
 their owning documentation. Retain source versions in example links and
@@ -68,19 +73,41 @@ Use their terminology and link to them when introducing a technical term.
 | Term | Owning explanation |
 |---|---|
 | Entity | [Source identity, Occurrence and Net](docs/concepts/geometry.qmd#entity-occurrence-and-net) |
-| Net | [Convention](docs/conventions.qmd#term-net) and [geometry contact rules](docs/geometry-sgb.qmd#component-to-backend-geometry-contract) |
-| GeometryPlan | [Convention](docs/conventions.qmd#term-geometry-plan) |
-| Snapshot | [Convention](docs/conventions.qmd#term-snapshot) |
-| Handoff / run package | [Convention](docs/conventions.qmd#term-handoff) and [execution](docs/course/execute.qmd) |
-| `handoff_id` | [Preparation-side identity and result resolution](docs/course/returned-results.qmd#palace-bind-the-independently-retained-preparation-id) |
-| Resolve | [Returned-result loading and checks](docs/course/returned-results.qmd) |
+| Net | [Terms and units](docs/reference/terms-and-units.qmd#term-net) and [geometry contact rules](docs/reference/specs/geometry-plan.qmd#component-to-backend-geometry-contract) |
+| GeometryPlan | [Terms and units](docs/reference/terms-and-units.qmd#term-geometry-plan) |
+| Snapshot | [Terms and units](docs/reference/terms-and-units.qmd#term-snapshot) |
+| Handoff / run package | [Terms and units](docs/reference/terms-and-units.qmd#term-handoff) and [execution](docs/guides/run-elsewhere.qmd) |
+| `handoff_id` | [Preparation-side identity and result resolution](docs/guides/convergence-and-reports.qmd#palace-bind-the-independently-retained-preparation-id) |
+| Resolve | [Returned-result loading and checks](docs/guides/convergence-and-reports.qmd) |
 | Route A / Route B | [Geometric approximations](docs/concepts/model-and-numerics.qmd#choose-the-geometric-approximation) |
 
-The English [Convention](docs/conventions.qmd) and
-[Chinese Convention](zh-TW/docs/conventions.qmd) collect reader terminology.
+The English [Terms and units](docs/reference/terms-and-units.qmd) and
+[Chinese terms and units](zh-TW/docs/reference/terms-and-units.qmd) collect reader terminology.
 Chinese reader pages retain the English technical terms requested for this
 project, with a Chinese explanation on first use. Keep API names and actual
 interface strings unchanged.
+
+### Chinese terms
+
+Chinese reader pages use these Taiwanese terms and address the reader as 你.
+API names, interface strings and the solvers' own names (HFSS `Eigenmode`,
+`Driven Terminal`, Q3D `Signal`) stay as they are.
+
+| English term | Taiwanese term | Note |
+|---|---|---|
+| port | 埠 | Not 端口 or 連接埠. A lumped-port sheet is 集總埠片. |
+| terminal | 端子 | The conductor a capacitance solve sets to 1 V. Not 終端 (終端機 is the terminal window). |
+| eigenmode | 本徵模態 | Not 本徵模. |
+| resonant mode | 共振模態 | |
+| inset margin | 邊距 | The distance from a gap edge to a band boundary. Not 內縮邊距 or margin. |
+| band | 條帶 | One inset band; a band family is 條帶族. |
+| snapshot | 快照 | The immutable result of `plan.prepare()`. |
+| coupon | 試片 | The small structure around the device that is simulated. Not 試樣 or coupon. |
+| region | 區域 | For a region of the model, not 區塊. |
+| mesh | 網格 | Not 格網. |
+| vacuum region | 真空區域 | The box of empty space the solver includes. Not 真空區, 真空範圍 or 真空盒. |
+| Net | Net | Kept in English. On first use, explain it: 一塊具名、作為同一個導體的金屬. |
+| you | 你 | Not 您. |
 
 ## 6. Bilingual and derived output
 

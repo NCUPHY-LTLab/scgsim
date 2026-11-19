@@ -1,6 +1,6 @@
 """Build Palace's group dict from the SGB sidecar alone, with every group lowered to solver attributes.
 
-The rules are those of ``zh-TW/docs/design/sgb/consumer-mapping.qmd``.  The dict has four keys, each a
+The rules are those of ``zh-TW/docs/contribute/sgb-design/consumer-mapping.qmd``.  The dict has four keys, each a
 mapping from a name to a JSON-serialisable record:
 
 ``volumes``

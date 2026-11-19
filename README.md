@@ -3,140 +3,69 @@
 **Simulate superconducting layouts with Python.**
 
 [![License: Apache-2.0](docs/assets/badges/license.svg)](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/LICENSE)
-[![Python: 3.12–3.13](docs/assets/badges/python.svg)](docs/course/installation.qmd)
-[![Tutorial: Layout EM](docs/assets/badges/tutorial.svg)](docs/examples.qmd)
-[![AEDT: HFSS / Q3D / Q2D](docs/assets/badges/aedt.svg)](docs/backend-support.qmd)
-[![Palace: Electrostatic / Eigenmode](docs/assets/badges/palace.svg)](docs/course/palace-eigenmode.qmd)
+[![Python: 3.12–3.13](docs/assets/badges/python.svg)](docs/start/install.qmd)
+[![Tutorial: Layout EM](docs/assets/badges/tutorial.svg)](docs/start/choose-a-simulation.qmd)
+[![AEDT: HFSS / Q3D / Q2D](docs/assets/badges/aedt.svg)](docs/reference/supported-calculations.qmd)
+[![Palace: Electrostatic / Eigenmode](docs/assets/badges/palace.svg)](docs/guides/modes-palace.qmd)
 [![Gmsh: Meshing](docs/assets/badges/gmsh.svg)](docs/concepts/geometry.qmd)
-[![gsim: Unofficial Downstream](docs/assets/badges/gsim.svg)](docs/goals-and-upstream.qmd)
+[![gsim: Unofficial Downstream](docs/assets/badges/gsim.svg)](docs/contribute/goals-and-upstream.qmd)
 
 ![SCGSim orca and penguin introducing a chip layout, finite-element mesh and illustrative electromagnetic field.](docs/assets/scgsim-overview-orca-penguin.png)
 
-SCGSim prepares Palace and Ansys AEDT simulations, then returns capacitance, resonant modes, S-parameters and per-length line results with units.
+SCGSim turns a superconducting chip layout, its layer stack and materials, and
+the conductors you name into a 3D model, and writes the input of the solver
+you choose: the open-source Palace, or Ansys AEDT (HFSS, Q3D, Q2D). When the
+run is done, it reads the results back with their units: capacitance matrices,
+resonant modes with their frequency, Q and energy participation, S-parameters,
+and per-length line parameters.
 
 ## Install
 
-Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and Git, then create a study project. These commands install SCGSim `3.0.0rc4` and the OrPen SC PDK component library used below, each pinned to an exact source revision.
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and Git,
+then create a study project with SCGSim `3.0.0rc4` and the OrcaPen SC PDK, the
+component library the examples draw their layouts with, each pinned to an exact
+revision:
 
 ```bash
 uv init --python 3.12 scgsim-study
 cd scgsim-study
-uv add 'scgsim[aedt] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@v3.0.0rc4' \
+uv add 'scgsim[palace] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@v3.0.0rc4' \
   'orcapen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@49e539fd59f3224ecda965d777c7ec3aadcc3b85'
 ```
 
-`uv` creates `.venv` and records resolved versions in `uv.lock`. Keep `pyproject.toml` and `uv.lock` with the study; run `uv sync` on another computer to recreate the environment.
+The `palace` extra prepares Palace runs. For AEDT, list its extra as well:
+`scgsim[palace,aedt]`. [Install SCGSim](docs/start/install.qmd) lists the
+extras and what Palace and AEDT need on the computer that runs them.
 
-> **Execution requirements:** The example needs AEDT Q3D 2024.2 installed on this host with a working license. Python packages do not include the native solver. See the [installation guide](docs/course/installation.qmd) for other backend setups.
+## Start here
 
-## Usage example: one script for SimplePad capacitance
+[First simulation](docs/start/first-simulation.qmd) runs one script that
+computes the capacitance of a 200 µm square pad in a 20 µm gap with Palace,
+on your own computer and without an AEDT licence. It ends by printing:
 
-This example uses the public PDK’s nominal 100 nm aluminum stack and places a 200 µm square metal pad, a 20 µm gap and surrounding Ground on a 1000 µm square die. The component library supplies the layout, materials and layer stack. The script declares the final `pad` and `ground` electrical membership, then asks Q3D for capacitance and conductance matrices.
-
-![SimplePad layout: square pad, surrounding Ground and authored locator.](docs/assets/simple-pad-layout.png)
-
-Save the complete program below as `simplepad_q3d.py`. Its four sections build the source, prepare solver inputs, execute, and read the result. No code from another page is required first.
-
-```python
-from pathlib import Path
-from uuid import uuid4
-import argparse
-import subprocess
-import sys
-
-import gdsfactory as gf
-import orcapen_sc_pdk
-from orcapen_sc_pdk import get_material_records
-from orcapen_sc_pdk.tech import get_single_die_layer_stack
-from scgsim.geometry import GeometryPlan
-from scgsim.aedt import (
-    AedtResources,
-    MatrixRunControl,
-    prepare_q3d_from_geometry,
-    resolve_results,
-)
-
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--handoff-only", action="store_true")
-    args = parser.parse_args()
-
-    # 1. Build the layout and declare electrical ownership.
-    orcapen_sc_pdk.activate()
-    component = gf.get_component(
-        "square_pad_capacitor",
-        pad_side_um=200.0,
-        gap_um=20.0,
-        die_side_um=1000.0,
-        junction_width_um=2.0,
-    )
-    records = get_material_records()
-    plan = GeometryPlan(
-        component=component,
-        root_id="chip",
-        layer_stack=get_single_die_layer_stack(),
-        material_records=records,
-        coupon_padding_um=0.0,
-    )
-    plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
-    plan.set_vacuum_region(padding=(250.0, 250.0, 1000.0))
-    snapshot = plan.prepare()
-
-    # 2. Prepare a new, portable Q3D input directory.
-    handoff = prepare_q3d_from_geometry(
-        snapshot,
-        aedt_version="2024.2",
-        modeling="solid",
-        output_dir=Path(".artifacts/simplepad-q3d") / uuid4().hex[:12],
-        project_name="SimplePad",
-        design_name="Capacitance",
-        net_types={"pad": "Signal", "ground": "Signal"},
-        physical_ground_nets=("ground",),
-        run_control=MatrixRunControl(
-            setup_name="Setup1", frequency_ghz=5.0,
-            maximum_passes=10, convergence_percent=1.0,
-        ),
-        resources=AedtResources(cores=4, ram_limit_percent=80),
-    )
-    print("Inputs:", handoff.run_dir)
-    if args.handoff_only:
-        return
-
-    # 3. Run AEDT on this licensed host using the current Python environment.
-    subprocess.run(
-        [sys.executable, "-m", "scgsim.aedt.run",
-         "--handoff", str(handoff.metadata_path), "--execute"],
-        cwd=handoff.run_dir,
-        check=True,
-    )
-
-    # 4. Read the returned matrix entries with their names and exported units.
-    result = resolve_results(handoff.run_dir)
-    for row in result.physics_results():
-        print(row)
-
-
-if __name__ == "__main__":
-    main()
+```text
+Capacitance matrix (fF): pad
+     pad     112.54
 ```
 
-Run it from the study project:
+## What do you want to compute?
 
-```bash
-uv run simplepad_q3d.py
-```
+<div id="choose-your-next-simulation"></div>
 
-Each invocation creates a new run folder under `.artifacts/simplepad-q3d/`. Printed matrix entries retain the quantity, row, column, value and native exported unit; keep these fields together when using the result.
+| What you want to compute | With Palace | With AEDT |
+|---|---|---|
+| The capacitance matrix of pads and electrodes | [Palace: terminal capacitance](docs/guides/capacitance-palace.qmd) | [AEDT: Q3D extraction](docs/guides/capacitance-q3d.qmd) |
+| The frequency, Q and energy participation of resonant modes | [Palace: resonant modes](docs/guides/modes-palace.qmd) | [AEDT: HFSS Eigenmode](docs/guides/modes-hfss.qmd) |
+| The S-parameters of a two-port | not in SCGSim | [AEDT: HFSS Driven Terminal](docs/guides/s-parameters-hfss.qmd) |
+| The per-length C, G, L and R of a line's cross-section | not in SCGSim | [AEDT: Q2D cross-section extraction](docs/guides/line-parameters-q2d.qmd) |
 
-To inspect the inputs first, run `uv run simplepad_q3d.py --handoff-only`. This option prepares the inputs and portable archive without opening AEDT. The complete mode runs and reads results on the same host.
+[Choose a simulation](docs/start/choose-a-simulation.qmd) adds the OrcaPen SC
+PDK notebook for each of these. <span id="usage-example-one-script-for-simplepad-capacitance"></span>[AEDT: Q3D extraction](docs/guides/capacitance-q3d.qmd)
+opens with the AEDT counterpart of the first simulation: one script that
+prepares, runs and reads a Q3D capacitance run.
 
-Both Nets use Q3D's `Signal` type so they remain in the matrix; `physical_ground_nets` records the physical Ground role separately. The [Q3D lesson](docs/course/aedt-q3d.qmd) explains the model, Net and extraction choices, and [returned results](docs/course/returned-results.qmd) explains how to read the matrix.
+## Before your own layout
 
-## Choose your next simulation
-
-To compute a capacitance with Palace, without an AEDT licence, start with the [First simulation](docs/start/first-simulation.qmd).
-
-The [simulation chooser](docs/examples.qmd#getting-started) links the complete OrcaPen SC PDK notebook for capacitance, resonant modes and energy participation, and per-unit-length transmission-line parameters. For driven S-parameters, use the [Driven Terminal](docs/course/aedt-driven-terminal.qmd) lesson; it needs a layout with a lumped-port sheet for each of its two ports. Driven Modal and wave ports are not available in this version.
-
-Before you simulate a layout of your own, read the [supported scope](docs/supported-scope.qmd): what the layout must guarantee, what SCGSim guarantees in return, and who owns a failure.
+Before you simulate a layout of your own, read the
+[supported scope](docs/reference/supported-scope.qmd): what the layout must
+guarantee, what SCGSim guarantees in return, and who owns a failure.

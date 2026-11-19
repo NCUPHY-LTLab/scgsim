@@ -1,0 +1,87 @@
+---
+title: "AEDT: HFSS Driven Terminal"
+description: "Prepare a two-port HFSS Driven Terminal network on the SGB model, with lumped ports on its port sheets."
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/aedt-driven-terminal"
+aliases:
+  - ../course/aedt-driven-terminal.html
+  - ../course/aedt-driven-modal.html
+---
+
+HFSS Driven Terminal solves the two-port network of an SGB model, the same
+model Palace meshes. Start from a `GeometryPlan` snapshot whose layout carries
+two lumped-port sheets, one where each port meets its conductors. Each port is
+a `LumpedTerminalPort` that names its sheet (`port_sheet_id`, the model's
+`PORT::<port_sheet_id>` group), the signal and reference Entities the sheet
+joins, and the port impedance.
+
+```python
+from pathlib import Path
+from scgsim.aedt import (
+    FrequencySweepSpec, HfssRunControl, LumpedTerminalPort,
+    prepare_hfss_driven_from_geometry, prepare_sgb_model,
+)
+
+AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
+ports = (
+    LumpedTerminalPort(1, "p1", "port_1", ("chip/pad_1",), ("chip/ground",), 50.0),
+    LumpedTerminalPort(2, "p2", "port_2", ("chip/pad_2",), ("chip/ground",), 50.0),
+)
+model = prepare_sgb_model(
+    snapshot.geometry_input,
+    prepared_stack=snapshot.stack,
+    modeling="solid",  # or "thin_film"
+    output_dir=Path(".artifacts/driven-model"),
+    ports=ports,
+)
+handoff = prepare_hfss_driven_from_geometry(
+    aedt_version=AEDT_VERSION,
+    model=model,
+    project_name="two_port",
+    design_name="DrivenTerminal",
+    run_control=HfssRunControl(
+        "Setup1", "Sweep1", FrequencySweepSpec(4.0, 8.0, points=201)
+    ),
+    output_dir=Path(".artifacts/driven-handoff"),
+)
+print(handoff.spec_path, handoff.archive_path)
+```
+
+The ports belong to the model: `prepare_sgb_model(..., ports=...)` binds each
+one to its port sheet and refuses a sheet the model does not have. The Driven
+request takes exactly two ports, 1 and 2, with distinct names and one shared
+ordered reference. Each sheet must join one of its port's signal Entities and
+one of its reference Entities. A Driven model carries no junctions, lumped
+RLCs or Surface-EPR specs; those belong to HFSS Eigenmode. The handoff carries
+the model's STEP, BREP, sidecar and guard in its `model/` folder.
+
+In AEDT the run imports the STEP into an empty Driven Terminal design, as the
+Eigenmode run does, and puts each port on its sheet: a Terminal lumped port
+over the sheet's faces, and its Terminal on the edges where the sheet meets the
+signal conductor. The [runtime contract](../reference/specs/aedt-runtime.qmd#hfss-driven-terminal-sgb)
+gives the rules. The returned resolver checks that the receipt's geometry is
+the request's model as imported, that each port and Terminal was read back from
+the saved design on the faces and edges it was given, and the ordered
+S-parameters and Touchstone of the declared sweep.
+
+The example requests 201 points. Choose `points` and the sweep bounds for the
+network response your study needs; the native setup and the returned readback
+keep that request. The [sweep reference](../reference/specs/aedt-runtime.qmd#hfss-driven-sweep-count)
+gives its exact input rules.
+
+Review the copied spec's ports, then [execute on the native host](run-elsewhere.qmd)
+and [restart and resolve](convergence-and-reports.qmd) before passing the network
+response into a downstream analysis. Native benchmark and adaptive evidence
+describe the run separately from the physical response.
+
+### Ports that wait for issue #135
+
+A wave `TerminalPort` on a Region face and every Driven Modal port
+(`ModalPort`) have no realization on the SGB model yet. `prepare_sgb_model`
+refuses a request that declares one, naming
+[issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135). There is no
+Driven Modal workflow until that issue lands; until then, the lumped ports
+above give a two-port's network response. The GDS-import route
+(`HfssDrivenSpec`, `gds_path`, `LayerImport`, `ObjectBinding`, `LengthMeshSpec`)
+is removed.
