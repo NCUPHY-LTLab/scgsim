@@ -128,7 +128,7 @@ drift 的數字來自不同的輸入，不能互相取代，下表逐一標出�
 
 三點要小心。第一，一個 round 的 $\sqrt{2}/2\,g$ 界限不適用於反覆之後的結果：兩組對抗性樣本都超過它。第二，layout 類的輸入只有 $N = 200$ 的隨機 layout 這一個可重現的數字（0.605 g）；沒有其他可重現來源的範圍數字，本頁不引用。第三，圓弧的 0.632 g 量的是 offset 圓弧偏離精確圓的程度，不是直線 segment 的 drift，不能拿來當直線的證據。
 
-layout 的來源本來就在格點上，所以 drift 只出現在斜向 carrier 的交叉處。arrangement 記錄每條 edge 的實測偏離量，而不是把它藏起來。要不要對 drift 設**上限**（iterated snap rounding 的 bounded-drift 變體，Packer 2008）是決策 D7：Lead 的建議是 v1 只記錄、不設上限，若真實 layout 的 drift 超過 1 g 再重新考慮（見[設計決議](decisions.qmd#d7)）。production 的極端案例 catalogue 現在逐列記錄 drift 與 mesh 品質：54 個建出的列，最大的 snap drift 是 0 g，最大的 arc 偏離是 0.760 g，都低於 1 g，所以 D7 的重新評估條件沒有被觸發（見 [Validation](validation.qmd#catalogue)）。這些 fixture 的輸入都在格點上，drift 為 0 是依構造而得，不是對斜向 carrier 交叉處的量測。
+layout 的來源本來就在格點上，所以 drift 只出現在斜向 carrier 的交叉處。arrangement 記錄每條 edge 的實測偏離量，而不是把它藏起來。要不要對 drift 設**上限**（iterated snap rounding 的 bounded-drift 變體，Packer 2008）是決策 D7：只記錄、不設上限，若真實 layout 的 drift 超過 1 g 再重新考慮（見[設計決議](decisions.qmd#d7)）。production 的極端案例 catalogue 現在逐列記錄 drift 與 mesh 品質：54 個建出的列，最大的 snap drift 是 0 g，最大的 arc 偏離是 0.760 g，都低於 1 g，所以 D7 的重新評估條件沒有被觸發（見 [Validation](validation.qmd#catalogue)）。這些 fixture 的輸入都在格點上，drift 為 0 是依構造而得，不是對斜向 carrier 交叉處的量測。
 
 ## 成本
 
@@ -147,12 +147,12 @@ production 把 edge 與 hot pixel 放進均勻的空間 hash，大約每個格�
 ## 曲線類別 {#curve-classes}
 
 - **直線與圓弧**是第一版的類別。兩者對 offset 都是封閉的，所以 inset 曲線仍留在這個類別中。
-- **來源 B-spline** 是設計上可以作為材料邊界 carrier 的類別，但第一版 production 在 S2 就 fail closed（`UnsupportedCurveError`），留待之後的階段。B-spline 的 offset 無法精確表示，所以即使之後支援，**inset 也會拒絕它**；要近似它，需要一個只有 Human 能設定的容許值。原型與 production 都只實作直線與圓弧。
+- **來源 B-spline** 是設計上可以作為材料邊界 carrier 的類別，但 production 在 S2 就 fail closed（`UnsupportedCurveError`），這是之後可以加入的擴充。B-spline 的 offset 無法精確表示，所以即使之後支援，**inset 也會拒絕它**；要近似它，需要一個寫進 handoff 的容許值。production 只實作直線與圓弧。
 - **一個完整的圓是四段 quarter arc。** 完整的圓是一條 loop edge，半圓則與它的弦平行；而 arrangement 要求每條 edge 連接兩個不同的 vertex，且沒有兩條 edge 連接同一對 vertex。
 
 ### 透過 polyline witness 處理圓弧
 
-未決的決策 D3 問的是：圓弧要原生地 node，還是透過 polyline。暫定的決策（原型與 production 都已實作）是 **polyline witness**：
+決策 D3 問的是：圓弧要原生地 node，還是透過 polyline。選定的做法（production 已實作）是 **polyline witness**：
 
 1. 為了 noding，圓弧被換成弦，其 sagitta（弦與弧之間的間隙）至多為 $g/4$。每條弦帶有 id `<arc id>#<k>` 與弧的一段參數區間；它屬於哪條圓弧、是第幾條弦，記在 carrier 的 `curve` 與 `piece` 欄位，id 只寫出、從不拆回。
 2. Snap rounding 把這些弦當作一般的 segment。
@@ -176,7 +176,7 @@ witness 的代價是大小。半徑為 $r$ 的 quarter arc 約需要 $\sqrt{r/g}
 - **幾乎重合的來源曲線。** 兩條相差只有幾個 grid unit 的不同邊界，只要它們留在不同的 pixel，就會保持分開。要保留、回報或合併它們，是 policy 的決定（見 [Sliver](slivers.qmd)）；格點不決定它。極端案例目錄有兩個直接的例子：兩個 layer 的邊緣只差 0.4 g 時會合併、不產生 sliver；差 2 g 時留下一個真正的 2 nm 寬 face，而它通過 `BRepCheck_Analyzer`、`BOPAlgo_ArgumentAnalyzer` 與 conformal mesh 的全部檢查，所以只需要回報，不需要移除。
 - **由 snapping 造成的接觸。** 兩個不同 Net 之間的間隙若小於一個 pixel，粗格點會把它關上；這樣的接觸是錯誤，並且指出兩個 entity 與位置。4 nm 的間隙在 g = 1 nm 時可以通過，在 g = 10 nm 時不行（見 [2.5D layered model](layered-model.qmd)）。
 - **困難的曲線組合。** 極端案例目錄中，近乎相切的圓弧與直線（secant 深 2 nm）、夾角 1.6 度的兩段圓弧、共線重疊的 edge，以及 0.6 度窄縫的 reflex vertex，在 Route A 與 Route B 都通過全部檢查。
-- **來源曲線絕不移動。** 衍生曲線（inset band）之後也許會被允許在某個容許值內 snap 到來源曲線上。那是經 Human 把關的 policy，不在本頁範圍內（見 [Sliver](slivers.qmd)）。
+- **來源曲線絕不移動。** 衍生曲線（inset band）之後也許會被允許在某個容許值內 snap 到來源曲線上。那需要一個寫進 handoff 的容許值，目前不啟用，不在本頁範圍內（見 [Sliver](slivers.qmd)）。
 - **Z。** arrangement 是 planar 的。Level 是精確的，從不被 snap。
 
 ## 補充：重現資料

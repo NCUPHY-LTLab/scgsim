@@ -15,7 +15,7 @@ Writes into ``zh-TW/docs/contribute/sgb-design/figures/``:
 The defect "a top arc moved to another circle" needs a curved wall; the real input has none, so that one row is built on the
 stage-level scene ``pad_in_ground("B")`` of ``tests/sgb_scenes.py`` and says so in the numbers.
 
-Run:  SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/validation.py
+Run:  uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/validation.py
 """
 
 from __future__ import annotations

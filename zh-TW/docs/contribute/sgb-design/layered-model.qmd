@@ -13,7 +13,7 @@ SGB 處理的模型是有限個 **prism** 的集合：晶片在 **level** 處被
 
 ## 模型格點
 
-所有 XY 座標都落在同一個**模型格點** $g$ 上，預設是來源的資料庫單位 1 nm，宣告一次並記錄在 handoff 中。這個格點來自 develop 既有的固定格點來源準備（S0 與 S1）：來源的正規化與 polygon Boolean 在已宣告的格點上完成，`GeometryGridContext` 帶著 $g$ 往後傳，S4 的 snap rounding 使用的就是同一個 $g$。S2 起是新的 pipeline（production 實作在 `scgsim.geometry.sgb`）：S2 讀 S1 的 effective 輸入，格點取自其 `GeometryGridContext`，座標以精確的整數轉換，沒有格點資訊的輸入與不在格點上的頂點都會被拒絕（見[總覽](index.qmd)）。原型不含 S0 與 S1，直接以格點上的整數座標建立 prism。Z 不受這個格點約束（見下文）。
+所有 XY 座標都落在同一個**模型格點** $g$ 上，預設是來源的資料庫單位 1 nm，宣告一次並記錄在 handoff 中。這個格點來自 `scgsim.geometry` 的來源準備（S0 與 S1）：來源的正規化與 polygon Boolean 在已宣告的格點上完成，`GeometryGridContext` 帶著 $g$ 往後傳，S4 的 snap rounding 使用的就是同一個 $g$。S2 起是新的 pipeline（production 實作在 `scgsim.geometry.sgb`）：S2 讀 S1 的 effective 輸入，格點取自其 `GeometryGridContext`，座標以精確的整數轉換，沒有格點資訊的輸入與不在格點上的頂點都會被拒絕（見[總覽](index.qmd)）。原型不含 S0 與 S1，直接以格點上的整數座標建立 prism。Z 不受這個格點約束（見下文）。
 
 ## 執行範例的觀點
 

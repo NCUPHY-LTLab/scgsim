@@ -129,13 +129,9 @@ AEDT 的階段資料夾沒有受檢查的順序；[如何閱讀一個資料夾](
 每一區有一個表格，各列依工作經過的順序排列。每列的文字是該資料夾 docstring 的翻譯：
 「它是什麼」是第一句話，In、Out、Next 是那三行；英文原文在英文版的同一頁。
 不是階段的資料夾會在 In 欄說明它是什麼：一區本身的資料夾，或某一列所列階段的一部分。
+`geometry/sgb` 各列中的 S2 到 S10 是 [SGB 管線的階段](sgb-design/pipeline-reference.qmd)，D5 是以 Entity 為表面命名的[設計決議](sgb-design/decisions.qmd#d5)。
 
-要修改某一列，請編輯該資料夾的 docstring，在 `scripts/code_map_zh_tw.toml` 翻譯改動的文字，
-再執行 `python scripts/generate_code_map.py`；各列的順序只在這個腳本中寫一次。
-翻譯檔的每一筆都記錄它所翻譯的英文。腳本會拒絕它沒有列出的套件資料夾、缺少三行之一的階段、
-沒有翻譯的資料夾、對應資料夾已不存在的翻譯，以及所記錄的英文已不等於 docstring 的翻譯；
-最後這種情況會印出需要記錄並重新翻譯的新英文。表格與 docstring 或翻譯不一致時，
-`tests/test_code_map.py` 會失敗。
+這些表格由 docstring 產生，所以某一列只會隨它的資料夾的 docstring 一起改變；產生的步驟寫在 [`MAINTAINING.md`](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/zh-TW/MAINTAINING.md#generated-pages)。
 
 {{< include _code-map-stages.md >}}
 
@@ -151,6 +147,22 @@ AEDT 的階段資料夾沒有受檢查的順序；[如何閱讀一個資料夾](
 | `refusal.py` | 拒絕訊息的措辭：兩種句型、拒絕訊息所指名的已宣告物件，以及所見值的文字。 | 除 `contracts` 以外的每個資料夾 |
 
 拒絕訊息只有兩種句型：呼叫者可以修改的輸入用「{object}: {problem}. Change it in {where}.」；SCGSim 自身的承諾被破壞時用「internal: {invariant}. Nothing in the input is to blame: report it to SCGSim with the input that produced it.」。兩句都由 `refusal.py` 寫出，每個資料夾都用它建構拒絕訊息；`contracts` 不匯入 `scgsim`，保留自己的字面文字。
+
+## AEDT 資料夾旁的模組 {#aedt-modules}
+
+`src/scgsim/aedt` 中，與各階段資料夾並列的還有九個模組。它們是檔案而不是資料夾，所以階段表格沒有列出；前兩個是準備好的原生批次流程。
+
+| 模組 | 它是什麼 |
+| --- | --- |
+| `batch.py` | 封裝準備好的 HFSS EPR 模型、執行只含求解器的嘗試，並收集結果（`prepare_native_batch`、`run_native_batch`、`collect_native_batch`）。 |
+| `batch_stages.py` | `batch.py` 執行的、與來源綁定的封裝，以及取得擁有權後的收集。 |
+| `eigenmode.py` | `EigenmodeSim`：在 `GeometryPlan` 上設定 Eigenmode 或 EPR 執行，並準備它的交接。 |
+| `drc.py` | AEDT 模擬的幾何部分，在它的 plan 上執行、不需要 AEDT：也就是 `simulation_drc` 做的檢查。 |
+| `run.py` | 指令 `python -m scgsim.aedt.run`，經由 `aedt/runtime` 執行一份準備好的交接。 |
+| `versions.py` | 請求可以指定的 AEDT 版本，以及它們固定的傳輸設定。 |
+| `data.py` | 不可變的請求資料與其標準識別資訊，只使用標準函式庫。 |
+| `io.py` | AEDT 檔案的雜湊，以及寫出脫離原物件的 JSON 與 CSV 紀錄。 |
+| `benchmark_data.py` | 擷取到的 AEDT 效能紀錄中的記憶體，歸屬到它的原生工作。 |
 
 ## 隱性狀態 {#ambient-state}
 
@@ -178,9 +190,4 @@ AEDT 的階段資料夾沒有受檢查的順序；[如何閱讀一個資料夾](
 
 ## 契約與設計 {#contracts-and-design}
 
-本頁列出各階段與它們的順序；各階段承諾的內容在下列頁面：
-
-- [架構與資料流程](architecture.qmd)：模組與狀態邊界，以及 Palace 與 AEDT 的生命週期。
-- [GeometryPlan 與 SGB](../reference/specs/geometry-plan.qmd)：從版圖到後端幾何的幾何契約。
-- [支援範圍](../reference/supported-scope.qmd#supported-entry)：支援的入口，以及直接呼叫其下層時所假設的條件。
-- [後端支援矩陣](../reference/supported-calculations.qmd)：每條路線支援的計算。
+本頁列出各階段與它們的順序。各階段承諾的內容寫在它的契約頁；貢獻頁面的[閱讀順序](index.qmd#reading-order)列出每個資料夾的契約頁。

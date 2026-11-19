@@ -15,7 +15,7 @@ aliases:
 ## Terms
 
 - **Feature**: one small shape (a rectangle, an L shape, a chamfered or a rotated shape) placed on the chip inside its own cutout of the ground plane. **N** is the number of features. About a quarter of them carry a second, overlapping shape of the same Net.
-- **Derivation and validation**: the build step `build_model_from_catalogue`. It derives the conformal topology (the vertices, edges, faces and volumes shared by neighbouring materials) from the prisms and then runs the structural checks; the checks cannot be switched off in production. The checks' own cost is in [Cost of the checks](validation-cost.qmd).
+- **Derivation and validation**: the derivation step of the SGB build (the internal function `build_model_from_catalogue`, below the supported entry). It derives the conformal topology (the vertices, edges, faces and volumes shared by neighbouring materials) from the prisms and then runs the structural checks; the checks cannot be switched off in production. The checks' own cost is in [Cost of the checks](validation-cost.qmd).
 - **Face**: one boundary surface of the derived model. The number of faces is the size of the model.
 - **Local slope**: the slope of a straight line between two neighbouring measurements on log-log axes, `ln(y2 / y1) / ln(N2 / N1)`. A slope of 1 means time proportional to N; a slope of 2 means time proportional to N squared.
 
@@ -37,8 +37,6 @@ In @fig-scaling, the time curve lies slightly above the slope-1 line and the mem
 
 ## Interpretation
 
-Within the measured range the build is close to linear in the size of the model. Each step from 1,000 to 5,000 and from 5,000 to 20,000 features multiplies the time by slightly more than the size factor, so the per-face cost rises by about a third over the whole range. The measurements do not reach beyond 20,000 features, so the trend is not extended past it.
-
-Memory grows a little slower than the model.
+Within the measured range the build is close to linear in the size of the model. Each step from 1,000 to 5,000 and from 5,000 to 20,000 features multiplies the time by slightly more than the size factor, so the per-face cost rises by about a third over the whole range. The measurements do not reach beyond 20,000 features, so the trend is not extended past it. Memory grows a little slower than the model.
 
 What happens after the derivation, and what it costs, is in [Direct writer and Gmsh load](emission-and-load.qmd).

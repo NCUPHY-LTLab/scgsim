@@ -1,50 +1,229 @@
 ---
 lang: zh-TW
-title: "讀取完整回傳結果"
-description: "綁定回傳證據，再依指定的 SCQ 研究用途解讀數值與歷程。"
+title: "收斂與報告"
+description: "宣告 Palace 執行何時算收斂、執行它，再讀三個報告檢視：收斂了嗎、數值是多少、花了多少成本。"
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/returned-results"
+resources:
+  - ../images/convergence-and-reports/*.html
+  - ../images/sgb-concept/plotly.min.js
 aliases:
   - ../course/returned-results.html
 ---
 
-請在主機上明確執行並取回完整執行資料夾後，使用本教學。請開啟新的分析工作階段：結果解讀不應依賴準備階段仍在執行的 `sim`、試片或 Desktop。請將回傳位元組與中繼資料放在一起保存。解析會離線檢查識別與產物，不會再次求解。
+這一頁回答 Palace 執行的兩個問題：收斂了沒有，數值是多少。執行前，你先宣告 Palace 細化網格時，哪些數值必須停止變化、變化要小到多少。SCGSim 會在條件成立後讓 Palace 停下，報告則把每一個回合（pass）都對照你的條件列出。範例是[第一個模擬](../start/first-simulation.qmd)的方形焊墊：加上宣告後，它的電容在第 4 回合穩定在 95.21 fF。
 
-## Palace：綁定另行保留的準備 ID {#palace-bind-the-independently-retained-preparation-id}
+## 宣告收斂 {#declare-convergence}
+
+Palace 的細化是自適應的：求解一次，估計哪裡誤差最大，在那裡細化網格，再解一次。每次求解稱為一個回合；第 1 回合求解的是 `mesh()` 寫出的網格。收斂宣告說明哪些數值從這一回合到下一回合必須停止變化、變化要小到多少，以及要連續幾個回合成立。它要在 `write_config()` 之前設定在模擬上。
+
+這支腳本就是第一個模擬的腳本，只在第 4 步加上了宣告：
+
+```python
+import os
+import subprocess
+from pathlib import Path
+from uuid import uuid4
+
+import gdsfactory as gf
+import orcapen_sc_pdk
+from orcapen_sc_pdk import get_material_records
+from orcapen_sc_pdk.tech import get_single_die_layer_stack
+from scgsim.geometry import GeometryPlan
+from scgsim.palace import Capacitance, ElectrostaticSim, resolve_palace_result
+
+# 1. The layout and the plan of First simulation.
+orcapen_sc_pdk.activate()
+component = gf.get_component(
+    "square_pad_capacitor", pad_side_um=200.0, gap_um=20.0, die_side_um=1000.0
+)
+plan = GeometryPlan(
+    component=component,
+    root_id="chip",
+    layer_stack=get_single_die_layer_stack(),
+    material_records=get_material_records(),
+    coupon_padding_um=0.0,
+)
+plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
+plan.set_vacuum_region(padding=(0.0, 0.0, 1000.0))
+
+# 2. The capacitance problem: the pad is the terminal, the ground is at 0 V.
+sim = ElectrostaticSim()
+sim.set_plan(plan.prepare())
+sim.set_output_dir(Path(".artifacts/simplepad-converged") / uuid4().hex[:12])
+sim.add_terminal("pad", net_id="pad")
+sim.add_ground(net_id="ground")
+sim.set_electrostatic(unassigned_conductor_policy="error")
+
+# 3. Refine the mesh up to 6 times, with second-order elements.
+sim.set_numerical(order=2, amr_max_passes=6)
+
+# 4. Converged: the capacitance changes by at most 0.5 % from one pass to
+#    the next, two passes in a row.
+sim.set_convergence(
+    Capacitance.diagonal().within(percent=0.5),
+    minimum_converged_passes=2,
+)
+
+# 5. Mesh, write Palace's input, and run Palace here with 16 MPI processes.
+sim.mesh()
+sim.write_config()
+handoff = sim.prepare_handoff(
+    profile="direct-local",
+    executable=os.environ["SCGSIM_PALACE_EXECUTABLE"],
+    resources={"command_style": "wrapper", "processes": 16, "threads": 1},
+)
+subprocess.run(["bash", "run_palace.sh"], cwd=handoff.run_dir, check=True)
+
+# 6. Read the result: did it converge, and the capacitance matrix.
+result = resolve_palace_result(handoff.run_dir, expected_handoff_id=handoff.handoff_id)
+verdict = result.convergence.verdict
+print("Status:", result.status)
+print("Convergence:", verdict.state, "at pass", verdict.pass_number)
+terminals = {
+    entry["index"]: entry["terminal_name"]
+    for entry in result.provenance.index_map["entries"]
+    if entry["role"] == "terminal"
+}
+print("Capacitance matrix (fF):", *terminals.values())
+for row in result.tables["terminal-C"].rows:
+    values = [row[f"C[i][{column}] (F)"] * 1e15 for column in terminals]
+    print(f"{terminals[int(row['i'])]:>8}", *(f"{value:10.2f}" for value in values))
+```
+
+第 3 與第 4 步就是宣告：
+
+- `set_numerical(order=2, amr_max_passes=6)` 允許細化六次，所以最多七個回合，並使用二階有限元素。沒有給回合數上限時，Palace 完全不細化。
+- `Capacitance.diagonal().within(percent=0.5)` 在某一回合成立的條件是：電容矩陣的每個對角元素（這裡是 `C[pad][pad]`）與上一回合相比，變化不超過 0.5 %。變化需要有上一回合才算得出來，所以最早在第 2 回合才可能成立。
+- `minimum_converged_passes=2` 表示：每個條件都連續兩個回合成立的第一個回合，就是收斂的那一回合。
+
+這些門檻只是範例。合適的門檻取決於你要拿這個數值做什麼：給電路模型用的電容，可能需要比粗估更嚴格的變化量。條件也可以指定矩陣中的單一元素（`Capacitance.element("pad", "pad")`）、模態頻率、Surface EPR，或 Palace 的誤差估計（`ErrorIndicator().below(...)`）；全部列在[收斂宣告](../reference/specs/palace-electrostatic-sgb.qmd#convergence-declaration)。若宣告指定了模擬沒有的端子，或回合數上限不夠達成要求的連續回合數，`write_config()` 會拒絕。
+
+Palace 會在收斂的那一回合之後被停下，所以之後成本最高的幾個回合都不會求解（[停止方式](../reference/specs/palace-electrostatic-sgb.qmd#convergence-stop)）。
+
+## 執行 {#run-it}
+
+像[第一個模擬](../start/first-simulation.qmd#palace-executable)一樣，在設好 `SCGSIM_PALACE_EXECUTABLE` 的 shell 中執行這支腳本。在一台工作站上以 16 個 MPI 行程執行，花了 99 秒，最後印出：
+
+```text
+Status: completed
+Convergence: converged at pass 4
+Capacitance matrix (fF): pad
+     pad      95.21
+```
+
+執行在第 4 回合收斂，所以 Palace 在那裡停下，第 5 到 7 回合都沒有求解。電容取第 4 回合的值：95.21 fF。
+
+## 讀三個檢視 {#read-the-views}
+
+在筆記本中，解析後的結果提供三個檢視，各回答一個問題：
+
+| 呼叫 | 回答 |
+|---|---|
+| `result.show_run_trustworthiness()` | 這是哪一次執行？收斂了嗎？ |
+| `result.show_physics_quantities()` | 數值是多少？ |
+| `result.show_simulation_benchmark()` | 花了多少成本？ |
+| `result.show_all_results()` | 依這個順序顯示全部三個 |
+
+每個檢視都接受 `theme="light"` 或 `"dark"`。以下是這次執行在各檢視中顯示的內容。
+
+### 收斂了嗎？ {#trust-view}
+
+`show_run_trustworthiness()` 先列出執行的身分：Electrostatic 問題、Route B、記錄了 4 個回合、16 個 MPI 行程，各 1 個 OpenMP 執行緒。接著是收斂表，每個回合一列。`C diagonal ≤ 0.5 %` 這一欄是條件及其門檻，每格是與上一回合相比的變化：
+
+| 回合 | 求解的元素數 | C diagonal ≤ 0.5 % | 每個條件，連續 2 個回合 |
+|---|---|---|---|
+| 1 | 31,096 | N/A | not yet |
+| 2 | 169,380 | 1.37 % ✗ | fails |
+| 3 | 658,735 | 0.485 % ✓ | holds, 1 in a row |
+| 4 | 1,628,883 | 0.223 % ✓ | holds, 2 in a row |
+
+第 1 回合沒有上一回合，所以沒有變化量。條件在第 3 回合首次成立，第 4 回合再次成立：連續兩個回合，所以執行在第 4 回合收斂。檢視接著畫出每個物理量隨回合數的變化，以及它的變化量對照宣告的門檻：
+
+<iframe src="../images/convergence-and-reports/capacitance-by-pass.html" title="C[pad][pad] 隨 AMR 回合數的變化：97.20、95.89、95.43 與 95.21 fF" width="100%" height="460" style="border:0;" loading="lazy"></iframe>
+
+<iframe src="../images/convergence-and-reports/capacitance-change-by-pass.html" title="C[pad][pad] 與上一回合相比的變化，對數座標，對照 0.5 % 的門檻" width="100%" height="460" style="border:0;" loading="lazy"></iframe>
+
+第三張圖畫出每一回合 Palace 的誤差估計。加上 `show_details=True` 時，檢視還會用一句話說出判定（以下是原文輸出）：
+
+> Converged at pass 4, of the 4 passes read (passes 1 to 4): every criterion
+> held at passes 3 to 4, 2 in a row. Last to hold: C diagonal, from pass 3. No
+> pass was read after it. SCGSim stopped Palace after pass 4: 3 of the 7 passes
+> its limit allows were not run.
+
+意思是：在讀到的 4 個回合中於第 4 回合收斂，條件在第 3、4 回合連續成立；最後成立的是 C diagonal；SCGSim 在第 4 回合後停下 Palace，上限允許的 7 個回合中有 3 個沒有執行。沒有收斂的執行會把上限允許的每一回合都解完，這句話則會列出仍未成立的條件，以及差了多少。
+
+### 數值是多少？ {#physics-view}
+
+`show_physics_quantities()` 顯示最後讀到的那一回合（第 4 回合）的數值：Maxwell 電容矩陣，這裡只有一個元素，`C[pad][pad]` = 95.2144 fF。下面還有一行說 Surface-EPR 的物理量無法取得，因為這次執行沒有要求它。本徵模態執行則改為顯示每個模態的頻率與 Q 值。
+
+### 花了多少成本？ {#benchmark-view}
+
+`show_simulation_benchmark()` 顯示成本：Palace 總耗時 93.8 秒，第 4 回合有 2,285,940 個自由度，峰值記憶體 24.37 GiB。它的逐回合表格顯示時間花在哪裡：
+
+| 回合 | 自由度 | 網格元素數 | 本回合耗時 | 峰值記憶體 |
+|---|---|---|---|---|
+| 1 | 50,966 | 31,096 | 0.716 s | 1.20 GiB |
+| 2 | 246,415 | 169,380 | 5.15 s | 3.22 GiB |
+| 3 | 928,764 | 658,735 | 25.5 s | 10.22 GiB |
+| 4 | 2,285,940 | 1,628,883 | 62.4 s | 24.37 GiB |
+
+光是第 4 回合就占了三分之二的時間，再往下每一回合只會更貴：這就是 Palace 要在收斂時停下的原因。成本檢視不判斷物理是否正確；Palace 各計時項彼此重疊，所以不能相加。
+
+各檢視逐張卡片的版面，見[報告模型](../reference/specs/report-model.qmd#declared-convergence)。
+
+## 在腳本中讀出數值 {#numbers-in-a-script}
+
+腳本第 6 步讀取矩陣的方式與[第一個模擬](../start/first-simulation.qmd#the-script)相同：`result.tables["terminal-C"]` 是 Palace 以法拉為單位的電容表，執行的索引對照 `result.provenance.index_map["entries"]` 則標出每一列、每一欄是哪個端子。更簡單的讀法正在 [issue #273](https://github.com/NCUPHY-LTLab/scgsim/issues/273) 中討論。
+
+## 數值要連同狀態、條件與歷程一起保存 {#interpret-for-scq-use}
+
+「收斂」只表示你的條件成立了，不表示這個數值回答了你的問題。使用數值之前：
+
+- **說明它的用途**：給電路模型用的電容、某個模態的頻率，或某個表面在某個模態中的參與比。用途決定你要讀哪個物理量，以及能接受多大的變化。
+- **讀物理量本身**：它的單位，以及執行記錄的端子、埠或模態順序。
+- **保存歷程**：每一回合的數值，而不只是最後一回合。這裡第 1 回合是 97.20 fF，第 4 回合是 95.21 fF；第一個模擬對同一塊焊墊只用一階元素、不細化、解一次，得到的是 112.54 fF。只有歷程能顯示單次求解離細化後的數值有多遠。沒有記錄下來的歷程，事後補不回來。
+- **把執行狀態與條件放在旁邊**：Palace 如何結束、收斂宣告、回合數上限與求解器設定。若數值在你的條件下還沒穩定，就照實說明；不要補上執行沒有顯示的趨勢或容許誤差。
+
+其他指南都連到這裡說明這條原則；它適用於每一種求解器。
+
+## 開啟在別處執行的結果 {#palace-bind-the-independently-retained-preparation-id}
+
+在這裡準備、在另一台電腦上執行的模型，會以一個資料夾的形式回來。請保留它原本的名稱複製回來，放在 `prepare_handoff()` 寫在它旁邊的那個 `.tar.gz` 封存檔旁：資料夾會拿這個封存檔來核對。`resolve_palace_result` 只在它確實是你準備的那次執行時才會開啟。請傳入交接 ID（`prepare_handoff()` 回傳的 `handoff.handoff_id`，代表這次執行的身分），而且要從準備時另外保存的記錄中讀出，例如用 `Path(".artifacts/palace-preparation-handoff-id.txt").write_text(handoff.handoff_id)` 存下來。絕不要從你正要核對的資料夾裡取得預期的 ID。
 
 ```python
 from pathlib import Path
 from scgsim.palace import resolve_palace_result
 
-returned_run_dir = Path(".artifacts/returned-palace")
+# The run folder as it came back, beside its 4de138d3f97d.tar.gz.
+returned_run_dir = Path(".artifacts/simplepad-converged/4de138d3f97d")
 expected_id = Path(".artifacts/palace-preparation-handoff-id.txt").read_text(
     encoding="utf-8"
 ).strip()
-resolved = resolve_palace_result(
-    returned_run_dir, expected_handoff_id=expected_id
-)
-resolved.show_all_results()
+result = resolve_palace_result(returned_run_dir, expected_handoff_id=expected_id)
+result.show_all_results()
 ```
 
-請將路徑指向實際取回的執行資料夾與準備階段的 ID 記錄。不可從正在識別的回傳資料中取得預期 ID。嚴格解析器要求輸出已完成且綁定收據，幾何、設定、交接資料與雜湊都必須相符。即使失敗的執行資料夾中剛好有頻率 CSV，也不會接受該結果。
+請把路徑改成你取回的資料夾與你的記錄。`resolve_palace_result` 會拒絕失敗或沒跑完的執行、改了名稱或缺少封存檔的資料夾，以及檔案與準備時不符的資料夾，即使裡面剛好有某個結果表格也一樣。較早的 SCGSim 版本寫出的執行資料夾不會被讀取（[哪些版本](../reference/specs/report-model.qmd#palace-run-schemas)）。怎麼執行，見[執行已準備的模型](run-elsewhere.qmd)。
 
-在 Palace 中，`resolved.mesh_summary()` 會讀取已解析執行資料中的網格證據，並將它綁定至封存的網格與 manifest 識別。Eigenmode 自由度是依設定 FEM 階數計算的主角點拓撲估算值，不是原生求解器計數。結構早於目前版本的執行資料夾不會被讀取；見 [Palace 執行結構](../reference/specs/report-model.qmd#palace-run-schemas)。
+## 失敗或不完整的執行 {#failed-or-partial-run}
 
-請依報告顯示順序閱讀：識別／可信度、數值證據與成本，最後是可用的物理量。識別與完成狀態說明哪些證據可歸屬於本次執行；物理問題則決定要檢視哪些證據。Electrostatic 報告會為矩陣保留激發與端子順序。Eigenmode 報告會保留模態識別、頻率，以及原生能量／埠／表面意義。AMR 指標與代數 eigenpair 殘差是不同的數值。
-
-若 Palace 回傳資料失敗或不完整，請改用檢查介面：
+執行失敗或只回來一部分時，改用 `inspect_run_trustworthiness` 開啟資料夾：
 
 ```python
-from scgsim.palace import inspect_run_trustworthiness
-report = inspect_run_trustworthiness(returned_run_dir)
 from IPython.display import display
+from scgsim.palace import inspect_run_trustworthiness
+
+report = inspect_run_trustworthiness(returned_run_dir)
 display(report)
 ```
 
-此介面會保留已記錄狀態，並可將最新可讀迭代顯示為部分證據。它不會授予完成狀態，也不會在嚴格結果解析時以較早快照取代最終結果。請將 signal-kill 診斷與經雜湊確認的 OOM 標記分開判讀；僅有 exit 137 無法證明發生記憶體不足。
+它會對資料夾中有的那幾個回合顯示同樣的收斂表、記錄的狀態，失敗時也說明原因。最後一個可讀回合的結果會當成部分證據顯示，但不會讓執行變成完成。被系統終止的程式結束代碼是 137，常見原因是記憶體不足，但光憑代碼不能證明；報告會說明實際記錄了什麼。
 
-## AEDT：讀取封存的模型證據 {#aedt-read-the-sealed-family-evidence}
+## AEDT 的結果 {#aedt-read-the-sealed-family-evidence}
+
+AEDT 的執行資料夾用 `resolve_results` 開啟，檢視同樣是那三個：
 
 ```python
 from pathlib import Path
@@ -57,22 +236,10 @@ rows = resolved.physics_results()
 benchmark = resolved.simulation_benchmark()
 ```
 
-解析器會驗證收據群組、複製輸入、實際輸出雜湊，以及各模型專屬的原生讀回資料。`physics_results()` 會回傳選定模型的資料列：Driven 的有序 S 參數、一般 Eigenmode 的模態頻率／原生 Q、Q3D 矩陣，或 Q2D 每單位長度矩陣區塊。將這些資料用於下游分析時，請保留原生單位及導體／埠順序。
+`resolve_results` 會確認檔案就是這次執行寫出的那些。接著 `physics_results()` 回傳該計算的資料列：Driven Terminal 的 S 參數、Eigenmode 每個模態的頻率與 Q 值、Q3D 的矩陣，以及 Q2D 的每單位長度矩陣，單位與導體、埠的順序都依 AEDT。使用這些資料列時請保留這個順序。報告絕不會補上 AEDT 沒有記錄的歷程。各計算回傳什麼，見 [AEDT 參考](../reference/specs/aedt-runtime.qmd)。
 
-請將原生狀態、實際請求的控制項及可用歷程與這些數值一併保存。報告不會補上缺少的歷程，也不會將不完整回傳資料轉成已完成的求解。[執行階段參考](../reference/specs/aedt-runtime.qmd)說明各模型保留哪些原始紀錄與正規化欄位。
+## 接下來 {#continue-with-the-evidence-you-actually-have}
 
-基準紀錄會區分 SCGSim 實際經過時間與原生工作／階段時間；缺少的效能剖析資料仍維持不可用。缺少自適應剖析時不會憑空產生通過曲線；彼此重疊的階段時間或峰值也不可當成獨立數值相加。Details 會顯示來源資訊，主檢視則維持易讀。[報告契約](../reference/specs/report-model.qmd)定義精確排序與可用性。
-
-## 依 SCQ 用途解讀數值 {#interpret-for-scq-use}
-
-解讀結果前，先在研究紀錄中說明研究用途，例如電路模型所需的端子電容、共振模態頻率，或特定介面與模態的參與量。確認實際數值、單位、導體或模態識別、邊界／模型假設，以及可用通道。僅有可讀數值無法證明它能回答該問題。
-
-請將同一數值的可用歷程與實際變化一併閱讀。進行模態研究時，請分別檢查指定模態的頻率與相關 EPR 貢獻；頻率變化很小，不代表表面參與量的變化也很小。進行擷取時，檢視矩陣項目須保留矩陣順序、激發方式與單位。請明確呈現缺漏或部分歷程；單一快照無法提供從未記錄的趨勢。
-
-請將實際停止控制項與任何變更連同回傳的原生狀態保存。該分類描述原生執行在這些控制項下的狀況；預期用途則決定哪些數值、假設與觀測變化值得關注。說明證據支持哪些結論，以及哪些部分仍未知。若證據無法回答問題，請指出缺少的證據，不要補上未記錄的趨勢或另訂通用精度門檻。
-
-## 依實際可用證據繼續 {#continue-with-the-evidence-you-actually-have}
-
-若 Palace Eigenmode EPR 結果可用，`resolved.epr_result()` 會回傳分離的最終結果。請保留該結果以供[離線 EPR](offline-loss.qmd)使用。AEDT 的自適應 EPR 歷程與獨立評估的最終儲存場 EPR 是不同產物。需要後者時，請使用[儲存場分析銜接流程](saved-fields.qmd)。已完成的一般 Eigenmode 收據不會補上缺少的儲存場群組，也不會追溯加入 EPR 請求。
-
-若工作目標是 Driven 或擷取結果，課程到此結束：請保留數值、可用歷程與識別，並說明該結果對指定用途是否足夠。這不表示 SCGSim 會將結果轉換成電路模型或估算元件總損耗。
+- 帶 Surface EPR 的 Palace 本徵模態執行，`result.epr_result()` 會回傳最終的參與比；你可以保存它，日後不必重新求解就能[用其他損耗假設評估](offline-loss.qmd)。
+- AEDT 已保存的場，其 EPR 要另外計算：[分析已保存的場](saved-fields.qmd)。
+- 電容、S 參數或傳輸線參數，上面的數值、歷程與執行狀態就是結果。

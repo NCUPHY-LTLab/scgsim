@@ -147,18 +147,14 @@ Each area has one table, its rows in the order the work flows through it. A
 row's text is the folder's docstring: *What it is* is the first sentence, and
 In, Out and Next are the three lines. A folder that is not a stage says in
 its In cell what it is instead: an area's own folder, or a part of the stage
-in the row it names.
+in the row it names. In the `geometry/sgb` rows, S2 to S10 are the
+[stages of SGB's pipeline](../../zh-TW/docs/contribute/sgb-design/pipeline-reference.html)
+and D5 is the [design decision](../../zh-TW/docs/contribute/sgb-design/decisions.html#d5)
+that names surfaces by Entity (both pages in Traditional Chinese).
 
-To change a row, edit the folder's docstring, translate the changed text in
-`scripts/code_map_zh_tw.toml`, and run `python scripts/generate_code_map.py`;
-the order of the rows is stated once, in that script. Each entry of the
-translation file records the English it translates. The script refuses a
-package folder it does not list, a stage whose docstring lacks one of the three
-lines, a folder without a translation entry, an entry for a folder that is gone,
-and an entry whose recorded English is no longer the docstring's text; that
-refusal prints the new English to record and translate.
-`tests/test_code_map.py` fails while the tables differ from the docstrings and
-their translations.
+The tables are generated from the docstrings, so a row changes only with its
+folder's docstring; [`MAINTAINING.md`](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md#generated-pages)
+gives the procedure.
 
 {{< include _code-map-stages.md >}}
 
@@ -180,6 +176,24 @@ Nothing in the input is to blame: report it to SCGSim with the input that
 produced it." for a broken promise of SCGSim's own. `refusal.py` words both,
 and every folder builds its refusals with it; `contracts` imports nothing from
 `scgsim` and keeps its own literals.
+
+## Modules beside the AEDT folders {#aedt-modules}
+
+Nine modules sit directly in `src/scgsim/aedt`, beside its stage folders. The
+stage tables do not list them, because they are files, not folders; the first
+two are the prepared-native batch workflow.
+
+| Module | What it is |
+| --- | --- |
+| `batch.py` | Package a prepared HFSS EPR model, run its solver-only attempt and collect the result (`prepare_native_batch`, `run_native_batch`, `collect_native_batch`). |
+| `batch_stages.py` | The source-bound packaging and the owned collection that `batch.py` runs. |
+| `eigenmode.py` | `EigenmodeSim`: configure an Eigenmode or EPR run on a `GeometryPlan` and prepare its handoff. |
+| `drc.py` | The geometry half of an AEDT simulation, run on its plan without AEDT: the check `simulation_drc` makes. |
+| `run.py` | The command `python -m scgsim.aedt.run`, which runs one prepared handoff through `aedt/runtime`. |
+| `versions.py` | The AEDT versions a request may name and their pinned transport profiles. |
+| `data.py` | Immutable request data and its canonical identities, with the standard library only. |
+| `io.py` | Hashing of AEDT files, and the writing of detached JSON and CSV records. |
+| `benchmark_data.py` | The memory of a captured AEDT profile, attributed to its native task. |
 
 ## Ambient state {#ambient-state}
 
@@ -211,14 +225,6 @@ change a result.
 
 ## Contracts and design {#contracts-and-design}
 
-This page names the stages and their order; the pages below hold what each
-stage promises:
-
-- [Architecture and data flow](architecture.qmd): module and state boundaries
-  and the Palace and AEDT lifecycles.
-- [GeometryPlan and SGB](../reference/specs/geometry-plan.qmd): the geometry contract from a layout
-  to the backend geometry.
-- [Supported scope](../reference/supported-scope.qmd#supported-entry): the supported entry
-  and what a direct call below it assumes.
-- [Backend support matrix](../reference/supported-calculations.qmd): the calculations each route
-  supports.
+This page names the stages and their order. What each stage promises is on
+its contract page; the [reading order](index.qmd#reading-order) of the
+Contribute pages names the contract page of each folder.

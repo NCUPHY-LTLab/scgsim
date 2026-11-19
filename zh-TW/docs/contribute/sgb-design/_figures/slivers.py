@@ -20,7 +20,7 @@ carries every layer's boundary on every level (2), and the noded cells before di
 *emulation* of derived-to-source snapping (production has no such policy): the source curve is moved onto the derived curve by
 4 nm, which gives the same topology the policy would.
 
-Run:  SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/slivers.py
+Run:  uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/slivers.py
 """
 
 from __future__ import annotations

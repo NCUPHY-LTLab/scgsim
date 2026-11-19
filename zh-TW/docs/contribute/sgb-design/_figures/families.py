@@ -15,7 +15,7 @@ Writes into ``zh-TW/docs/contribute/sgb-design/figures/``:
 * ``families-numbers.json``     ablation counts (what each family adds), band areas with and without the extra families, order
   independence of the build identity and the family record fields.
 
-Run:  SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/families.py
+Run:  uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/families.py
 """
 
 from __future__ import annotations

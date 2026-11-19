@@ -2,8 +2,8 @@
 
 Run, with the Python of the checkout that contains the production SGB core (``scgsim.geometry.sgb``)::
 
-    SGB_CORE=<sgb-core> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/emission.py            # figures and tables
-    SGB_CORE=<sgb-core> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/emission.py --measure  # also rerun the timings
+    uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/emission.py            # figures and tables
+    uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/emission.py --measure  # also rerun the timings
     ... emission.py --measure-only                                                                           # only the timings
     ... emission.py --occt-only                                                                              # only the OCCT and catalogue tables
 

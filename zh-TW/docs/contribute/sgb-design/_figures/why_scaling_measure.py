@@ -17,8 +17,8 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-# the test-side scene builders of the sgb-core checkout (a measuring child imports nothing heavier than it needs,
-# because it reports its own peak memory)
+# the test-side scene builders of this checkout, or of the one SGB_CORE names (a measuring child imports
+# nothing heavier than it needs, because it reports its own peak memory)
 sys.path.insert(
     0, str(Path(os.environ.get("SGB_CORE", str(HERE.parents[4]))) / "tests")
 )
