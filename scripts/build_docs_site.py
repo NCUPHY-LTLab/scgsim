@@ -315,25 +315,30 @@ def _aliases(page: Path) -> list[str]:
 
 
 def moved_folders(presentation: Path) -> dict[str, str]:
-    """Old folder -> new folder, for each folder whose aliased pages all moved to one folder under their names.
+    """Old folder -> new folder, for each folder whose aliased pages all moved to one folder.
 
-    Paths are below a version root and end in ``/``; a longer folder comes first, as the missing page takes
-    the first that matches. A folder with a page that moved anywhere else, or under another name, has none.
+    At least one of those pages must keep its name: then the folder moved as a whole, and the files beside the
+    pages moved with them under their names.  A page renamed or merged into another page of the same new folder
+    does not stop the move.  Paths are below a version root and end in ``/``; a longer folder comes first, as the
+    missing page takes the first that matches.  A folder whose pages went to more than one folder, or that only
+    renamed pages left, has none.
     """
     targets: dict[str, set[str]] = {}
+    named: set[str] = set()
     for page in sorted(presentation.glob("docs/**/*.qmd")) + sorted(
         presentation.glob("zh-TW/docs/**/*.qmd")
     ):
         folder = page.parent.relative_to(presentation).as_posix()
         for alias in _aliases(page):
             old = posixpath.normpath(posixpath.join(folder, alias))
-            kept = posixpath.basename(old) == page.stem + ".html"
-            new = folder + "/" if kept else ""
-            targets.setdefault(posixpath.dirname(old) + "/", set()).add(new)
+            old_folder = posixpath.dirname(old) + "/"
+            targets.setdefault(old_folder, set()).add(folder + "/")
+            if posixpath.basename(old) == page.stem + ".html":
+                named.add(old_folder)
     moved = {
-        old: new.pop()
+        old: next(iter(new))
         for old, new in targets.items()
-        if len(new) == 1 and "" not in new and old not in new
+        if len(new) == 1 and old in named and old not in new
     }
     return dict(sorted(moved.items(), key=lambda item: -len(item[0])))
 
