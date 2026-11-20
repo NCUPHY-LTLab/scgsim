@@ -42,7 +42,7 @@ name of the port sheet it sits on. Palace and AEDT read it from the snapshot;
 no simulation declares one of its own. Declared the old way or the new way, a
 study builds the same model, byte for byte (the mesh, the Palace configuration
 and the AEDT model files, checked on the roster's Eigenmode layouts and the
-HFSS EPR acceptance case). Two other changes of this version are at the end
+HFSS EPR acceptance case). Three other changes of this version are at the end
 of this section: [what you prepared with 3.0.0rc4](#models-from-rc4).
 
 1. Replace Palace `sim.add_port(name, layer=..., layout_sheet=True, inductance=L)`
@@ -109,7 +109,7 @@ neither conductor's Net. [Lumped elements](../reference/specs/geometry-plan.qmd#
 gives the records, and [Supported calculations](../reference/supported-calculations.qmd#lumped-elements)
 what each calculation does with them.
 
-[]{#models-from-rc4}Two other changes affect what you prepared or ran with
+[]{#models-from-rc4}Three other changes affect what you prepared or ran with
 3.0.0rc4:
 
 - **Prepare it again.** An SGB model now says it is `scgsim.sgb.sidecar.v6`.
@@ -122,6 +122,12 @@ what each calculation does with them.
   signal conductor before its ground, as the OrcaPen SC PDK launcher does.
   3.0.0rc4 put the Terminal on the port sheet's ground edge; it is now on its
   signal edge.
+- **Run HFSS Eigenmode again where a lumped element has a capacitance.**
+  3.0.0rc4 and earlier wrote the capacitance in a unit AEDT reads as
+  femtofarads, so the model held 10⁻¹⁵ times the capacitance you declared, with
+  no error. This affects a Lumped RLC and an EPR junction given
+  `capacitance_f`; their inductance and resistance were right, and Palace is
+  not affected.
 
 ## From 3.0.0rc3 {#from-3-0-0rc3}
 

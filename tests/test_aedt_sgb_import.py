@@ -42,6 +42,7 @@ from scgsim.aedt.preparation.sgb_model import (  # noqa: E402
     aedt_net_names,
     junction_rlc_names,
     lumped_rlc_names,
+    port_group,
     prepare_sgb_model,
 )
 from scgsim.aedt.runtime.families.sgb_boundaries import (  # noqa: E402
@@ -262,8 +263,26 @@ def test_a_generic_rlc_enables_exactly_its_authored_branches():
         "Resistance": "50.0ohm",
         "UseInduct": False,
         "UseCap": True,
-        "Capacitance": "0.0F",
+        "Capacitance": "0.0farad",
     }
+
+
+def test_every_capacitance_is_written_in_the_unit_aedt_reads_as_farad(tmp_path):
+    """A Lumped RLC's and a junction's capacitance carry ``farad``: AEDT takes a bare ``F`` as femto (#288)."""
+    sidecar, exported = export(
+        build_model(FIXTURES["port_crossing_round_pad"], "C"), tmp_path
+    )
+    rlc = LumpedRlc("p1", "parallel", capacitance_f=1e-15)
+    (planned,) = plan_hfss_boundaries(sidecar, exported.guard, (), (rlc,)).lumped_rlcs
+    assert planned.branches["Capacitance"] == "1e-15farad"
+    junction = PlanarJunction(
+        "j1", "p1", "A", "B", planned.direction[:2], 2.0, 1e-8, 2e-15
+    )
+    (planned,) = plan_hfss_boundaries(
+        sidecar, exported.guard, (SgbJunction(junction, port_group("p1")),), ()
+    ).junctions
+    assert planned.branches["Capacitance"] == "2e-15farad"
+    assert planned.branches["Inductance"] == "1e-08H"
 
 
 def _bare_model(tmp_path, **treatments):
