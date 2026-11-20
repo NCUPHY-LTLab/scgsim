@@ -9,7 +9,8 @@ model's; nothing is re-derived from the sources.
 
 The steps run in order: the cut on the model grid, the cut within the model's extent, the crossings of every
 curve of an emitted face (each refused where it breaks a cut rule), the traces of the faces and walls, the
-section's cells and regions with the rules read on them, the records, the groups, and the 2D validation.  A
+section's cells and regions with the rules read on them, the records, the regions conductors fill, the groups,
+and the 2D validation.  A
 broken cut rule raises :class:`~scgsim.geometry.exact.errors.InputError` with its place; a failed invariant
 raises :class:`~scgsim.geometry.sgb.errors.ValidationError`.  Nothing is written: emitting the 2D model to
 files is a later stage.  The section is a function of the 3D model alone.
@@ -24,6 +25,7 @@ from scgsim.geometry.sgb.section.assembly import (
     AssembledSection,
     assemble_section,
     check_regions,
+    section_conductors,
     section_grid,
 )
 from scgsim.geometry.sgb.section.frame import cut_frame
@@ -49,6 +51,7 @@ def build_section_model(model: ConformalModel, cut: CutLine) -> SectionModel:
     grid = section_grid(frame, model, traces)
     check_regions(frame, model, curves, traces, grid)
     assembled = assemble_section(model, traces, grid)
+    conductors = section_conductors(model, assembled)
     groups = _groups(assembled)
     unions = {
         name: kept
@@ -69,6 +72,7 @@ def build_section_model(model: ConformalModel, cut: CutLine) -> SectionModel:
         assembled.vertices,
         assembled.edges,
         assembled.faces,
+        conductors,
         groups,
         unions,
         rows,

@@ -9,6 +9,8 @@ groups and Surface-EPR rows the cut crosses.
   primary group, so the interface type, face kind, Entity, Net and band carry over unchanged.
 * A **face** is the trace of one emitted 3D volume: one connected part of the volume's cross-section, so a
   volume the cut crosses twice gives two faces.  Its group is the volume's, the owning Entity.
+* A **conductor** is one region a conductor fills, whether the route emits it as a face (Route C) or excludes
+  it (Route B), so a section of either route has the same conductors.
 
 Groups have ``dim`` 2 (faces) and 1 (edges), one dimension below the 3D model's.
 """
@@ -82,11 +84,28 @@ class SectionFace:
     twice_area: Fraction
 
 
+@dataclass(frozen=True)
+class SectionConductor:
+    """One region of the section a conductor fills: a connected part of the conductors' cross-section.
+
+    On Route C it is a face of the section (``face``).  Route B excludes the conductors from the model, so there
+    it is a region no face fills (``face`` is None), and only the edges around it name its domain; the regions
+    the section is joined into find it either way.  ``domains`` are the conductors that fill it: one, unless
+    conductors touch with no face between them.  ``u`` (grid units) and ``z`` (um) are the ranges it covers.
+    """
+
+    domains: tuple[Domain, ...]
+    u: tuple[int, int]
+    z: tuple[Fraction, Fraction]
+    face: str | None
+
+
 @dataclass
 class SectionModel:
     """The plane section of a validated 3D model along a cut line, validated in 2D.
 
-    ``groups`` are the primary groups (``dim`` 2 for faces, 1 for edges) and ``unions`` the 3D unions restricted
+    ``conductors`` are the regions conductors fill, in order along the cut.  ``groups`` are the primary groups
+    (``dim`` 2 for faces, 1 for edges) and ``unions`` the 3D unions restricted
     to them; ``surface_epr_rows`` maps each Surface-EPR row the cut crosses to its group, and
     ``band_family_requests`` are the concrete requests of the band families whose bands the cut crosses (one per
     family, its id the family's), with their margins.  ``source`` is the
@@ -99,6 +118,7 @@ class SectionModel:
     vertices: dict[str, SectionVertex]
     edges: dict[str, SectionEdge]
     faces: dict[str, SectionFace]
+    conductors: tuple[SectionConductor, ...]
     groups: dict[str, PhysicalGroup]
     unions: dict[str, list[str]]
     surface_epr_rows: dict[str, str]
@@ -129,6 +149,7 @@ class SectionModel:
                 "vertices": [self.vertices[k] for k in sorted(self.vertices)],
                 "edges": [self.edges[k] for k in sorted(self.edges)],
                 "faces": [self.faces[k] for k in sorted(self.faces)],
+                "conductors": list(self.conductors),
                 "groups": {k: [g.dim, sorted(g.ids)] for k, g in self.groups.items()},
                 "unions": self.unions,
                 "surface_epr_rows": self.surface_epr_rows,

@@ -11,7 +11,7 @@
 | `geometry/source` | 來源階段：從版圖與堆疊到準備好的 snapshot。 | 版圖（元件、GDS）與堆疊，加上宣告的格點、真空區域、埠面與 Surface-EPR 規格。 | `GeometryPlan` 與它的 snapshot；其中的 `GeometryBuildInput` 與堆疊保留每個輸入身分，並帶有後續階段記錄的雜湊值與來源稽核。每個宣告的 recipe 連同它的稽核一起傳回結果（`recipes`）；`grid_projection` 把讀到的多邊形放上版圖的格點。 | `interpretation` 讀取準備好的輸入。`contact_pads` 找出每個接觸墊所附著的面金屬。`surface_epr_specs` 持有計畫檢查規格所依的 Surface-EPR 規則，`surface_epr`、Palace 與 AEDT 依它讀取規格與其邊距。 |
 | `geometry/junctions` | 集總埠周圍的矩形分割：切割規則、精確輸出與檢查；是 `interpretation` 的接面步驟。 | 來自 `interpretation` 的有效輸入與其矩形 junction 請求，每個請求指名一個來源多邊形與它的兩個端子 net；端子的綁定環來自精確核心（`exact`），與 SGB 使用的綁定相同。 | 每個被請求的多邊形切成中央矩形與屬於兩端端子的端塊、再放回輸入格點後的輸入，以及記錄這次切割的 `junction_partitions`。 | `interpretation` 回傳該輸入，`sgb` 由它建構並讀取這筆紀錄；SGB 從不匯入這個資料夾，這個資料夾也不讀取 SGB 的任何部分。 |
 | `geometry/interpretation` | 準備好的輸入的物理解讀，以及它的真空包絡。 | 準備好的 `GeometryBuildInput` 與堆疊，以及選定的近似設定。 | 有效輸入與堆疊，帶有物理表示計畫與自動真空包絡；輸入的矩形接面在其上導出，薄片介面綁定到所選的近似設定。 | 它的接面步驟執行 `junctions`；接著 `sgb` 從有效輸入建構。 |
-| `geometry/surface_epr` | 規格之後的 Surface-EPR 帶狀幾何：對應的 SGB 內縮請求，以及帶有內縮帶的建構。 | 計畫 snapshot 中正規化的 `MA`／`MS`／`SA` 規格，依 `source.surface_epr_specs` 的規則讀取；帶狀建構另外需要有效的 `GeometryBuildInput`、它的 `RepresentationContext` 與路線（來自呼叫它的 `palace/mesh` 或 AEDT 模型準備）。 | 規格邊距對應的 SGB 內縮請求，以及帶狀建構的檔案（`SgbArtifacts`：XAO、BREP 與 sidecar），由它以這些請求呼叫 `sgb.build_sgb_geometry` 建構。 | `palace/mesh` 為帶狀建構產生網格，AEDT 準備則匯出它。 |
+| `geometry/surface_epr` | 規格之後的 Surface-EPR 帶狀幾何：對應的 SGB 內縮請求，以及帶有內縮帶的建構。 | 計畫 snapshot 中正規化的 `MA`／`MS`／`SA` 規格，依 `source.surface_epr_specs` 的規則讀取；帶狀建構另外需要有效的 `GeometryBuildInput`、它的 `RepresentationContext` 與路線（來自呼叫它的 `palace/mesh`、AEDT 模型準備或 `geometry.sections`）。 | 規格邊距對應的 SGB 內縮請求，以及帶狀建構的檔案（`SgbArtifacts`：XAO、BREP 與 sidecar），由它以這些請求呼叫 `sgb.build_sgb_geometry` 建構；或留在記憶體中的已驗證模型。 | `palace/mesh` 為帶狀建構產生網格，AEDT 準備匯出它，`geometry.sections` 則在記憶體中切開模型。 |
 
 ### `geometry/sgb`
 
@@ -36,7 +36,7 @@
 | `geometry/sgb/output/sidecar` | 正式的 sidecar `scgsim.sgb.sidecar.v5`（設計簡報第 7 與 12 節，決策 D8）。 | 屬於 `geometry/sgb/output`，請與那一列一起閱讀。 |  |  |
 | `geometry/sgb/output/verification` | 寫出之幾何的檢查：Gmsh 載入檢查，以及 OCCT 檢查額外涵蓋的部分。 | 屬於 `geometry/sgb/output`，請與那一列一起閱讀。 |  |  |
 | `geometry/sgb/output/exchange` | 輸出實體與其他工具的交換：AEDT 用的 STEP 匯出與其匯入防護（設計簡報決策 D4，實驗 E4）。 | 屬於 `geometry/sgb/output`，請與那一列一起閱讀。 |  |  |
-| `geometry/sgb/section` | SGB 的 2D 模型：已驗證 3D 模型沿一條切線的平面截面。 | 已驗證的 `ConformalModel`（來自 `model`）與一條 `CutLine`。 | `SectionModel`：截面的頂點、邊與面，加上切線穿過的 3D 群組、Surface-EPR 列與帶族，並已在 2D 驗證；不寫出任何檔案。 | 呼叫者在記憶體中讀取它；套件中沒有階段讀取它。 |
+| `geometry/sgb/section` | SGB 的 2D 模型：已驗證 3D 模型沿一條切線的平面截面，以及它呈現的傳輸線。 | 已驗證的 `ConformalModel`（來自 `model`）與一條 `CutLine`。 | `SectionModel`：截面的頂點、邊、面與導體區域，加上切線穿過的 3D 群組、Surface-EPR 列與帶族，並已在 2D 驗證；以及它的分類結果 `LineCrossSection`；不寫出任何檔案。 | `geometry.sections` 回傳 `LineCrossSection`；套件中目前還沒有階段讀取截面。 |
 
 ### `meshing`
 

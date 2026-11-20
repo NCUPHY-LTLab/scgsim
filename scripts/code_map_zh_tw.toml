@@ -71,12 +71,12 @@ Next.zh = "``interpretation`` 回傳該輸入，``sgb`` 由它建構並讀取這
 ["geometry/surface_epr"]
 summary.en = "Surface-EPR band geometry after the specs: their SGB inset requests and the banded build."
 summary.zh = "規格之後的 Surface-EPR 帶狀幾何：對應的 SGB 內縮請求，以及帶有內縮帶的建構。"
-In.en = "the normalized ``MA``/``MS``/``SA`` specs of the plan's snapshot, read by the rules of ``source.surface_epr_specs``; for the banded build, the effective ``GeometryBuildInput``, its ``RepresentationContext`` and the route (from ``palace/mesh`` or the AEDT model preparation, which call it)."
-In.zh = "計畫 snapshot 中正規化的 ``MA``／``MS``／``SA`` 規格，依 ``source.surface_epr_specs`` 的規則讀取；帶狀建構另外需要有效的 ``GeometryBuildInput``、它的 ``RepresentationContext`` 與路線（來自呼叫它的 ``palace/mesh`` 或 AEDT 模型準備）。"
-Out.en = "the SGB inset requests of the specs' margins, and the banded build's files (``SgbArtifacts``: XAO, BREP and sidecar), which it builds by calling ``sgb.build_sgb_geometry`` with those requests."
-Out.zh = "規格邊距對應的 SGB 內縮請求，以及帶狀建構的檔案（``SgbArtifacts``：XAO、BREP 與 sidecar），由它以這些請求呼叫 ``sgb.build_sgb_geometry`` 建構。"
-Next.en = "``palace/mesh`` meshes the banded build and the AEDT preparation exports it."
-Next.zh = "``palace/mesh`` 為帶狀建構產生網格，AEDT 準備則匯出它。"
+In.en = "the normalized ``MA``/``MS``/``SA`` specs of the plan's snapshot, read by the rules of ``source.surface_epr_specs``; for the banded build, the effective ``GeometryBuildInput``, its ``RepresentationContext`` and the route (from ``palace/mesh``, the AEDT model preparation or ``geometry.sections``, which call it)."
+In.zh = "計畫 snapshot 中正規化的 ``MA``／``MS``／``SA`` 規格，依 ``source.surface_epr_specs`` 的規則讀取；帶狀建構另外需要有效的 ``GeometryBuildInput``、它的 ``RepresentationContext`` 與路線（來自呼叫它的 ``palace/mesh``、AEDT 模型準備或 ``geometry.sections``）。"
+Out.en = "the SGB inset requests of the specs' margins, and the banded build's files (``SgbArtifacts``: XAO, BREP and sidecar), which it builds by calling ``sgb.build_sgb_geometry`` with those requests, or its validated model in memory."
+Out.zh = "規格邊距對應的 SGB 內縮請求，以及帶狀建構的檔案（``SgbArtifacts``：XAO、BREP 與 sidecar），由它以這些請求呼叫 ``sgb.build_sgb_geometry`` 建構；或留在記憶體中的已驗證模型。"
+Next.en = "``palace/mesh`` meshes the banded build, the AEDT preparation exports it, and ``geometry.sections`` cuts the model in memory."
+Next.zh = "``palace/mesh`` 為帶狀建構產生網格，AEDT 準備匯出它，``geometry.sections`` 則在記憶體中切開模型。"
 
 ["geometry/sgb"]
 summary.en = "Semantic geometry builder (SGB) core: the prism-based, Boolean-free pipeline."
@@ -197,14 +197,14 @@ summary.en = "Exchange of the emitted solids with other tools: the AEDT STEP exp
 summary.zh = "輸出實體與其他工具的交換：AEDT 用的 STEP 匯出與其匯入防護（設計簡報決策 D4，實驗 E4）。"
 
 ["geometry/sgb/section"]
-summary.en = "SGB's 2D models: the plane section of a validated 3D model along a cut line."
-summary.zh = "SGB 的 2D 模型：已驗證 3D 模型沿一條切線的平面截面。"
+summary.en = "SGB's 2D models: the plane section of a validated 3D model along a cut line, and the line it shows."
+summary.zh = "SGB 的 2D 模型：已驗證 3D 模型沿一條切線的平面截面，以及它呈現的傳輸線。"
 In.en = "the validated ``ConformalModel`` (from ``model``) and a ``CutLine``."
 In.zh = "已驗證的 ``ConformalModel``（來自 ``model``）與一條 ``CutLine``。"
-Out.en = "the ``SectionModel``: the section's vertices, edges and faces with the 3D groups, Surface-EPR rows and band families the cut crosses, validated in 2D; nothing is written."
-Out.zh = "``SectionModel``：截面的頂點、邊與面，加上切線穿過的 3D 群組、Surface-EPR 列與帶族，並已在 2D 驗證；不寫出任何檔案。"
-Next.en = "the caller reads it in memory; no stage of the package reads it."
-Next.zh = "呼叫者在記憶體中讀取它；套件中沒有階段讀取它。"
+Out.en = "the ``SectionModel``: the section's vertices, edges, faces and conductor regions with the 3D groups, Surface-EPR rows and band families the cut crosses, validated in 2D; and its classification, the ``LineCrossSection``; nothing is written."
+Out.zh = "``SectionModel``：截面的頂點、邊、面與導體區域，加上切線穿過的 3D 群組、Surface-EPR 列與帶族，並已在 2D 驗證；以及它的分類結果 ``LineCrossSection``；不寫出任何檔案。"
+Next.en = "``geometry.sections`` returns the ``LineCrossSection``; no stage of the package reads the section yet."
+Next.zh = "``geometry.sections`` 回傳 ``LineCrossSection``；套件中目前還沒有階段讀取截面。"
 
 ["meshing"]
 summary.en = "Standalone meshing of SGB geometry: sizes from a recipe, a quality audit and a repair loop."

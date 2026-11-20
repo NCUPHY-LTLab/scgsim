@@ -48,6 +48,7 @@ from scgsim.geometry.models.physical import (
     interpret_physical_layers,
 )
 from scgsim.geometry.models.regions import PortSheetOverlapRecord, PortSheetRegionRecord
+from scgsim.geometry.models.section import CutLine, LineCrossSection
 from scgsim.geometry.source.adapter import build_gds_stack_geometry_input
 from scgsim.geometry.source.junctions import with_rectangular_junctions
 from scgsim.geometry.source.plan import GeometryPlan, GeometryPlanSnapshot
@@ -67,12 +68,14 @@ __all__ = [
     "Coordinate",
     "CurveKindLiteral",
     "CurveOrientationLiteral",
+    "CutLine",
     "GdsBoundaryReconstructionSpec",
     "GeometryBuildInput",
     "GeometryPlan",
     "GeometryPlanSnapshot",
     "InputSummary",
     "LayoutPolygonSpec",
+    "LineCrossSection",
     "PathInput",
     "PolygonRing",
     "PortSheetOverlapRecord",
