@@ -3,10 +3,10 @@
 AEDT models the geometry Palace meshes (issue #67).  One preparation runs, in order:
 
 1. the physical interpretation of the source under the requested ``modeling``, unchanged
-   (:mod:`scgsim.aedt.preparation.modeling`), which also derives the plan's rectangular junctions into
-   their port sheets;
-2. the binding of each AEDT junction to the port sheet of the plan's ``RectangularJunctionSpec`` of the
-   same id, and of each lumped RLC and lumped port to the port sheet it names (issue #67 decision 8);
+   (:mod:`scgsim.aedt.preparation.modeling`), which also derives the rectangular junctions the input
+   requests into their port sheets (the plan's lumped elements, :mod:`scgsim.aedt.preparation.lumped_elements`);
+2. the binding of each AEDT junction to its partitioned port sheet, by the sheet's source polygon, and of
+   each lumped RLC and lumped port to the port sheet it names (issue #67 decision 8);
    wave and modal ports are refused (follow-up NCUPHY-LTLab/scgsim#135);
 3. the SGB build with the Surface-EPR bands of the normalized specs
    (:func:`scgsim.geometry.surface_epr.build_banded_geometry`).  ``thin_film`` builds Route A (conductor
@@ -54,6 +54,7 @@ from scgsim.geometry.sgb.topology.routes.policy import (
     RoutePolicy,
 )
 from scgsim.geometry.surface_epr import build_banded_geometry
+from scgsim.refusal import internal
 
 SCHEMA = "scgsim.aedt.sgb-model.v1"
 VACUUM_REGION = "VACUUM_REGION"
@@ -408,13 +409,14 @@ def check_region_box(sidecar: Sidecar, bounds: Sequence[float]) -> None:
 def bind_junctions(
     effective_input: GeometryBuildInput, junctions: Sequence[PlanarJunction]
 ) -> tuple[SgbJunction, ...]:
-    """Bind each junction to the port sheet its plan's ``RectangularJunctionSpec`` derived.
+    """Bind each junction to its sheet, cut to its central rectangle by a ``RectangularJunctionSpec``.
 
-    The junction's polygon and its two Nets must be the ones the spec names; a junction without a spec
-    is refused rather than partitioned again here.
+    A junction names its sheet by the sheet's source polygon; its id is the junction's own name (the plan's
+    element name), not the partition's.  The partition's polygon and two Nets must be the junction's; a
+    junction whose sheet was not partitioned is refused rather than partitioned again here.
     """
-    by_junction = {
-        region.metadata.get("rectangular_junction_partition"): region
+    by_polygon = {
+        region.source_polygon_id: region
         for region in effective_input.port_sheet_regions
         if region.metadata.get("rectangular_junction_partition") is not None
     }
@@ -422,11 +424,13 @@ def bind_junctions(
     for junction in junctions:
         if not isinstance(junction, PlanarJunction):
             raise TypeError("junctions must contain PlanarJunction records")
-        region = by_junction.get(junction.junction_id)
+        region = by_polygon.get(junction.source_polygon_id)
         if region is None:
             raise ValueError(
-                f"junction {junction.junction_id!r} has no RectangularJunctionSpec in the plan; "
-                "declare it with GeometryPlan.set_rectangular_junctions"
+                internal(
+                    f"junction {junction.junction_id!r}: its sheet {junction.source_polygon_id!r} was not cut "
+                    "to its central rectangle"
+                )
             )
         binding = region.metadata["rectangular_junction_binding"]
         declared = (

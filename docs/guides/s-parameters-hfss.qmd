@@ -32,46 +32,34 @@ is one: `square_pad_capacitor` declares it as `o_junction_lumped`, and it
 joins the pad to the ground across the 20 µm gap.
 
 A two-port network needs two such sheets. No layout of the OrcaPen SC PDK at
-the revision these guides use has two; add them to your own component. After
-`plan.prepare()`, the sheet IDs that a port names are listed by
-
-```python
-print([region.port_sheet_id for region in snapshot.geometry_input.port_sheet_regions])
-```
-
-which prints `['PORT_SHEET__chip/o_junction_lumped__0000']` for First
+the revision these guides use has two; add them to your own component. A
+port names its sheet by the name the component declares it with, qualified
+by the placed part: `chip/o_junction_lumped` for the sheet of First
 simulation's plan.
 
 ## Prepare the run {#prepare-the-run}
 
-The block below is the form of a two-port request. The sheet IDs `port_1`
-and `port_2` and the Entities `chip/pad_1`, `chip/pad_2` and `chip/ground`
-stand for your layout's; an Entity is a named shape of the layout, such as
-`chip/PAD`. `snapshot` is your plan's, prepared as in
-[Prepare a coplanar waveguide for AEDT](aedt-cpw-inputs.qmd).
+The block below is the form of a two-port request. The sheets `chip/port_1`
+and `chip/port_2` and the Net `ground` stand for your layout's; a Net is a
+named piece of metal that acts as one conductor. `plan` is your plan, made as
+in [Prepare a coplanar waveguide for AEDT](aedt-cpw-inputs.qmd).
 
 ```python
 from pathlib import Path
 from scgsim.aedt import (
-    FrequencySweepSpec, HfssRunControl, LumpedTerminalPort,
-    prepare_hfss_driven_from_geometry, prepare_sgb_model,
+    FrequencySweepSpec, HfssRunControl, prepare_hfss_driven_from_geometry,
 )
+from scgsim.geometry import LumpedPort
 
 AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
-ports = (
-    LumpedTerminalPort(1, "p1", "port_1", ("chip/pad_1",), ("chip/ground",), 50.0),
-    LumpedTerminalPort(2, "p2", "port_2", ("chip/pad_2",), ("chip/ground",), 50.0),
-)
-model = prepare_sgb_model(
-    snapshot.geometry_input,
-    prepared_stack=snapshot.stack,
-    modeling="solid",  # or "thin_film"
-    output_dir=Path(".artifacts/driven-model"),
-    ports=ports,
-)
+plan.set_lumped_elements([
+    LumpedPort("chip/port_1", reference_net="ground", impedance_ohm=50.0),
+    LumpedPort("chip/port_2", reference_net="ground", impedance_ohm=50.0),
+])
 handoff = prepare_hfss_driven_from_geometry(
+    plan.prepare(),
     aedt_version=AEDT_VERSION,
-    model=model,
+    modeling="solid",  # or "thin_film"
     project_name="two_port",
     design_name="DrivenTerminal",
     run_control=HfssRunControl(
@@ -84,13 +72,17 @@ print(handoff.spec_path, handoff.archive_path)
 
 What the inputs mean:
 
-- Each `LumpedTerminalPort` gives the port's number (1 or 2), its name, the
-  port sheet it sits on, the signal Entities and the reference Entities the
-  sheet joins, and its impedance in ohms. The two ports share one reference.
-- `prepare_sgb_model(..., ports=...)` builds the model and binds each port to
-  its sheet; it refuses a sheet the model does not have, or a sheet that does
-  not join one of its port's signal Entities and one of its reference
-  Entities.
+- Each `LumpedPort` on the plan is one port: the sheet it sits on, the Net of
+  its reference conductor (the other conductor the sheet joins is its signal)
+  and its impedance in ohms. Port 1 is the first you give, port 2 the second;
+  the two ports share one reference. The ports are the plan's, so a Palace or
+  HFSS Eigenmode study of the same plan sees them too, as loads.
+- `plan.prepare()` refuses a sheet the layout does not draw, a sheet that does
+  not join two conductors, and a `reference_net` that is neither conductor's
+  Net, naming the sheet's layer and place.
+  `prepare_hfss_driven_from_geometry` builds the model from the plan and
+  refuses a plan with other than two ports, or with a lumped element that is
+  not a port.
 - `HfssRunControl` sets the solution setup and the sweep: here 201 points from
   4 GHz to 8 GHz. Choose the bounds and the number of points for the response
   you need ([sweep reference](../reference/specs/aedt-runtime.qmd#hfss-driven-sweep-count)).

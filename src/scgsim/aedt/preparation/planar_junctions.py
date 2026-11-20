@@ -17,6 +17,7 @@ from scgsim.geometry.junctions.contact import junction_source_binding
 from scgsim.geometry.junctions.exact_geometry import closed_contact
 from scgsim.geometry.junctions.lattice import drawn_exterior, lattice_rectangle
 from scgsim.geometry.junctions.terminal import junction_terminal_line
+from scgsim.geometry.models.junctions import junction_net_id
 from scgsim.geometry.source.validation import validate_geometry_input
 
 
@@ -71,7 +72,7 @@ def planar_junction_from_port(  # noqa: PLR0913 -- preserve the supported explic
                 continue
             polygon = polygons[pid]
             if closed_contact([sheet], [source_rings(polygon.exterior, polygon.holes)]):
-                overlap_nets.add(entity.net_id)
+                overlap_nets.add(junction_net_id(entity))
     if overlap_nets != {terminal_a_net, terminal_b_net}:
         raise ValueError(
             f"port {port_name!r} overlaps must identify exactly the explicit "

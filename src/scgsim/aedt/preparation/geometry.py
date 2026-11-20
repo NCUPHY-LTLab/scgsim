@@ -20,6 +20,7 @@ from scgsim.aedt.preparation.handoff import (
     prepare_handoff,
 )
 from scgsim.aedt.preparation.handoff_files import handoff_member, utc_now, write_script
+from scgsim.aedt.preparation.lumped_elements import hfss_driven_inputs
 from scgsim.aedt.preparation.sgb_handoff import attach_sgb_model, sgb_model_source
 from scgsim.aedt.preparation.sgb_model import (
     PreparedSgbModel,
@@ -161,38 +162,53 @@ def prepare_hfss_eigenmode_from_geometry(  # noqa: PLR0913 -- preserve the suppo
 
 
 def prepare_hfss_driven_from_geometry(  # noqa: PLR0913 -- preserve the supported explicit preparation keyword API.
+    snapshot: GeometryPlanSnapshot,
     *,
     aedt_version: str,
-    model: PreparedSgbModel,
+    modeling: Modeling,
+    output_dir: str | Path,
     project_name: str,
     design_name: str,
     run_control: HfssRunControl | None = None,
-    output_dir: str | Path,
     resources: AedtResources | None = None,
 ) -> HandoffPlan:
-    """Prepare the HFSS Driven Terminal handoff of an SGB model; omitted run_control authors no solve setup.
+    """Prepare the HFSS Driven Terminal handoff of the plan's SGB model, without AEDT; omitted run_control authors no solve setup.
 
-    The ports are the model's two lumped Terminal ports (``prepare_sgb_model(..., ports=...)``).  The handoff
-    carries the model's four files in its ``model/`` folder (issue #67).  The import's own first step
-    (:func:`plan_import`) runs on the model first, so a model the HFSS import cannot realize is refused here,
-    before AEDT is started (issue #266).
+    The plan is built as the SGB model AEDT imports (:func:`prepare_sgb_model`, issue #67), with the plan's two
+    excitation ports (``GeometryPlan.set_lumped_elements``) as its lumped Terminal ports, port *i* the plan's
+    *i*-th ``LumpedPort`` (:func:`~scgsim.aedt.preparation.lumped_elements.hfss_driven_inputs`).  A lumped element
+    that is not a port is refused by name, and the plan's Surface-EPR specs are not read.  The handoff carries
+    the model's four files in its ``model/`` folder.  The import's own first step (:func:`plan_import`) runs on
+    the model first, so a model the HFSS import cannot realize is refused here, before AEDT is started (issue
+    #266).
     """
-    plan_import(model, family="hfss")
-    spec = HfssDrivenGeometrySpec(
-        aedt_version=aedt_version,
-        modeling=model.modeling,
-        model=model,
-        project_name=project_name,
-        design_name=design_name,
-        run_control=run_control,
-    )
-    return _BodyHfssHandoff(
-        spec=spec,
-        materials=detached(model.materials),
-        output_dir=output_dir,
-        workflow="body_first_driven_terminal",
-        resources=resources,
-    ).build()
+    if not isinstance(snapshot, GeometryPlanSnapshot):
+        raise TypeError("snapshot must be GeometryPlanSnapshot")
+    lumped = hfss_driven_inputs(snapshot)
+    with TemporaryDirectory(prefix="scgsim-driven-model-") as temporary:
+        model = prepare_sgb_model(
+            lumped.build_input,
+            prepared_stack=snapshot.stack,
+            modeling=modeling,
+            output_dir=Path(temporary),
+            ports=lumped.lumped_ports,
+        )
+        plan_import(model, family="hfss")
+        spec = HfssDrivenGeometrySpec(
+            aedt_version=aedt_version,
+            modeling=model.modeling,
+            model=model,
+            project_name=project_name,
+            design_name=design_name,
+            run_control=run_control,
+        )
+        return _BodyHfssHandoff(
+            spec=spec,
+            materials=detached(model.materials),
+            output_dir=output_dir,
+            workflow="body_first_driven_terminal",
+            resources=resources,
+        ).build()
 
 
 @dataclass

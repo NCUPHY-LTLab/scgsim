@@ -140,13 +140,19 @@ refused, not rounded. SCGSim reads back exactly that many points.
 
 ### Port sheets, junctions and RLCs {#hfss-shared-lumped-support}
 
-A `PlanarJunction`, a `LumpedRlc` or a `LumpedTerminalPort` sits on a port
-sheet of the plan, named by its `port_sheet_id`. Each port sheet takes exactly
-one of them, and in HFSS every port sheet must take one.
+What sits on a port sheet is the plan's: each lumped element of
+`plan.set_lumped_elements` ([Lumped elements](geometry-plan.qmd#lumped-elements)),
+on the sheet it names. HFSS makes of each one:
 
-A `LumpedRlc` names its topology, `series` or `parallel`; each of its R, L and
-C is a finite value or `None` to leave it out. It is a linear circuit element,
-not a junction: it has no junction participation.
+| On the plan | HFSS Eigenmode | HFSS Driven Terminal |
+|---|---|---|
+| `LumpedElement` with an inductance and no resistance | a junction: a Lumped RLC of its L and C (C = 0 when none is given), with junction participation; its EPR id is its sheet's name | refused, naming the element |
+| any other `LumpedElement` | a parallel Lumped RLC of its R, L and C, a linear circuit element with no junction participation | refused, naming the element |
+| `LumpedPort` | a parallel Lumped RLC of its impedance, a load | a lumped Terminal port, in the plan's order |
+
+Each sheet is cut to the rectangle between its two conductors, as Palace cuts
+it ([How a junction is cut](#aedt-automatic-junction-partition)). A sheet the
+plan declares nothing on is not in the model.
 
 AEDT keeps only the letters, digits and `_` of a name, so a Net named
 `chip/A` becomes `chip_A` in AEDT. Two Nets whose names become the same, such
@@ -155,11 +161,14 @@ are two junctions or two RLCs whose names collide. Nothing is renamed.
 
 ### HFSS Driven Terminal {#hfss-driven-terminal-sgb}
 
-Give the model two lumped Terminal ports, ports 1 and 2, with different names
-and one shared reference (`prepare_sgb_model(..., ports=...)`). Each port
-sheet joins two conductors: one must be a signal conductor of its port, the
-other a reference conductor. A Driven model carries no junctions, RLCs or
-Surface-EPR specs. The run returns the S-parameters of the declared sweep in
+Declare two `LumpedPort`s on the plan, with one shared reference Net, and
+prepare the run with `prepare_hfss_driven_from_geometry(plan.prepare(), modeling=..., ...)`.
+Port 1 is the first `LumpedPort`; each port's AEDT name is its sheet's name
+with every character other than letters, digits and `_` made `_`. Each port
+sheet joins two conductors: the one in its `reference_net` is the reference,
+the other the signal, where the Terminal goes. A Driven model carries no
+junctions, RLCs or Surface-EPR specs: a `LumpedElement` on the plan is
+refused, and the plan's Surface-EPR specs are not read. The run returns the S-parameters of the declared sweep in
 port order, as CSV and as Touchstone.
 
 Driven Modal and wave ports are not available; see [Not supported](#current-exclusions).
@@ -167,8 +176,8 @@ Driven Modal and wave ports are not available; see [Not supported](#current-excl
 ### HFSS Eigenmode and EPR {#eigenmode-saved-fields-and-surface-epr-direction}
 
 `EigenmodeSim(modeling=..., aedt_version=...)` takes the plan with `set_plan`,
-the setup with `set_eigenmode`, and optionally `add_junction`,
-`add_lumped_rlc` and `set_epr_request`. Surface EPR is the plan's
+the setup with `set_eigenmode`, and optionally `set_epr_request`; the
+junctions and lumped RLCs are the plan's lumped elements. Surface EPR is the plan's
 (`plan.set_surface_epr(specs)` before `prepare()`): its inset margins are cut
 into the model as bands. Every Surface-EPR row of the declared types is
 integrated over all its faces, side walls included, unless the spec's
@@ -232,8 +241,9 @@ documents the rule in its
 
 #### How a junction is cut {#aedt-automatic-junction-partition}
 
-AEDT puts a junction's inductance on a rectangle. SCGSim cuts the drawn
-junction sheet into two conductor ends, each joined to its terminal, and one
+AEDT puts a junction's inductance on a rectangle, and every other lumped
+element on the same kind of rectangle. SCGSim cuts the drawn sheet into two
+conductor ends, each joined to its terminal, and one
 full-width central rectangle that carries the whole inductance and
 capacitance. The sheet must have a clear full-width corridor between its two
 terminals, touching no other metal; otherwise preparation stops and names the

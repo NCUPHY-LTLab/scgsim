@@ -39,45 +39,14 @@ plan.set_surface_epr({
     }
     for kind in ("MA", "MS", "SA")
 })
+snapshot = plan.prepare()
 ```
 
 邊距會切進 AEDT 匯入的模型，宣告的每一類表面都會積分，包含金屬的側面。
 
 ## 接面 {#bind-the-junction}
 
-AEDT 需要在計畫上宣告接面：它是哪一片薄片、連接哪兩個 Entity，以及它們各屬哪個 Net。接著 `planar_junction_from_port` 把電路值綁到這片薄片上。
-
-```python
-from scgsim.aedt import planar_junction_from_port
-from scgsim.geometry import JunctionTerminalBinding, RectangularJunctionSpec
-
-plan.set_rectangular_junctions([
-    RectangularJunctionSpec(
-        junction_id="jj",
-        port_sheet_id="PORT_SHEET__chip/device/o_junction_lumped__0000",
-        source_polygon_id="PORT_SHEET__chip/device/o_junction_lumped__SOURCE__P0000",
-        source_occurrence_path="chip/device",
-        terminal_a=JunctionTerminalBinding("chip/D1_BOTTOM_GROUND_PLANE", "chip", "Ground"),
-        terminal_b=JunctionTerminalBinding("chip/device/D1_XMON_PAD", "chip/device", "xmon_pad"),
-    )
-])
-snapshot = plan.prepare()
-junction = planar_junction_from_port(
-    snapshot.geometry_input,
-    port_name=port_name,
-    junction_id="jj",
-    terminal_a_net="Ground",
-    terminal_b_net="xmon_pad",
-    inductance_h=11.78e-9,
-    capacitance_f=0.0,
-)
-```
-
-- `port_sheet_id` 與 `source_polygon_id` 是準備好的計畫為接面薄片取的名稱；`[r.port_sheet_id for r in snapshot.geometry_input.port_sheet_regions]` 可以列出它們。
-- 端子 A 是薄片起點所在的 Entity，這裡是 D1 接地平面；端子 B 是它指向的 Entity，也就是 Xmon 焊墊；順序相反會被拒絕。每個端子都寫出它的 Entity、它所屬的放入部分（平面是 `chip`，焊墊是 `chip/device`）與它的 Net。
-- `capacitance_f=0.0` 把接面當成純電感。這是建模選擇，不代表接面沒有電容。
-
-AEDT 會把接面放在兩個導體之間的薄片上（[接面參考](../../reference/specs/aedt-runtime.qmd#aedt-automatic-junction-partition)）。
+接面屬於計畫：[共用的計畫](inputs.qmd)把它宣告一次，即薄片 `port_name` 上的 11.78 nH 電感。只有電感、沒有電阻的元件在 HFSS 中是接面：薄片上、D1 接地平面與 Xmon 焊墊之間的 Lumped RLC，並像 Palace 一樣切成兩者之間的矩形（[接面參考](../../reference/specs/aedt-runtime.qmd#aedt-automatic-junction-partition)）。它的 EPR id 就是薄片的名稱 `port_name`。
 
 ## 準備計算 {#select-reported-rows-and-prepare-a-handoff}
 
@@ -109,12 +78,11 @@ sim.set_eigenmode(
     ),
     resources=AedtResources(cores=4, ram_limit_percent=80),
 )
-sim.add_junction(junction)
 sim.set_epr_request(
     EprAnalysisRequest(
         mode_indices=(1,),
         surface_epr_groups=None,  # every Surface EPR group
-        junction_ids=(junction.junction_id,),
+        junction_ids=(port_name,),
         bulk_domain_ids=None,  # every dielectric solid and the Region
     )
 )

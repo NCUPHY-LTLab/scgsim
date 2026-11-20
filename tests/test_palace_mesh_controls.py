@@ -154,9 +154,9 @@ def stand_in_mesh_stages(monkeypatch, module, tmp_path):
         calls.append(("geometry", request))
         return geometry
 
-    def check(built):
+    def check(built, lumped_elements):
         assert built is geometry
-        calls.append(("check", None))
+        calls.append(("check", lumped_elements))
 
     def mesher(built, controls):
         assert built is geometry

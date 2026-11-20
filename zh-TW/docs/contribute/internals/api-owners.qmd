@@ -38,7 +38,7 @@ scgsim-id: "docs/contribute/internals/api-owners"
 - 元件轉接器、`scgsim.sgb.stack` 與 `scgsim.sgb.source_curves`：`build_gdsfactory_geometry_input`、`build_component_stack`、`bind_source_curves`。帶有 `component_semantics` schema 2 宣告的元件經由 `GeometryPlan` 進入，由它從 PDK 層堆疊建立堆疊，並自行帶入繪製的曲線綁定；
 - 在 3.0.0rc3 隨 AEDT 自己的幾何建構器一起移除：`scgsim.geometry.planning`、`scgsim.geometry.models.topology`（`InterfacePlanRecord`、`MMContactRecord`、`SurfacePlanRecord`），以及建構記錄 `ConstructionBodyPlanRecord` 與 `SurfacePartitionRecord`。
 
-門面之下的模組以職責命名。格點引擎是 `scgsim.geometry.grid`，含 `grid_cache`、`tagged_grid`、`tagged_grid_faces`、`tagged_grid_operations` 與 `polygon_ops`；來源準備是 `scgsim.geometry.source`，含 `normalization`、`occurrence` 與 `plan_assembly`。矩形接面以 `scgsim.geometry` 的 `RectangularJunctionSpec`、`JunctionTerminalBinding` 與 `with_rectangular_junctions` 宣告，由 `interpret_physical_geometry` 推導；共用的接觸服務（`JunctionContactRequest`、`junction_contact_inventory`）位在 `scgsim.geometry.junctions.contact`，不對外匯出。
+門面之下的模組以職責命名。格點引擎是 `scgsim.geometry.grid`，含 `grid_cache`、`tagged_grid`、`tagged_grid_faces`、`tagged_grid_operations` 與 `polygon_ops`；來源準備是 `scgsim.geometry.source`，含 `normalization`、`occurrence` 與 `plan_assembly`。集總元件以 `LumpedElement` 與 `LumpedPort` 宣告，由 `scgsim.geometry.source.lumped_elements` 解析成 `LumpedElementRecord`；每個模擬以 `scgsim.geometry` 的 `RectangularJunctionSpec`、`JunctionTerminalBinding` 與 `with_rectangular_junctions` 把它的埠片綁定為矩形切分，由 `interpret_physical_geometry` 推導；共用的接觸服務（`JunctionContactRequest`、`junction_contact_inventory`）位在 `scgsim.geometry.junctions.contact`，不對外匯出。
 
 ## AEDT 名稱與模組擁有者 {#aedt-api-transaction-and-state-ownership}
 
@@ -52,18 +52,17 @@ scgsim-id: "docs/contribute/internals/api-owners"
 | `scgsim.aedt.spec` | `scgsim.aedt.specs.q3d` | `Q3dNetSpec`、`Q3dSpec` |
 | `scgsim.aedt.spec` | `scgsim.aedt.specs.parse` | `AedtSpec`、`parse_aedt_spec` |
 | `scgsim.aedt._epr_models` | `scgsim.aedt.epr.models` | `EprResult` |
-| `scgsim.aedt._epr_models` | `scgsim.aedt.specs.epr` | `EprAnalysisRequest`、`ExpressionCacheConvergence`、`NativeExpressionDefinition`、`NormalizedSurfaceEprTotal`、`PlanarJunction`、`SavedSolution` |
+| `scgsim.aedt._epr_models` | `scgsim.aedt.specs.epr` | `EprAnalysisRequest`、`ExpressionCacheConvergence`、`NativeExpressionDefinition`、`NormalizedSurfaceEprTotal`、`SavedSolution` |
 | `scgsim.aedt.handoff` | `scgsim.aedt.preparation.handoff` | `HandoffPlan`、`prepare_handoff` |
-| `scgsim.aedt.handoff` | `scgsim.aedt.preparation.geometry` | `prepare_hfss_eigenmode_from_geometry`、`prepare_q3d_from_geometry` |
+| `scgsim.aedt.handoff` | `scgsim.aedt.preparation.geometry` | `prepare_hfss_driven_from_geometry`、`prepare_hfss_eigenmode_from_geometry`、`prepare_q3d_from_geometry` |
 | `scgsim.aedt.handoff` | `scgsim.aedt.epr.workflow` | `analyze_epr` |
 | `scgsim.aedt.eigenmode` | `scgsim.aedt.eigenmode` | `EigenmodeSim` |
 | `scgsim.aedt.resolve` | `scgsim.aedt.results.resolve` | `ResolvedRun`、`resolve_results` |
-| `scgsim.aedt._epr_geometry` | `scgsim.aedt.preparation.planar_junctions` | `planar_junction_from_port` |
 | `scgsim.aedt._epr_results` | `scgsim.aedt.epr.reanalysis` | `reanalyze_epr` |
 | `scgsim.aedt._epr_results` | `scgsim.aedt.results.epr` | `resolve_epr_result`、`resolve_saved_solution` |
 | `scgsim.aedt._epr_results`、`_presentation` | `scgsim.aedt.presentation.epr` | `plot_epr_result`、`show_epr` |
 | `scgsim.aedt.run` | `scgsim.aedt.run` | `main` |
-| （3.0.0rc3 新增） | `scgsim.aedt.preparation.sgb_model` | `PreparedSgbModel`、`prepare_sgb_model` |
+| （3.0.0rc3 新增） | `scgsim.aedt.preparation.sgb_model` | `PreparedSgbModel` |
 
 職責樹：
 

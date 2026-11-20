@@ -107,7 +107,7 @@ Q3D、HFSS Eigenmode 與 HFSS Driven 的公開幾何準備函式，以及 `Eigen
 
 ## 集總埠片、Net 名稱與 EPR 積分 {#hfss-shared-lumped-support}
 
-`LumpedRlc` 與 `LumpedTerminalPort` 指名一個 `port_sheet_id`：計畫中的一個埠片，SGB 模型把它記成 `PORT::<port_sheet_id>` group，與 Palace 的集總元件相同。不再有另外的支撐紀錄。`prepare_sgb_model()` 把每一個綁到它的 group；模型中沒有該 group 的名稱會被拒絕，接面、RLC 或集總埠共用同一個埠片也會被拒絕。在 HFSS 中，每個埠片都必須帶有一個接面、一個 RLC 或一個集總 Terminal 埠。
+集總元件屬於計畫：`GeometryPlan.set_lumped_elements`，由 `prepare()` 解析成快照的 `LumpedElementRecord`，每張埠片的兩個導體依其繪製方向排列。HFSS 在 `scgsim.aedt.preparation.lumped_elements` 中實現它們：`hfss_eigenmode_inputs` 把有電感、沒有電阻的元件做成 `PlanarJunction`，以埠片命名並以 `planar_junction_from_port` 綁定；其他元件做成並聯 `LumpedRlc`；激發埠做成其阻抗的並聯 `LumpedRlc`。`hfss_driven_inputs` 把每個激發埠做成 `LumpedTerminalPort`（編號即索引，AEDT 名稱為清理過的埠片名稱），並拒絕其他元件。兩者都只保留帶有元件的埠片，並以 `with_rectangular_junctions` 把每張埠片綁定為矩形切分（切分 id 是埠片的 `port_sheet_id`，端子 A 是方向起點的導體），與 Palace 的集總埠相同。這些紀錄是內部的：沒有呼叫者建立它們。`LumpedRlc` 與 `LumpedTerminalPort` 指名一個 `port_sheet_id`，SGB 模型把它記成 `PORT::<port_sheet_id>` group，與 Palace 的集總元件相同；`PlanarJunction` 以埠片的來源多邊形綁定到它的埠片，該埠片必須已經切分。不再有另外的支撐紀錄。`prepare_sgb_model()` 把每一個綁到它的 group；模型中沒有該 group 的名稱會被拒絕，接面、RLC 或集總埠共用同一個埠片也會被拒絕。在 HFSS 中，模型的每張埠片都必須帶有一個接面、一個 RLC 或一個集總 Terminal 埠；由計畫建出的模型一定如此，因為模型裡只有宣告過的埠片。
 
 HFSS 匯入把每個 `LumpedRlc` 放在它的埠面上，方式與接面相同：在匯入的 face 上建立一個 Lumped RLC，電流線沿 sidecar 的 `direction`，連接這些 face 自身兩端 edge 的中點。
 
@@ -119,7 +119,7 @@ SGB 模型的 EPR 不經 AEDT，從 sidecar 與準備好的紀錄讀出要積分
 
 ## HFSS Driven Terminal 的建構 {#hfss-driven-terminal-sgb}
 
-`prepare_hfss_driven_from_geometry(model=...)` 為一個 `PreparedSgbModel` 準備 Driven Terminal 交接，其 `lumped_ports` 就是它的兩個埠（`prepare_sgb_model(..., ports=...)`）。`HfssDrivenGeometrySpec`（結構 `hfss-driven-geometry.v1`，模式 `terminal`）攜帶此模型；它的 `ports` 就是模型的埠。要求必須有埠 1 與 2，名稱不同，並共用一個有序參考；每個埠片的兩個宿主 Entity，必須是該埠的一個訊號 Entity 與一個參考 Entity，且一個埠的任何 Entity 不得同時是兩者，讓兩個宿主分擔兩個角色。Driven 模型不帶接面、集總 RLC 或 Surface-EPR 規格。交接在 `model/` 中攜帶模型的四個檔案，收據來源綁定 `sgb_model_sha256` 與 `sgb_model_files`，與 HFSS Eigenmode 相同。帶有 `geometry`（原生建構器的）的要求酬載會遭拒，並說明原因。
+`prepare_hfss_driven_from_geometry(snapshot, modeling=..., ...)` 在暫存資料夾中建出計畫的 SGB 模型，以計畫的兩個激發埠作為它的 `lumped_ports`（`hfss_driven_inputs`，再 `prepare_sgb_model(..., ports=...)`），並為這個 `PreparedSgbModel` 準備 Driven Terminal 交接。`HfssDrivenGeometrySpec`（結構 `hfss-driven-geometry.v1`，模式 `terminal`）攜帶此模型；它的 `ports` 就是模型的埠。要求必須有埠 1 與 2，名稱不同，並共用一個有序參考；每個埠片的兩個宿主 Entity，必須是該埠的一個訊號 Entity 與一個參考 Entity，且一個埠的任何 Entity 不得同時是兩者，讓兩個宿主分擔兩個角色。Driven 模型不帶接面、集總 RLC 或 Surface-EPR 規格。交接在 `model/` 中攜帶模型的四個檔案，收據來源綁定 `sgb_model_sha256` 與 `sgb_model_files`，與 HFSS Eigenmode 相同。帶有 `geometry`（原生建構器的）的要求酬載會遭拒，並說明原因。
 
 在 AEDT 中，執行會把 STEP 匯入空白的 Driven Terminal 設計（`import_sgb_model`），Region、其 Perfect H 與每個 Route A Net 的 Perfect E 都與 Eigenmode 相同。帶有集總 Terminal 埠的模型只匯入 Driven Terminal 設計，而 Driven Terminal 設計也只接受帶有這些埠的模型。接著每個埠依序為：
 
@@ -129,7 +129,7 @@ SGB 模型的 EPR 不經 AEDT，從 sidecar 與準備好的紀錄讀出要積分
 
 儲存後，每個埠都從已儲存的設計讀回：一個正好位於其各面上的 Terminal `Lumped Port`，以及它唯一的 Terminal，即正好位於其各邊上的已儲存子項。AEDT 若記錄了參考導體，它們必須是各埠參考宿主的導體實體；AEDT 2024.2 在兩種路徑上都沒有記錄任何參考導體，而 Route A 的宿主是 Perfect E 薄片，不是實體。收據保留這些紀錄、原生屬性與 AEDT 記錄的參考導體。結果讀取要求收據的幾何就是請求的模型匯入後的樣子（其識別與 guard 的實體）、每筆埠紀錄就是匯入所建立的那一筆，以及所宣告掃頻的有序 S 參數與 Touchstone。
 
-`LumpedRlc` 要求明確 `series` 或 `parallel` 拓樸。R、L、C 分別選擇，`None` 停用對應元件；每個啟用的一般 R、L、C 值，在數值轉換後必須有限。零仍表示啟用，有限負值保留。目前建構器會拒絕含非有限值的歷史一般 RLC 酬載，包含解碼；限制只適用於這些一般 RLC 元件，不延伸到其他電路或 EPR 量。`EigenmodeSim.add_lumped_rlc()` 加入模型負責的集合，每個埠片一個處理，`HfssEprSpec` 只投影準備清單，不建立第二份可編輯副本。模型來源雜湊包含 RLC 資料。此一般線性網路不是 Josephson 接面，不建立 `PlanarJunction`、接面參與率或 EPR 貢獻；既有接面與已儲存場 EPR 結果契約保持分開。
+`LumpedRlc` 要求明確 `series` 或 `parallel` 拓樸。R、L、C 分別選擇，`None` 停用對應元件；每個啟用的一般 R、L、C 值，在數值轉換後必須有限。零仍表示啟用，有限負值保留。目前建構器會拒絕含非有限值的歷史一般 RLC 酬載，包含解碼；限制只適用於這些一般 RLC 元件，不延伸到其他電路或 EPR 量。計畫的 `LumpedElement` 只產生數值為正的並聯 `LumpedRlc`；`series` 與零或負值只有計畫之下的呼叫者才會交給 `LumpedRlc`。模型負責這個集合，每個埠片一個處理，`HfssEprSpec` 只投影準備清單，不建立第二份可編輯副本。模型來源雜湊包含 RLC 資料。此一般線性網路不是 Josephson 接面，不建立 `PlanarJunction`、接面參與率或 EPR 貢獻；既有接面與已儲存場 EPR 結果契約保持分開。
 
 ## 原生設定對應 {#aedt-family-setup-controls}
 
@@ -261,7 +261,7 @@ Analyze 結束後，recorder 關閉新請求並觀察一次原生 `odesktop.AreT
 
 ## HFSS Eigenmode 與 EPR 的建構 {#eigenmode-saved-fields-and-surface-epr-direction}
 
-HFSS Eigenmode 在 Palace 網格化的同一個 SGB 模型上執行。`EigenmodeSim.prepare_handoff()` 以 `prepare_sgb_model()` 從 plan 及其 junction、集總 RLC 與 Surface-EPR specs 建出模型，並寫出攜帶它的交接資料；之後 `EigenmodeSim.prepared_model` 就是交接資料中的模型。在執行 AEDT 的位置，請求以交接資料夾為基準讀取，模型的四個檔案再檢查一次，然後依下列順序建立 Eigenmode 設計：
+HFSS Eigenmode 在 Palace 網格化的同一個 SGB 模型上執行。`EigenmodeSim.prepare_handoff()` 以 `prepare_sgb_model()` 從 plan、HFSS Eigenmode 所實現的集總元件（`hfss_eigenmode_inputs`）與 Surface-EPR specs 建出模型，並寫出攜帶它的交接資料；之後 `EigenmodeSim.prepared_model` 就是交接資料中的模型。在執行 AEDT 的位置，請求以交接資料夾為基準讀取，模型的四個檔案再檢查一次，然後依下列順序建立 Eigenmode 設計：
 
 1. `import_sgb_model()` 匯入受 guard 保護的 STEP，將每個面對應到規劃的面，重建 free faces，實現材料與 Region，並指派 Perfect E、junction 的 Lumped RLC 與一般 RLC；
 2. 對 EPR 請求，從匯入的面複製出每個選取的 Surface-EPR 列一張非模型 sheet，每個 junction 一張電壓 sheet；

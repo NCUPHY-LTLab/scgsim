@@ -32,7 +32,6 @@ import json
 import os
 import subprocess
 import tarfile
-from dataclasses import replace
 from pathlib import Path
 
 import gdsfactory as gf
@@ -41,11 +40,11 @@ from orcapen_sc_pdk import get_material_records
 from orcapen_sc_pdk.tech import get_single_die_layer_stack
 from scgsim.aedt import (
     AedtResources, EigenmodeRunControl, EigenmodeSim, EprAnalysisRequest,
-    planar_junction_from_port, prepare_native_batch,
+    prepare_native_batch,
 )
-from scgsim.geometry import GeometryPlan, JunctionTerminalBinding, RectangularJunctionSpec
+from scgsim.geometry import GeometryPlan, LumpedElement
 
-# The pad of First simulation, with its junction sheet declared as a junction.
+# The pad of First simulation; each case puts its junction on the junction sheet.
 orcapen_sc_pdk.activate()
 component = gf.get_component(
     "square_pad_capacitor", pad_side_um=200.0, gap_um=20.0, die_side_um=1000.0
@@ -59,26 +58,7 @@ plan = GeometryPlan(
 )
 plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
 plan.set_vacuum_region(padding=(0.0, 0.0, 1000.0))
-plan.set_rectangular_junctions([
-    RectangularJunctionSpec(
-        junction_id="jj",
-        port_sheet_id="PORT_SHEET__chip/o_junction_lumped__0000",
-        source_polygon_id="PORT_SHEET__chip/o_junction_lumped__SOURCE__P0000",
-        source_occurrence_path="chip",
-        terminal_a=JunctionTerminalBinding("chip/PAD", "chip", "pad"),
-        terminal_b=JunctionTerminalBinding("chip/GROUND", "chip", "ground"),
-    )
-])
-snapshot = plan.prepare()
-junction = planar_junction_from_port(
-    snapshot.geometry_input,
-    port_name="chip/o_junction_lumped",
-    junction_id="jj",
-    terminal_a_net="pad",
-    terminal_b_net="ground",
-    inductance_h=10e-9,
-    capacitance_f=0.0,
-)
+junction = "chip/o_junction_lumped"
 
 AEDT_VERSION = "2024.2"  # The same release on all three computers.
 resources = AedtResources(cores=4, ram_limit_percent=80)
@@ -87,8 +67,9 @@ packages = study / "packages"
 packages.mkdir(parents=True, exist_ok=False)
 rows = []
 for case_id, inductance_h in (("L10nH", 10e-9), ("L12nH", 12e-9), ("L14nH", 14e-9)):
+    plan.set_lumped_elements([LumpedElement(junction, inductance_h=inductance_h)])
     sim = EigenmodeSim(modeling="solid", aedt_version=AEDT_VERSION)
-    sim.set_plan(snapshot)
+    sim.set_plan(plan.prepare())
     sim.set_output_dir(study / "prepared" / case_id)
     sim.set_eigenmode(
         project_name=f"pad_{case_id}",
@@ -100,11 +81,10 @@ for case_id, inductance_h in (("L10nH", 10e-9), ("L12nH", 12e-9), ("L14nH", 14e-
         ),
         resources=resources,
     )
-    sim.add_junction(replace(junction, inductance_h=inductance_h))
     sim.set_epr_request(EprAnalysisRequest(
         mode_indices=(1,),
         surface_epr_groups=None,  # every Surface EPR group of the plan (none here)
-        junction_ids=("jj",),
+        junction_ids=(junction,),
         bulk_domain_ids=None,  # every dielectric solid and the Region
     ))
     handoff = sim.prepare_handoff()  # Writes the run folder; opens no AEDT.
@@ -136,7 +116,7 @@ print(outbound)
 2. 執行該資料夾的 `run_aedt.sh --prepare-only`：AEDT 建立模型、設定求解與 EPR 計算、儲存專案後關閉，不求解；
 3. 以 `prepare_native_batch()` 把儲存的專案封裝給 HPC 求解器。
 
-接面需要在 `prepare()` 之前以 `plan.set_rectangular_junctions` 宣告：它指名接面薄片，以及薄片連接的焊墊與接地 Entity，焊墊在前，因為薄片的方向是從焊墊指向接地。三個模型之間只有電感不同，所以共用一個計畫；若要掃描幾何，每個案例都需要新的計畫、快照與接面。`sweep.json` 是你自己的案例表；SCGSim 沒有掃描函式。
+接面是計畫上的集總元件：每個案例都以 `set_lumped_elements` 在接面薄片上宣告它的電感，再重新準備計畫。計畫自己找出薄片連接的焊墊與接地，HFSS 在 EPR 要求中以薄片名稱指名這個接面。三個模型之間只有電感不同，所以它們共用版圖與幾何；若要掃描幾何，就以同樣方式改變版圖或計畫。`sweep.json` 是你自己的案例表；SCGSim 沒有掃描函式。
 
 每個 `packages/<案例>` 裡有 `native-batch-package.json`、`run_batch.py` 與 `native_batch.tar.gz`。請把 `prepared/` 資料夾留在工作站上。
 

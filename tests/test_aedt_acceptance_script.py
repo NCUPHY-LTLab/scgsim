@@ -34,17 +34,19 @@ def acceptance():
 
 
 def test_the_handoff_is_the_route_c_epr_model_of_the_pad_pair(acceptance, tmp_path):
-    """One junction on the port sheet between the pads, and MA, MS and SA rows with their inset bands."""
-    snapshot, junction = acceptance._plan()  # noqa: SLF001 -- the script's own preparation step
+    """One junction on the port sheet between the pads, named by its sheet, and MA, MS and SA rows with their inset bands."""
+    snapshot = acceptance._geometry_plan().prepare()  # noqa: SLF001 -- the script's own preparation step
     handoff = acceptance._handoff(  # noqa: SLF001 -- the script's own preparation step
-        tmp_path / "out", snapshot, junction, acceptance.AedtResources(2, 50)
+        tmp_path / "out", snapshot, acceptance.AedtResources(2, 50)
     )
     spec = parse_aedt_spec(
         json.loads(handoff.spec_path.read_text(encoding="utf-8")),
         base_dir=handoff.run_dir,
     )
     assert spec.modeling == "solid"
-    assert [item.junction.junction_id for item in spec.model.junctions] == ["jj"]
+    assert [item.junction.junction_id for item in spec.model.junctions] == ["chip/J1"]
+    assert spec.epr_request is not None
+    assert spec.epr_request.junction_ids == ("chip/J1",)
     sidecar = read_sidecar(spec.model.path("sidecar"))
     assert sidecar["model"]["route"] == "C"
     banded = {

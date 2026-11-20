@@ -38,7 +38,7 @@ display(summary)
 
 接下來幾張表列出 Net 成員（`ground`：`chip/GROUND`；`pad`：`chip/PAD`）、每種材料的性質（矽的介電常數 11.9、鋁的導電率），以及埠片。方形焊墊有一片埠片 `chip/o_junction_lumped`，位在 `chip/PAD` 與 `chip/GROUND` 上，圖層為 `D0_TOP_M1`。
 
-這份摘要只顯示來源。不論計畫用 `set_rectangular_junctions` 或 `set_surface_epr` 設定了什麼，它的接面表與 Surface-EPR 表都會是空的，也沒有求解器設定：這裡的表是空的，不代表那些設定不存在。要檢查這些設定，請用下面的 `sim.input_summary()`。
+這份摘要只顯示來源。不論計畫用 `set_lumped_elements` 或 `set_surface_epr` 設定了什麼，它的接面表與 Surface-EPR 表都會是空的，也沒有求解器設定：這裡的表是空的，不代表那些設定不存在。要檢查這些設定，請用下面的 `sim.input_summary()`。
 
 `summary.data` 以字典形式提供同樣的內容，方便腳本使用。它是一份複本：修改它不會改變快照。
 

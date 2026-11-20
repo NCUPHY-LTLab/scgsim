@@ -22,8 +22,9 @@ carries a ground plane on its top face; the upper chip (D1) carries the Xmon
 on the face turned down towards it. Eight indium bumps, each 20 µm square,
 connect the two ground planes across the 8.2 µm gap. The model is 1060 µm
 square. The junction is modelled by its sheet, a small sheet that joins the pad
-to the D1 ground plane: both backend pages put an 11.78 nH inductor
-there, the value of the PDK's public notebooks for this qubit.
+to the D1 ground plane: the plan puts an 11.78 nH inductor there, the
+value of the PDK's public notebooks for this qubit, and both backend pages
+read it from the plan.
 
 You need SCGSim with its `palace` extra for the Palace page or its `aedt-epr`
 extra for the AEDT page, and the OrcaPen SC PDK
@@ -37,7 +38,7 @@ import orcapen_sc_pdk
 from orcapen_sc_pdk import LAYER_STACK, get_material_records
 from orcapen_sc_pdk.helpers.assembly import place_flip_chip_ground_short_bumps
 from orcapen_sc_pdk.tech import OUTER_VACUUM_THICKNESS_UM
-from scgsim.geometry import GeometryPlan
+from scgsim.geometry import GeometryPlan, LumpedElement
 
 orcapen_sc_pdk.activate()
 gf.clear_cache()
@@ -93,8 +94,9 @@ plan.set_nets({
 plan.set_vacuum_region(
     padding=(0.0, 0.0, float(OUTER_VACUUM_THICKNESS_UM))
 )
-snapshot = plan.prepare()
 port_name = "chip/device/o_junction_lumped"
+plan.set_lumped_elements([LumpedElement(port_name, inductance_h=11.78e-9)])
+snapshot = plan.prepare()
 ```
 
 What each step fixes:
@@ -118,8 +120,11 @@ What each step fixes:
 - `set_vacuum_region` adds 1000 µm of vacuum above and below the two chips
   (`OUTER_VACUUM_THICKNESS_UM`) and none beyond their sides. The 8.2 µm gap
   between the chips is part of the stack, not of this region.
-- `port_name` is the junction sheet's name in the plan; both backend pages use
-  it.
+- `set_lumped_elements` declares the junction once, on the plan: an 11.78 nH
+  inductor on the junction sheet `port_name`, between the Xmon pad and the D1
+  ground plane, with no capacitance of its own, a modelling choice. Both
+  backend pages read it from the plan and name the junction by `port_name` in
+  their EPR requests ([Lumped elements](../../reference/specs/geometry-plan.qmd#lumped-elements)).
 
 ## Next {#observe-the-prepared-source-and-continue}
 

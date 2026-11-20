@@ -287,15 +287,15 @@ def port_on_the_pad_only(monkeypatch):
 
 
 def test_a_lumped_port_on_one_conductor_is_located_on_its_layer(monkeypatch):
-    """The refusal names the port, its one host, the sheet's layer and the sheet's box."""
+    """The plan's refusal at ``prepare()`` names the element, its one host, the sheet's layer and the sheet's box."""
     with pytest.raises(ValueError) as error:
         check(EigenmodeSim, port_on_the_pad_only(monkeypatch))
     message = str(error.value)
-    assert message.startswith(
-        "lumped port 'chip/P1': must land on two conductors to be made a rectangle; "
-        "it lands on 1: ['chip/pad_0000']; the sheet is drawn on layer 9/0"
+    assert message.startswith("lumped element 'chip/P1', its sheet on layer 9/0 at ")
+    assert message.endswith(
+        ": it lands on 1 conductor, ['chip/pad_0000']; draw the sheet so that it lands on exactly "
+        "two conductors of its target layer 'metal', one at each end. Change it in the layout."
     )
-    assert "Fix the layout or the port declaration" in message
     (place,) = places(message)
     assert on(place, (15, 8, 25, 12)) and on((15, 8, 25, 12), place)
 

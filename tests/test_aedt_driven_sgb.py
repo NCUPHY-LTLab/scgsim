@@ -1,8 +1,9 @@
 """HFSS Driven Terminal on an SGB model, without AEDT: the request, its handoff and the lumped-port assignment.
 
-The model is the two-port source of ``sgb_driven_inputs`` built by ``prepare_sgb_model(ports=...)``.  The
-assignment runs on a stand-in for the AEDT design that records the boundaries it is given; the live import,
-port, setup and solve are checked in AEDT.  Skipped where OCP (the ``occt`` group) is missing.
+The model is the two-port source of ``sgb_driven_inputs`` built by the internal ``prepare_sgb_model(ports=...)``;
+the public handoff is prepared from the same layout's plan (``test_aedt_driven_plan_ports``).  The assignment
+runs on a stand-in for the AEDT design that records the boundaries it is given; the live import, port, setup
+and solve are checked in AEDT.  Skipped where OCP (the ``occt`` group) is missing.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from sgb_driven_inputs import (  # noqa: E402
     lumped_two_port_source,
 )
 from sgb_extreme_cases import FIXTURES, build_model  # noqa: E402
+from test_aedt_driven_plan_ports import PORTS, two_port_plan  # noqa: E402
 from test_aedt_public_preparation import junction_model  # noqa: E402
 from test_sgb_step_guard import export  # noqa: E402
 from test_simulation_drc import layout_plan  # noqa: E402
@@ -31,10 +33,10 @@ from scgsim.aedt import (  # noqa: E402
     FrequencySweepSpec,
     HfssDrivenGeometrySpec,
     HfssRunControl,
-    LumpedTerminalPort,
     prepare_handoff,
     prepare_hfss_driven_from_geometry,
 )
+from scgsim.aedt.preparation.lumped_elements import hfss_driven_inputs  # noqa: E402
 from scgsim.aedt.preparation.sgb_model import prepare_sgb_model  # noqa: E402
 from scgsim.aedt.runtime.families.hfss_ports import (  # noqa: E402
     read_saved_lumped_ports,
@@ -46,10 +48,15 @@ from scgsim.aedt.runtime.families.sgb_faces import (  # noqa: E402
     SgbImportError,
     import_tolerance_um,
 )
-from scgsim.aedt.runtime.families.sgb_import import lumped_port_faces  # noqa: E402
+from scgsim.aedt.runtime.families.sgb_import import (  # noqa: E402
+    lumped_port_faces,
+    plan_import,
+)
 from scgsim.aedt.runtime.families.sgb_ports import assign_lumped_port  # noqa: E402
+from scgsim.aedt.specs.common import LumpedTerminalPort  # noqa: E402
 from scgsim.aedt.specs.parse import parse_aedt_spec  # noqa: E402
 from scgsim.contracts.sgb_sidecar import read_sidecar  # noqa: E402
+from scgsim.geometry import LumpedPort  # noqa: E402
 from scgsim.geometry.sgb.output.exchange.guard import read_step_guard  # noqa: E402
 
 pytestmark = pytest.mark.occt
@@ -69,10 +76,12 @@ def _spec(model=None, run_control=RUN):
     )
 
 
-def _handoff(root):
+def _handoff(monkeypatch, root):
+    """The public Driven Terminal handoff of the two-port layout's plan, its two ports declared on the plan."""
     return prepare_hfss_driven_from_geometry(
+        two_port_plan(monkeypatch, PORTS).prepare(),
         aedt_version="2024.2",
-        model=driven_model(),
+        modeling="solid",
         project_name="Driven",
         design_name="Design",
         run_control=RUN,
@@ -80,19 +89,20 @@ def _handoff(root):
     )
 
 
-def test_the_handoff_carries_the_model_and_its_two_lumped_ports(tmp_path):
-    """The handoff holds the model's four files; its request reads back with the model's ports, moved too."""
-    plan = _handoff(tmp_path / "handoff")
+def test_the_handoff_carries_the_model_and_its_two_lumped_ports(monkeypatch, tmp_path):
+    """The handoff holds the model's four files; its request reads back with the plan's ports, moved too."""
+    plan = _handoff(monkeypatch, tmp_path / "handoff")
     payload = json.loads(plan.spec_path.read_text())
     assert payload["model"]["model_dir"] == "model"
     assert "geometry" not in payload and "ports" not in payload
     moved = tmp_path / "moved"
     shutil.copytree(plan.run_dir, moved)
     parsed = parse_aedt_spec(payload, base_dir=moved)
-    assert parsed.ports == DRIVEN_PORTS
+    snapshot = two_port_plan(monkeypatch, PORTS).prepare()
+    assert parsed.ports == hfss_driven_inputs(snapshot).lumped_ports
     assert parsed.to_payload() == payload
     receipt = json.loads(plan.receipt_path.read_text())
-    assert receipt["source"]["sgb_model_sha256"] == driven_model().identity_sha256
+    assert receipt["source"]["sgb_model_sha256"] == parsed.model.identity_sha256
     metadata = json.loads(plan.metadata_path.read_text())
     assert metadata["workflow"] == "body_first_driven_terminal"
     assert metadata["execution"] == {"resources": None}
@@ -115,13 +125,17 @@ def test_the_imports_first_step_runs_before_the_handoff_is_written(
 
     monkeypatch.setattr(geometry_module, "plan_import", refused)
     with pytest.raises(ValueError, match="cannot realize"):
-        _handoff(tmp_path / "handoff")
+        _handoff(monkeypatch, tmp_path / "handoff")
     assert families == ["hfss"]
     assert not (tmp_path / "handoff").exists()
 
 
-def test_an_untreated_port_sheet_is_refused_before_the_handoff_is_written(tmp_path):
-    """Issue #67 review B4: two treated port sheets and one untreated one; preparation refuses, writing nothing."""
+def test_an_untreated_port_sheet_is_refused_by_the_imports_first_step(tmp_path):
+    """Issue #67 review B4: a model with two treated port sheets and one untreated one is refused by the import.
+
+    The public preparation leaves a sheet without a lumped element out of the model
+    (``test_aedt_driven_plan_ports``); this is the import's own check of a model built below that entry.
+    """
     source, stack = lumped_two_port_source(
         sheets=(*TWO_PORT_SHEETS, ("port_3", 3, "pad_1", 4.5, 5))
     )
@@ -133,20 +147,12 @@ def test_an_untreated_port_sheet_is_refused_before_the_handoff_is_written(tmp_pa
         ports=DRIVEN_PORTS,
     )
     with pytest.raises(ValueError, match=r"PORT::port_3"):
-        prepare_hfss_driven_from_geometry(
-            aedt_version="2024.2",
-            model=model,
-            project_name="Driven",
-            design_name="Design",
-            run_control=RUN,
-            output_dir=tmp_path / "handoff",
-        )
-    assert not (tmp_path / "handoff").exists()
+        plan_import(model, family="hfss")
 
 
-def test_a_driven_request_of_the_native_builder_is_refused(tmp_path):
+def test_a_driven_request_of_the_native_builder_is_refused(monkeypatch, tmp_path):
     """A Driven request that carries a native planar geometry is refused with the reason (decision 6)."""
-    plan = _handoff(tmp_path / "handoff")
+    plan = _handoff(monkeypatch, tmp_path / "handoff")
     payload = json.loads(plan.spec_path.read_text())
     payload["geometry"] = payload.pop("model")
     with pytest.raises(ValueError, match="natively built geometry"):
@@ -432,7 +438,8 @@ def _signal_first_two_port_plan(monkeypatch):
     The component declares its pads before its ground and the plan its signal Nets first, as an OrcaPen SC PDK
     layout does, so the source finds each sheet's pad before its ground (issue #282).  Pad ``k`` spans
     y = 0..20 um and the ground y = -30..-10 um; sheet ``Pk`` reaches 5 um into both, so what remains of it
-    runs from the ground edge (y = -10) to the pad edge (y = 0), along +y.
+    runs from the ground edge (y = -10) to the pad edge (y = 0), along +y.  Each sheet is declared on the plan
+    as a 50 ohm port referenced to the ground's Net ``G``.
     """
     import gdsfactory as gf  # noqa: PLC0415 -- optional layout stack, imported only by the tests that need it
 
@@ -465,7 +472,10 @@ def _signal_first_two_port_plan(monkeypatch):
         "ports": ports,
     }
     nets = {"P1": ("chip/pad_1",), "P2": ("chip/pad_2",), "G": ("chip/ground",)}
-    return layout_plan(component, nets=nets).prepare()
+    ports = [
+        LumpedPort(f"chip/P{k}", reference_net="G", impedance_ohm=50.0) for k in (1, 2)
+    ]
+    return layout_plan(component, nets=nets, lumped_elements=ports).prepare()
 
 
 def _conductor(name, layer, inside):
@@ -487,22 +497,13 @@ def test_the_terminal_is_on_the_signal_edge_when_the_layout_declares_its_signal_
     So on Route C and Route A each Terminal is on its pad edge (y = 0), not on the ground edge (y = -10).
     """
     snapshot = _signal_first_two_port_plan(monkeypatch)
-    sheet = {
-        region.metadata["source_name"]: region.port_sheet_id
-        for region in snapshot.geometry_input.port_sheet_regions
-    }
-    ports = tuple(
-        LumpedTerminalPort(
-            k, f"p{k}", sheet[f"chip/P{k}"], (f"chip/pad_{k}",), ("chip/ground",), 50.0
-        )
-        for k in (1, 2)
-    )
+    lumped = hfss_driven_inputs(snapshot)
     model = prepare_sgb_model(
-        snapshot.geometry_input,
+        lumped.build_input,
         prepared_stack=snapshot.stack,
         modeling=modeling,
         output_dir=tmp_path / "model",
-        ports=ports,
+        ports=lumped.lumped_ports,
     )
     sidecar = read_sidecar(model.path("sidecar"))
     guard = read_step_guard(model.path("guard"))

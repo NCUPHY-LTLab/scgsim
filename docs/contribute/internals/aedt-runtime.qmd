@@ -219,13 +219,28 @@ partial-success receipt or infer that native project bytes are usable.
 
 ## Lumped port sheets, Net names and EPR integration {#hfss-shared-lumped-support}
 
-`LumpedRlc` and `LumpedTerminalPort` name a `port_sheet_id`: a port sheet of
-the plan, which the SGB model carries as the `PORT::<port_sheet_id>` group, as
-Palace's lumped elements do. There is no separate
-support record. `prepare_sgb_model()` binds each one to its group and refuses
-a name the model has no group for, and a port sheet that a junction, an RLC
-or a lumped port share. In HFSS every port sheet must carry a junction, an
-RLC or a lumped Terminal port.
+The lumped elements are the plan's: `GeometryPlan.set_lumped_elements`, resolved
+by `prepare()` into the snapshot's `LumpedElementRecord`s, with each sheet's two
+conductors in the order of its authored direction. HFSS realizes them in
+`scgsim.aedt.preparation.lumped_elements`: `hfss_eigenmode_inputs` makes an
+element with an inductance and no resistance a `PlanarJunction`, named by its
+sheet and bound with `planar_junction_from_port`, any other element a parallel
+`LumpedRlc`, and an excitation port a parallel `LumpedRlc` of its impedance;
+`hfss_driven_inputs` makes each excitation port a `LumpedTerminalPort` (its
+number the index, its AEDT name the sanitised sheet name) and refuses any other
+element. Both keep only the sheets that carry an element and bind each one for
+the rectangular partition (`with_rectangular_junctions`, the partition id the
+sheet's `port_sheet_id`, terminal A the conductor at the start of the
+direction), the partition Palace's lumped ports take. These records are
+internal: no caller builds them. `LumpedRlc` and `LumpedTerminalPort` name a
+`port_sheet_id`, which the SGB model carries as the `PORT::<port_sheet_id>`
+group, as Palace's lumped elements do; a `PlanarJunction` binds to its sheet
+by the sheet's source polygon, which must have been partitioned. There is no
+separate support record. `prepare_sgb_model()` binds each one to its group and
+refuses a name the model has no group for, and a port sheet that a junction,
+an RLC or a lumped port share. In HFSS every port sheet of the model must
+carry a junction, an RLC or a lumped Terminal port; a model built from the
+plan always does, since only the declared sheets are in it.
 
 The HFSS import puts each `LumpedRlc` on its port face the same way as a
 junction: one Lumped RLC on the imported faces, with the current line joining
@@ -276,9 +291,10 @@ excluded.
 
 ## HFSS Driven Terminal construction {#hfss-driven-terminal-sgb}
 
-`prepare_hfss_driven_from_geometry(model=...)` prepares the Driven Terminal
-handoff of a `PreparedSgbModel` whose `lumped_ports` are its two ports
-(`prepare_sgb_model(..., ports=...)`). `HfssDrivenGeometrySpec` (schema
+`prepare_hfss_driven_from_geometry(snapshot, modeling=..., ...)` builds the
+plan's SGB model with the plan's two excitation ports as its `lumped_ports`
+(`hfss_driven_inputs`, then `prepare_sgb_model(..., ports=...)`) in a temporary
+folder and prepares the Driven Terminal handoff of that `PreparedSgbModel`. `HfssDrivenGeometrySpec` (schema
 `hfss-driven-geometry.v1`, mode `terminal`) carries the model; its `ports` are
 the model's. The request requires ports 1 and 2 with distinct names and one
 shared ordered reference; each port sheet's two host Entities must be one of
@@ -330,9 +346,11 @@ conversion. Zero remains enabled, and finite negative values are preserved.
 Historical generic RLC payloads containing nonfinite values are rejected by
 current constructors, including payload decoding. This restriction applies
 only to these generic RLC components, not to other circuit or EPR quantities.
-`EigenmodeSim.add_lumped_rlc()` adds to the model-owned collection, one
-treatment per port sheet; `HfssEprSpec` only projects the prepared list and
-does not introduce a second editable copy. The model-source hash includes the
+A plan's `LumpedElement` gives a parallel `LumpedRlc` of positive values only;
+`series` and zero or negative values reach `LumpedRlc` only from a caller below
+the plan. The model owns the collection, one treatment per port sheet;
+`HfssEprSpec` only projects the prepared list and does not introduce a second
+editable copy. The model-source hash includes the
 RLC records. This generic linear network is not a Josephson junction and does
 not create a `PlanarJunction`, junction participation, or an EPR contribution.
 Existing junction and saved-field EPR result contracts remain separate.
@@ -752,7 +770,8 @@ no-automatic-partial-save rule remains unchanged.
 
 HFSS Eigenmode runs on the SGB model Palace meshes.
 `EigenmodeSim.prepare_handoff()` builds it with `prepare_sgb_model()` from the
-plan, its junctions, lumped RLCs and Surface-EPR specs, and writes the handoff
+plan, its lumped elements as HFSS Eigenmode realizes them (`hfss_eigenmode_inputs`)
+and its Surface-EPR specs, and writes the handoff
 that carries it; `EigenmodeSim.prepared_model` is then the model in that
 handoff. Where AEDT runs, the request is read against the handoff folder, the
 model's four files are checked again, and the Eigenmode design is made in this

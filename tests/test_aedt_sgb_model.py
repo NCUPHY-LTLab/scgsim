@@ -112,11 +112,17 @@ def test_a_model_without_the_plans_vacuum_region_is_refused(tmp_path):
         _prepare(tmp_path, "solid", vacuum="upper_air")
 
 
-def test_a_junction_without_a_rectangular_junction_spec_is_refused(tmp_path):
-    """A junction is not partitioned again here; it needs its plan's spec."""
-    other = replace(JUNCTION, junction_id="other")
-    with pytest.raises(ValueError, match="no RectangularJunctionSpec"):
-        _prepare(tmp_path, "solid", junctions=(other,))
+def test_a_junction_whose_sheet_was_not_cut_is_refused(tmp_path):
+    """A junction binds to its sheet by the sheet's source polygon, which must have been cut to its rectangle.
+
+    It is not partitioned again here.  A junction named otherwise binds to the same sheet: its id is its own.
+    """
+    renamed = replace(JUNCTION, junction_id="chip/J1")
+    model = _prepare(tmp_path, "solid", junctions=(renamed,))
+    assert [item.junction.junction_id for item in model.junctions] == ["chip/J1"]
+    other = replace(JUNCTION, source_polygon_id="other_polygon")
+    with pytest.raises(ValueError, match="was not cut to its central rectangle"):
+        _prepare(tmp_path / "other", "solid", junctions=(other,))
 
 
 def test_a_junction_naming_other_nets_than_its_spec_is_refused(tmp_path):

@@ -19,7 +19,7 @@ from test_lumped_ports_at_any_angle import placed
 from test_palace_rectangular_ports import prepared_port
 from test_simulation_drc import LAYER_STACK, MATERIALS, NO_VACUUM_STACK, check, two_pads
 
-from scgsim.geometry import GeometryPlan
+from scgsim.geometry import GeometryPlan, LumpedElement
 from scgsim.geometry.exact.errors import UnsupportedCurveError
 from scgsim.geometry.models.physical import PhysicalLayerDeclaration
 from scgsim.palace import EigenmodeSim
@@ -89,8 +89,9 @@ def device_plan(component, nets=NETS, turn_degrees=0.0) -> GeometryPlan:
 def refusal(component, nets=NETS) -> str:
     """The refusal of the port's preparation, the one ``mesh()`` and ``simulation_drc`` run."""
     sim = EigenmodeSim()
-    sim.set_plan(device_plan(component, nets).prepare())
-    sim.add_port(PORT, layer="metal", layout_sheet=True, inductance=1e-9)
+    plan = device_plan(component, nets)
+    plan.set_lumped_elements([LumpedElement(PORT, inductance_h=1e-9)])
+    sim.set_plan(plan.prepare())
     with pytest.raises(ValueError) as error:
         prepared_port(sim)
     return str(error.value)
@@ -286,8 +287,9 @@ def test_a_terminal_outline_with_a_spline_is_located_by_its_ends(monkeypatch):
         }
     ]
     sim = EigenmodeSim()
-    sim.set_plan(device_plan(component).prepare())
-    sim.add_port(PORT, layer="metal", layout_sheet=True, inductance=1e-9)
+    plan = device_plan(component)
+    plan.set_lumped_elements([LumpedElement(PORT, inductance_h=1e-9)])
+    sim.set_plan(plan.prepare())
     with pytest.raises(UnsupportedCurveError) as error:
         prepared_port(sim)
     message = str(error.value)

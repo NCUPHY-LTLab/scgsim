@@ -86,34 +86,17 @@ Net 是一塊有名字、被當成同一個導體的金屬。`set_nets` 把每�
 
 真空區域是晶片周圍、求解器一併計算的那一塊空間。`padding=(0.0, 0.0, 1000.0)` µm 表示 x、y 方向不往外加，所以這個盒子在晶片邊緣結束；z 方向則往晶片上下各延伸 1000 µm。計畫若沒有真空區域（既沒有呼叫這個方法，層堆疊也沒有 `VACUUM_REGION` 層），檢查與每個模擬都會拒絕它。因為盒子在版圖的範圍邊緣結束，請把決定這個範圍的東西畫出來，例如晶片外框或接地面；只在一個點碰到這個範圍的導體會被拒絕（[原因](../reference/known-geometry-problems.qmd#boundary-point-pinch)）。
 
-### 接面 {#junctions}
+### 接面與其他集總元件 {#junctions}
 
-矩形接面是兩個導體之間的一片埠片，SCGSim 會把它切成橫跨間隙的矩形，用來代表 Josephson 接面這類集總元件。電容計算用不到它；含接面的共振器研究則需要。先從準備好的快照讀出這片薄片的 ID，再指定它的兩個導體與各自的 Net：
+集總元件是模型不畫成金屬的元件部分：以電感表示的 Josephson 接面、電阻、電容，或量測所驅動的埠。它放在元件所畫的一張集總埠片上，這裡是方形焊墊的 `chip/o_junction_lumped`，位於焊墊與接地之間。電容計算用不到它；含接面的共振器研究則需要。以埠片的名稱在計畫上宣告它：
 
 ```python
-from scgsim.geometry import JunctionTerminalBinding, RectangularJunctionSpec
+from scgsim.geometry import LumpedElement
 
-sheet = snapshot.geometry_input.port_sheet_regions[0]
-print(sheet.port_sheet_id)
-plan.set_rectangular_junctions(
-    [
-        RectangularJunctionSpec(
-            junction_id="pad_junction",
-            port_sheet_id=sheet.port_sheet_id,
-            source_polygon_id=sheet.source_polygon_id,
-            source_occurrence_path="chip",
-            terminal_a=JunctionTerminalBinding("chip/PAD", "chip", "pad"),
-            terminal_b=JunctionTerminalBinding("chip/GROUND", "chip", "ground"),
-        )
-    ]
-)
+plan.set_lumped_elements([LumpedElement("chip/o_junction_lumped", inductance_h=10e-9)])
 ```
 
-```text
-PORT_SHEET__chip/o_junction_lumped__0000
-```
-
-兩個導體與它們的 Net 都必須不同。各欄位說明見[幾何契約](../reference/specs/geometry-plan.qmd)；接面的電感在 [Palace：共振模態](modes-palace.qmd)中設定。
+`prepare()` 會找出埠片落在其上的兩個導體及其 Net，並拒絕沒有落在兩個不同 Net 之導體上的埠片，指出它的圖層與位置。計畫的每個模擬都會讀取這個元件：紀錄說明見[集總元件](../reference/specs/geometry-plan.qmd#lumped-elements)，[Palace：共振模態](modes-palace.qmd)以這個接面執行一次研究。
 
 ### Surface EPR {#surface-epr}
 

@@ -11,8 +11,8 @@ aliases:
 Each release candidate of SCGSim 3.0 changed some calls, with no compatibility
 layer: a script written for an earlier version stops with an error that names
 the call to change. Find the version your code was written for, then work
-through its checklist. Each checklist goes straight to 3.0.0rc4 and shows the
-final code. Until you are ready, keep the version your study project pins;
+through its checklist. Each checklist goes straight to the current version
+and shows the final code. Until you are ready, keep the version your study project pins;
 nothing changes for it.
 
 ## Find your version {#find-your-version}
@@ -24,6 +24,7 @@ prints.
 
 | Your code was written for | What changes most | Your checklist |
 |---|---|---|
+| 3.0.0rc4 | Junctions, lumped RLCs and Driven ports are declared on the plan, not on the simulation | [From 3.0.0rc4](#from-3-0-0rc4) |
 | 3.0.0rc3 | Surface EPR and the vacuum region are set on the plan, not on the simulation | [From 3.0.0rc3](#from-3-0-0rc3) |
 | 3.0.0rc1 or 3.0.0rc2 | The layout check takes the plan, and AEDT builds every 3D model from the plan | [From 3.0.0rc1 or rc2](#from-rc1-or-rc2) |
 | 2.0 (a 2.0.0 release candidate) | Palace builds its model with SGB and has new mesh controls; the route and Surface EPR are two settings; old run folders are not read | [From 2.0](#from-2-0) |
@@ -31,6 +32,96 @@ prints.
 Code older than 2.0, which imports `scgsim.sgb`, first moves its imports with
 the [old-import inventory](../contribute/internals/api-owners.qmd#geometry-api),
 then follows From 2.0.
+
+## From 3.0.0rc4 {#from-3-0-0rc4}
+
+[]{#lumped-elements-on-the-plan}A lumped element (a junction, a resistor, a
+capacitor, or the port a measurement drives) is a fact of the device, the same
+for every solver, so it is now declared once, on the `GeometryPlan`, by the
+name of the port sheet it sits on. Palace and AEDT read it from the snapshot;
+no simulation declares one of its own. Declared the old way or the new way, a
+study builds the same model, byte for byte (the mesh, the Palace configuration
+and the AEDT model files, checked on the roster's Eigenmode layouts and the
+HFSS EPR acceptance case). Two other changes of this version are at the end
+of this section: [what you prepared with 3.0.0rc4](#models-from-rc4).
+
+1. Replace Palace `sim.add_port(name, layer=..., layout_sheet=True, inductance=L)`
+   with `LumpedElement(name, inductance_h=L)` in `plan.set_lumped_elements([...])`,
+   before `plan.prepare()`. `layer` goes: the plan knows the sheet's layer. The
+   elements keep the order you give them, so the first is still Palace's `P1`.
+2. Replace AEDT `sim.add_junction(planar_junction_from_port(...))` and the
+   `RectangularJunctionSpec` you gave `plan.set_rectangular_junctions(...)` with
+   one `LumpedElement(sheet, inductance_h=L, capacitance_f=C)` on the plan. The
+   plan finds the sheet's two conductors and their Nets itself. The junction's
+   id is now its sheet's name: write that name in
+   `EprAnalysisRequest(junction_ids=...)` and read it in the results.
+3. Replace AEDT `sim.add_lumped_rlc(LumpedRlc(port_sheet_id, "parallel", ...))`
+   with `LumpedElement(sheet, resistance_ohm=..., inductance_h=..., capacitance_f=...)`,
+   named by the sheet's name, not its `port_sheet_id`. The components are in
+   parallel, as in Palace; a series RLC is no longer declarable.
+4. For HFSS Driven Terminal, replace the two `LumpedTerminalPort(...)` records,
+   `prepare_sgb_model(..., ports=...)` and `prepare_hfss_driven_from_geometry(model=..., ...)`
+   with two `LumpedPort(sheet, reference_net=..., impedance_ohm=...)` on the plan
+   and `prepare_hfss_driven_from_geometry(plan.prepare(), modeling=..., ...)`.
+   Port 1 is the first `LumpedPort` you give.
+5. `simulation_drc` checks the plan's elements as the simulation builds them;
+   it no longer gives every sheet a fixed 1 nH. A sheet the plan declares
+   nothing on is left out of a Palace or HFSS model; before, HFSS refused it.
+
+The code becomes:
+
+```python
+# Before
+plan.set_rectangular_junctions([RectangularJunctionSpec("jj", ...)])
+snapshot = plan.prepare()
+sim = palace.EigenmodeSim()
+sim.set_plan(snapshot)
+sim.add_port("chip/J1", layer="metal", layout_sheet=True, inductance=10e-9)
+hsim = aedt.EigenmodeSim(modeling="solid", aedt_version="2024.2")
+hsim.set_plan(snapshot)
+hsim.add_junction(planar_junction_from_port(snapshot.geometry_input, port_name="chip/J1",
+                  junction_id="jj", terminal_a_net="A", terminal_b_net="B",
+                  inductance_h=10e-9, capacitance_f=0.0))
+hsim.set_epr_request(EprAnalysisRequest(junction_ids=("jj",)))
+
+# Now
+plan.set_lumped_elements([LumpedElement("chip/J1", inductance_h=10e-9)])
+snapshot = plan.prepare()
+sim = palace.EigenmodeSim()
+sim.set_plan(snapshot)
+hsim = aedt.EigenmodeSim(modeling="solid", aedt_version="2024.2")
+hsim.set_plan(snapshot)
+hsim.set_epr_request(EprAnalysisRequest(junction_ids=("chip/J1",)))
+```
+
+| Removed | Now |
+|---|---|
+| Palace `EigenmodeSim.add_port`, `EigenmodeSim.ports` | `plan.set_lumped_elements([LumpedElement(...)])`; `sim.input_summary().data["backend"]["lumped_elements"]` |
+| AEDT `EigenmodeSim.add_junction`, `add_lumped_rlc`, and the `junctions` and `lumped_rlcs` arguments | `LumpedElement` on the plan |
+| `GeometryPlan.set_rectangular_junctions` | `LumpedElement` on the plan; the plan binds the sheet to its two conductors |
+| `scgsim.aedt.LumpedTerminalPort`, `LumpedRlc`, `PlanarJunction`, `planar_junction_from_port`, `prepare_sgb_model`; `scgsim.aedt.specs.LumpedRlc`, `LumpedTerminalPort` | `LumpedElement` and `LumpedPort` from `scgsim.geometry`; HFSS builds its records from them |
+| `prepare_hfss_driven_from_geometry(model=...)` | `prepare_hfss_driven_from_geometry(snapshot, modeling=..., ...)` |
+
+Errors now come from `prepare()`, naming the element, its sheet's layer and its
+place in µm: a sheet the layout does not draw, a sheet that lands on other than
+two conductors, two conductors of one Net, or a port whose `reference_net` is
+neither conductor's Net. [Lumped elements](../reference/specs/geometry-plan.qmd#lumped-elements)
+gives the records, and [Supported calculations](../reference/supported-calculations.qmd#lumped-elements)
+what each calculation does with them.
+
+[]{#models-from-rc4}Two other changes affect what you prepared or ran with
+3.0.0rc4:
+
+- **Prepare it again.** An SGB model now says it is `scgsim.sgb.sidecar.v6`.
+  A model, Palace run folder or AEDT handoff prepared with 3.0.0rc4 or earlier
+  is refused wherever SCGSim reads its model, with an error that says to
+  rebuild it. The old model may list a port sheet's two conductors in the
+  other order, and read now it would put an HFSS Terminal on the wrong edge.
+  Call `plan.prepare()` and prepare the simulation again.
+- **Run HFSS Driven Terminal again** where the layout declares a port's
+  signal conductor before its ground, as the OrcaPen SC PDK launcher does.
+  3.0.0rc4 put the Terminal on the port sheet's ground edge; it is now on its
+  signal edge.
 
 ## From 3.0.0rc3 {#from-3-0-0rc3}
 
@@ -82,6 +173,8 @@ you set them and again in `prepare()`. A refusal that named `set_surface_epr`
 on the simulation now names `GeometryPlan.set_surface_epr`. HFSS Driven
 Terminal and Q3D still read no Surface EPR and cut no bands.
 
+Then declare the lumped elements on the plan: [From 3.0.0rc4](#from-3-0-0rc4).
+
 ## From 3.0.0rc1 or rc2 {#from-rc1-or-rc2}
 
 Work through these steps in order.
@@ -105,7 +198,7 @@ Work through these steps in order.
    plan = GeometryPlan(component=component, root_id="chip", layer_stack=layer_stack, material_records=material_records, coupon_padding_um=0.0)
    plan.set_nets(nets)
    plan.set_vacuum_region((0.0, 0.0, 1000.0))
-   plan.set_rectangular_junctions(junctions)  # when the layout has rectangular junctions
+   plan.set_lumped_elements(elements)  # the junctions, loads and ports, when the device has any
    plan.set_surface_epr(specs)  # when the simulations compute Surface EPR
    EigenmodeSim.simulation_drc(plan, route="A")
    ```
@@ -115,8 +208,9 @@ Work through these steps in order.
    uses the plan's, and a plan without a vacuum region is refused. Register an
    assembly's instances with `plan.register_instance` before `set_nets`.
    [Check a layout](check-a-layout.qmd) shows the check and its report.
-3. **Surface EPR and the vacuum region on the plan.** Steps 1 to 5 of
-   [From 3.0.0rc3](#from-3-0-0rc3).
+3. **Surface EPR, the vacuum region and the lumped elements on the plan.**
+   Steps 1 to 5 of [From 3.0.0rc3](#from-3-0-0rc3), then
+   [From 3.0.0rc4](#from-3-0-0rc4).
 4. []{#aedt-sgb-migration}**AEDT builds from the plan.** Every 3D AEDT
    calculation is prepared from a `GeometryPlan` snapshot: AEDT imports the
    same model Palace meshes and builds no geometry of its own.
@@ -124,7 +218,7 @@ Work through these steps in order.
    | Calculation | Removed | Now |
    |---|---|---|
    | HFSS Eigenmode | `HfssEigenmodeSpec`, `gds_path` | `EigenmodeSim(modeling=..., aedt_version=...)`, `sim.set_plan(plan.prepare())`, `sim.prepare_handoff()`; see [HFSS Eigenmode](modes-hfss.qmd) |
-   | HFSS Driven Terminal | `HfssDrivenSpec`, `HfssDrivenMode`, `LayerImport`, `ObjectBinding`, `LengthMeshSpec`, `PreparedPlanarGeometry`, `prepare_planar_geometry_input`; the `modeling`, `geometry`, `ports` and `geometry_workers` arguments of `prepare_hfss_driven_from_geometry` | `prepare_sgb_model(snapshot.geometry_input, prepared_stack=snapshot.stack, modeling=..., output_dir=..., ports=...)`, then `prepare_hfss_driven_from_geometry(model=..., ...)`; see [HFSS Driven Terminal](s-parameters-hfss.qmd) |
+   | HFSS Driven Terminal | `HfssDrivenSpec`, `HfssDrivenMode`, `LayerImport`, `ObjectBinding`, `LengthMeshSpec`, `PreparedPlanarGeometry`, `prepare_planar_geometry_input`; the `modeling`, `geometry`, `ports` and `geometry_workers` arguments of `prepare_hfss_driven_from_geometry` | two `LumpedPort`s on the plan, then `prepare_hfss_driven_from_geometry(plan.prepare(), modeling=..., ...)`; see [HFSS Driven Terminal](s-parameters-hfss.qmd) |
    | Q3D | `Q3dBodySpec`; the `materials` and `region_padding_um` arguments of `prepare_q3d_from_geometry` | `prepare_q3d_from_geometry(snapshot, ...)`, with the stack's materials; see [Q3D](capacitance-q3d.qmd) |
 
    The rest of this step:
@@ -141,9 +235,8 @@ Work through these steps in order.
    - `prepare_handoff(spec=...)` takes only `Q3dSpec` and `Q2dSpec`; an HFSS
      request is refused with the name of the HFSS function to call.
      `--geometry-workers` and `ExecutionOptions.geometry_workers` are gone.
-   - Driven Modal and wave ports are not available: `prepare_sgb_model`
-     refuses a `ModalPort` and a wave `TerminalPort`. A two-port network is
-     Driven Terminal with `LumpedTerminalPort`s on the plan's port sheets
+   - Driven Modal and wave ports are not available. A two-port network is
+     Driven Terminal with two `LumpedPort`s on the plan's port sheets
      ([issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135) tracks
      Driven Modal).
    - Q3D extracts capacitance and conductance only: `Q3dTerminalPair`,

@@ -33,10 +33,12 @@ from scgsim.aedt import (  # noqa: E402
     Q3dNetSpec,
     Q3dSpec,
     prepare_q3d_from_geometry,
-    prepare_sgb_model,
 )
 from scgsim.aedt.preparation.sgb_handoff import attach_sgb_model  # noqa: E402
-from scgsim.aedt.preparation.sgb_model import PreparedSgbModel  # noqa: E402
+from scgsim.aedt.preparation.sgb_model import (  # noqa: E402
+    PreparedSgbModel,
+    prepare_sgb_model,
+)
 from scgsim.aedt.preparation.sgb_q3d import q3d_net_objects  # noqa: E402
 from scgsim.aedt.runtime.families.q3d_nets import (  # noqa: E402
     Q3dNetError,

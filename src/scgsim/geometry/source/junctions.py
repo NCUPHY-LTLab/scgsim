@@ -26,7 +26,7 @@ from scgsim.refusal import Declared
 
 _REQUEST = Declared(
     "rectangular junction request",
-    "the RectangularJunctionSpec passed to the plan or the simulation",
+    "the RectangularJunctionSpec given to with_rectangular_junctions",
 )
 
 

@@ -1,13 +1,14 @@
-"""The Eigenmode problem: lumped ports, the EPR selection, the mode controls and the Eigenmode config.
+"""The Eigenmode problem: the plan's lumped elements as ports, the EPR selection, the mode controls and the Eigenmode config.
 
-Everything else (the plan with its vacuum and Surface EPR, route, mesh controls, ``mesh()``, ``simulation_drc``, the summaries and
-the handoff) is ``PalaceSimulation`` in ``core``; this file shows only what the Eigenmode problem adds.
+Everything else (the plan with its vacuum, Surface EPR and lumped elements, route, mesh controls, ``mesh()``,
+``simulation_drc``, the summaries and the handoff) is ``PalaceSimulation`` in ``core``; this file shows only what
+the Eigenmode problem adds.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -18,7 +19,6 @@ from scgsim.contracts.palace_run_folder import (
     PORT_INFORMATION,
 )
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
-from scgsim.refusal import Declared, found_text
 
 from ..config.config import build_eigenmode_config
 from ..config.config_records import EigenmodeConfigBuildResult, EigenmodeSettings
@@ -26,28 +26,30 @@ from ..config.convergence_plan import PlanContext
 from ..config.files import MetadataFile
 from ..config.index import EprRequest, IndexEntry, check_epr_request
 from ..config.numerical import NumericalControls, ProblemDefaults
+from ..source.lumped_elements import (
+    eigenmode_ports,
+    eigenmode_realization,
+    eigenmode_report,
+    summarized_elements,
+)
 from ..source.ports import RequestedPort
-from ..source.transforms import validate_nonempty_string, validate_positive_number
 from .core import PalaceSimulation, index_map
-
-_WHERE_ADD_PORT = "the call to add_port"
-
-# The geometry build never reads a port's inductance, but ``add_port`` requires a positive one.
-_PORT_INDUCTANCE_H = 1.0e-9
 
 
 @dataclass
 class EigenmodeSim(PalaceSimulation):
     """Prepare an SGB-authored Eigenmode mesh, config, and manual handoff.
 
-    The calls run in this order; each later call needs the earlier ones::
+    The lumped elements are the plan's: each is a Palace ``LumpedPort``, an excitation port as its impedance
+    (``scgsim.palace.source.lumped_elements``).  The calls run in this order; each later call needs the earlier
+    ones::
 
         plan.set_surface_epr(specs)  # optional, on the plan: without it, no Surface EPR
+        plan.set_lumped_elements([LumpedElement("chip/P1", inductance_h=10e-9)])
         sim = EigenmodeSim()
         sim.set_plan(plan.prepare())
         sim.set_output_dir("runs/xmon")
         sim.set_route("B")  # optional: Route B is the default
-        sim.add_port("chip/P1", layer="metal", layout_sheet=True, inductance=10e-9)
         sim.set_eigenmode(num_modes=2, target=4e9)
         sim.set_numerical(amr_max_passes=0)
         sim.mesh()
@@ -57,7 +59,6 @@ class EigenmodeSim(PalaceSimulation):
         )
     """
 
-    ports: list[RequestedPort] = field(default_factory=list)
     epr_request: EprRequest | None = None
     num_modes: int = 10
     target_hz: float | None = None
@@ -69,46 +70,6 @@ class EigenmodeSim(PalaceSimulation):
     numerical_defaults: ClassVar[ProblemDefaults] = ProblemDefaults(
         amr_max_passes=None, amr_nonconformal=True, amr_tolerance=None
     )
-
-    def add_port(
-        self,
-        name: str,
-        *,
-        layer: str,
-        layout_sheet: bool = False,
-        inductance: float,
-    ) -> None:
-        """Bind one authored GDSFactory port to its target logical metal.
-
-        The n-th port added is Palace port ``P<n>``.  A port is geometry: it invalidates the mesh.
-
-        Raises:
-            ValueError: ``layout_sheet`` is not True, a name or layer is empty, the port is already
-                added, or ``inductance`` is not positive.
-        """
-        if layout_sheet is not True:
-            raise ValueError(
-                Declared(
-                    f"Eigenmode supports only authored sheet ports: pass layout_sheet=True for {name!r}",
-                    _WHERE_ADD_PORT,
-                ).refusal(found_text(layout_sheet))
-            )
-        name = validate_nonempty_string(name, "port name")
-        layer = validate_nonempty_string(layer, "port target layer")
-        if any(port.name == name for port in self.ports):
-            raise ValueError(
-                Declared(f"layout_sheet port {name!r}", _WHERE_ADD_PORT).refusal(
-                    "is already added"
-                )
-            )
-        self.ports.append(
-            RequestedPort(
-                name=name,
-                layer=layer,
-                circuit={"L": validate_positive_number(inductance, "inductance")},
-            )
-        )
-        self._fall_back("add_port")
 
     def set_epr_request(
         self,
@@ -283,21 +244,18 @@ class EigenmodeSim(PalaceSimulation):
             else self.epr_request.surface_interfaces,
         )
 
-    def _lumped_ports(self) -> list[RequestedPort]:
-        """Every port added, in the order ``add_port`` received them."""
-        return self.ports
+    def _lumped_ports(self, plan: GeometryPlanSnapshot) -> list[RequestedPort]:
+        """Every lumped element of ``plan``, in its number's order: element n is ``P<n>``."""
+        return eigenmode_ports(plan)
 
-    def _problem_summary(self) -> dict[str, Any]:
-        """The ports, the EPR selection and the mode controls."""
+    def _lumped_element_report(self, plan: GeometryPlanSnapshot) -> tuple[str, ...]:
+        """Each element as a ``LumpedPort``, and each authored sheet that carries none as not modeled."""
+        return eigenmode_report(plan)
+
+    def _problem_summary(self, plan: GeometryPlanSnapshot) -> dict[str, Any]:
+        """The lumped elements as Eigenmode realizes them, the EPR selection and the mode controls."""
         return {
-            "ports": [
-                {
-                    "name": item.name,
-                    "layer": item.layer,
-                    "inductance_h": item.circuit["L"],
-                }
-                for item in self.ports
-            ],
+            "lumped_elements": summarized_elements(plan, eigenmode_realization),
             "epr_request": None
             if self.epr_request is None
             else asdict(self.epr_request),
@@ -306,16 +264,6 @@ class EigenmodeSim(PalaceSimulation):
             "eigenmode_tolerance": self.eigenmode_tolerance,
             "save_fields": self.save_fields,
         }
-
-    def _add_drc_inputs(self, snapshot: GeometryPlanSnapshot) -> None:
-        """Add every authored port of ``snapshot``, with a fixed inductance the geometry never reads."""
-        for port in snapshot.stack["metadata"].get("port_sheet_source_layers", ()):
-            self.add_port(
-                port["name"],
-                layer=port["target_layer"],
-                layout_sheet=True,
-                inductance=_PORT_INDUCTANCE_H,
-            )
 
 
 def _kept[Value](given: Value | None, current: Value) -> Value:

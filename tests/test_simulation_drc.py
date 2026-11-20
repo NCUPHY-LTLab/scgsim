@@ -19,7 +19,7 @@ import scgsim.geometry.surface_epr.build as banded_build
 import scgsim.palace.mesh.build as build_module
 from scgsim.contracts.sgb_sidecar import views
 from scgsim.documentation import page_url
-from scgsim.geometry import GeometryPlan
+from scgsim.geometry import GeometryPlan, LumpedElement
 from scgsim.geometry.models.physical import PhysicalLayerDeclaration
 from scgsim.geometry.sgb.errors import ContactError, NonManifoldError
 from scgsim.palace import EigenmodeSim, ElectrostaticSim
@@ -162,13 +162,15 @@ def two_pads(monkeypatch, *, gap_um, port=False, pad=None, electrode=None):
 
 # The vacuum a layout author pads a stack without one by: none in the plane, 1000 um below and above (Issue #182).
 AUTHOR_VACUUM_PADDING_UM = (0.0, 0.0, 1000.0)
-PLAN_OPTIONS = (
-    "layer_stack",
-    "instances",
-    "nets",
-    "vacuum_padding_um",
-    "surface_epr_specs",
-)
+PLAN_OPTIONS = ("layer_stack", "instances", "nets", "vacuum_padding_um")
+PLAN_OPTIONS += ("surface_epr_specs", "lumped_elements")
+
+
+def every_sheet(plan):
+    """Every authored port sheet of ``plan`` as a 1 nH lumped element, in authored order, read without a prepare()."""
+    stack = plan._stack()  # noqa: SLF001 -- the authored port records, without a second prepare()
+    records = stack["metadata"]["port_sheet_source_layers"]
+    return [LumpedElement(port["name"], inductance_h=1e-9) for port in records]
 
 
 def layout_plan(  # noqa: PLR0913 -- the layout and each plan setting an author writes
@@ -179,14 +181,15 @@ def layout_plan(  # noqa: PLR0913 -- the layout and each plan setting an author 
     instances=None,
     nets=None,
     vacuum_padding_um=AUTHOR_VACUUM_PADDING_UM,
-    junctions=(),
     surface_epr_specs=None,
+    lumped_elements=None,
 ):
     """The ``GeometryPlan`` a layout author builds for ``component``, with the stand-in PDK data by default.
 
-    Root ``"chip"``, zero coupon padding, the ``instances`` registered, then the ``nets`` and the rectangular
-    ``junctions``.  A stack without its own vacuum gets the plan's vacuum padded by ``vacuum_padding_um``;
-    None leaves the plan without one.  ``surface_epr_specs`` go to ``set_surface_epr``; None sets none.
+    Root ``"chip"``, zero coupon padding, the ``instances`` registered, then the ``nets``.  A stack without its
+    own vacuum gets the plan's vacuum padded by ``vacuum_padding_um``; None leaves the plan without one.
+    ``surface_epr_specs`` go to ``set_surface_epr``; None sets none.  ``lumped_elements`` go to
+    ``set_lumped_elements``; None declares every authored port sheet as a 1 nH element (:func:`every_sheet`).
     """
     plan = GeometryPlan(
         component,
@@ -199,8 +202,9 @@ def layout_plan(  # noqa: PLR0913 -- the layout and each plan setting an author 
         plan.register_instance(path, reference)
     if nets is not None:
         plan.set_nets(nets)
-    if junctions:
-        plan.set_rectangular_junctions(junctions)
+    plan.set_lumped_elements(
+        every_sheet(plan) if lumped_elements is None else lumped_elements
+    )
     if vacuum_padding_um is not None and "VACUUM_REGION" not in layer_stack.layers:
         plan.set_vacuum_region(vacuum_padding_um)
     if surface_epr_specs is not None:
@@ -218,17 +222,9 @@ def check(simulation, component, **options):
 
 
 def configured(simulation, snapshot):
-    """A ``simulation`` set up as ``simulation_drc`` sets it up, from the settings a user would write."""
+    """A ``simulation`` set up as ``simulation_drc`` sets it up: bound to the plan, which carries its lumped elements."""
     sim = simulation()
     sim.set_plan(snapshot)
-    for port in snapshot.stack["metadata"]["port_sheet_source_layers"]:
-        if simulation is EigenmodeSim:
-            sim.add_port(
-                port["name"],
-                layer=port["target_layer"],
-                layout_sheet=True,
-                inductance=1e-9,
-            )
     return sim
 
 

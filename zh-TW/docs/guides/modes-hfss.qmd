@@ -53,4 +53,4 @@ print(handoff.spec_path, handoff.archive_path)
 
 ## 損耗與參與率 {#loss-and-participation}
 
-這次計算只回報頻率與 Q。若要看模態能量如何分配到各表面、基板與接面，以及這代表多少損耗，請在同一個模擬加上 EPR 請求，[覆晶 Xmon 範例](xmon/aedt.qmd)示範了做法。埠薄片也可以接上線性的 R、L 或 C，用 `EigenmodeSim.add_lumped_rlc()`（[參考](../reference/specs/aedt-runtime.qmd#hfss-shared-lumped-support)）；這個試片沒有埠薄片。
+這次計算只回報頻率與 Q。若要看模態能量如何分配到各表面、基板與接面，以及這代表多少損耗，請在同一個模擬加上 EPR 請求，[覆晶 Xmon 範例](xmon/aedt.qmd)示範了做法。埠薄片也可以接上線性的 R、L 或 C，在計畫上以 `LumpedElement` 宣告（[集總元件](../reference/specs/geometry-plan.qmd#lumped-elements)）；這個試片沒有埠薄片。

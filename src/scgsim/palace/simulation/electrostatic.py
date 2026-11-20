@@ -1,7 +1,9 @@
 """The Electrostatic problem: terminals, grounds, the boundary policies and the Electrostatic config.
 
-Everything else (the plan with its vacuum and Surface EPR, route, mesh controls, ``mesh()``, ``simulation_drc``, the summaries and
-the handoff) is ``PalaceSimulation`` in ``core``; this file shows only what the Electrostatic problem adds.
+Everything else (the plan with its vacuum, Surface EPR and lumped elements, route, mesh controls, ``mesh()``,
+``simulation_drc``, the summaries and the handoff) is ``PalaceSimulation`` in ``core``; this file shows only what
+the Electrostatic problem adds.  It realizes none of the plan's lumped elements: the capacitance matrix is the
+conductors', with every lumped element open, and says so (``scgsim.palace.source.lumped_elements``).
 """
 
 from __future__ import annotations
@@ -32,6 +34,11 @@ from ..config.numerical import (
     NumericalControls,
     ProblemDefault,
     ProblemDefaults,
+)
+from ..source.lumped_elements import (
+    electrostatic_realization,
+    electrostatic_report,
+    summarized_elements,
 )
 from ..source.transforms import validate_nonempty_string
 from .core import PalaceSimulation, index_map
@@ -240,13 +247,18 @@ class ElectrostaticSim(PalaceSimulation):
         """The terminals of the config, for a convergence criterion to be checked against."""
         return PlanContext(problem=self.problem, entries=entries)
 
-    def _lumped_ports(self) -> None:
+    def _lumped_ports(self, plan: GeometryPlanSnapshot) -> None:  # noqa: ARG002 -- the core asks every problem
         """None: an Electrostatic model cuts no lumped ports, and the plan's sheets stay as authored."""
         return None
 
-    def _problem_summary(self) -> dict[str, Any]:
-        """The terminals, grounds, saved fields and boundary policies."""
+    def _lumped_element_report(self, plan: GeometryPlanSnapshot) -> tuple[str, ...]:
+        """Each lumped element of ``plan``, realized by none: the capacitance has every element open."""
+        return electrostatic_report(plan)
+
+    def _problem_summary(self, plan: GeometryPlanSnapshot) -> dict[str, Any]:
+        """The lumped elements (none realized), the terminals, grounds, saved fields and boundary policies."""
         return {
+            "lumped_elements": summarized_elements(plan, electrostatic_realization),
             "terminals": [
                 {"name": item.name, "net_id": item.net_id} for item in self.terminals
             ],
@@ -255,9 +267,6 @@ class ElectrostaticSim(PalaceSimulation):
             "unassigned_conductor_policy": self.unassigned_conductor_policy,
             "exterior_boundary_policy": self.exterior_boundary_policy,
         }
-
-    def _add_drc_inputs(self, snapshot: GeometryPlanSnapshot) -> None:
-        """Nothing: terminals and grounds are bound to the mesh by ``write_config()``, after meshing."""
 
 
 __all__ = ["ElectrostaticSim"]

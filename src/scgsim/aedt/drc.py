@@ -18,9 +18,9 @@ stage: a :class:`SimulationDrcReport` carries the geometry stage only.  The mode
 folder that is removed.
 
 The check is Palace's (:mod:`scgsim.palace`'s ``simulation_drc``) in shape: it takes the plan the
-simulation is given and adds nothing to it (issue #266), and it gives every port sheet, a rectangular
-junction's included, a fixed inductance.  It is a separate implementation, as each simulation class checks
-the geometry half of its own pipeline (issue #247).
+simulation is given and adds nothing to it (issue #266), its lumped elements realized as the simulation
+realizes them, and its report says what that is for each element.  It is a separate implementation, as each
+simulation class checks the geometry half of its own pipeline (issue #247).
 """
 
 from __future__ import annotations
@@ -34,11 +34,6 @@ from typing import Literal
 from scgsim.aedt.epr.sgb_surfaces import surface_face_bindings
 from scgsim.aedt.preparation.sgb_model import PreparedSgbModel
 from scgsim.aedt.runtime.families.sgb_import import plan_import, planned_import
-from scgsim.aedt.specs.common import LumpedRlc
-from scgsim.geometry.source.plan import GeometryPlanSnapshot
-
-# The geometry never reads a port sheet's inductance, but a port sheet in HFSS needs a treatment.
-_PORT_INDUCTANCE_H = 1.0e-9
 
 
 @dataclass(frozen=True)
@@ -51,9 +46,14 @@ class StageResult:
 
 @dataclass(frozen=True)
 class SimulationDrcReport:
-    """The geometry stage of one AEDT ``simulation_drc`` call; AEDT meshes the model itself, so it has no meshing stage."""
+    """The geometry stage of one AEDT ``simulation_drc`` call, and what it does with the lumped elements.
+
+    AEDT meshes the model itself, so it has no meshing stage.  ``lumped_elements`` holds one line per lumped
+    element of the plan and per authored sheet that carries none, saying what HFSS makes of it.
+    """
 
     geometry: StageResult
+    lumped_elements: tuple[str, ...] = ()
 
     @property
     def passed(self) -> bool:
@@ -61,20 +61,12 @@ class SimulationDrcReport:
         return self.geometry.passed
 
     def render_text(self) -> str:
-        """The stage's verdict."""
-        return f"geometry stage: {'passed' if self.geometry.passed else 'refused'}\n"
-
-
-def fixed_port_rlcs(snapshot: GeometryPlanSnapshot) -> tuple[LumpedRlc, ...]:
-    """Every port sheet of ``snapshot``'s source with a parallel inductance the geometry never reads.
-
-    A rectangular junction's sheet is one of them: the plan binds its terminals to an authored sheet.  Each
-    names its sheet as a ``LumpedRlc`` does, by the ``PORT::<port_sheet_id>`` group of the model.
-    """
-    return tuple(
-        LumpedRlc(region.port_sheet_id, "parallel", inductance_h=_PORT_INDUCTANCE_H)
-        for region in snapshot.geometry_input.port_sheet_regions
-    )
+        """The stage's verdict, then the lumped elements."""
+        lines = [f"geometry stage: {'passed' if self.geometry.passed else 'refused'}"]
+        if self.lumped_elements:
+            lines.append("lumped elements:")
+            lines.extend(f"  {line}" for line in self.lumped_elements)
+        return "\n".join(lines) + "\n"
 
 
 def run_geometry_stage(
