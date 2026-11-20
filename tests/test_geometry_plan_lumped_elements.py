@@ -14,7 +14,7 @@ import pytest
 from test_simulation_drc import MATERIALS, NO_VACUUM_STACK, two_pads
 
 from scgsim.geometry import GeometryPlan, LumpedElement, LumpedPort
-from scgsim.palace import EigenmodeSim, ElectrostaticSim
+from scgsim.palace import EigenmodeSim, ElectrostaticSim, SimulationDrcError
 from scgsim.palace.source.lumped_elements import eigenmode_ports, eigenmode_report
 
 NETS = {"pad": ("chip/pad",), "electrode": ("chip/electrode",)}
@@ -269,6 +269,39 @@ def test_each_palace_check_says_what_it_does_with_the_lumped_elements(monkeypatc
         "lumped elements:\n  chip/P1: no lumped element on the plan; not modeled\n"
     )
     assert ElectrostaticSim.simulation_drc(empty).lumped_elements == ()
+
+
+# The pad with a 1 nm step down on its top edge, away from the port sheet: a fine edge the meshing stage refuses.
+STEPPED_PAD = ((0, 0), (20, 0), (20, 20), (5, 20), (5, 19.999), (0, 19.999))
+REFUSED_ELEMENT_LINES = {
+    EigenmodeSim: ("P1 chip/P1: LumpedPort, L 1e-08 H",),
+    ElectrostaticSim: (
+        "lumped element 'chip/P1' (L 1e-08 H): not realized: the capacitance matrix is the conductors', with "
+        "every lumped element open",
+    ),
+}
+
+
+@pytest.mark.parametrize("simulation", [EigenmodeSim, ElectrostaticSim])
+def test_a_meshing_stage_refusal_says_what_the_simulation_does_with_the_lumped_elements(
+    monkeypatch, tmp_path, simulation
+):
+    """The report a refusal carries holds the element lines a pass holds, and ``mesh()`` raises that report."""
+    component = two_pads(monkeypatch, gap_um=10.0, port=True, pad=STEPPED_PAD)
+    plan = plan_of(component, elements=[LumpedElement("chip/P1", inductance_h=1e-8)])
+    with pytest.raises(SimulationDrcError) as checked:
+        simulation.simulation_drc(plan)
+    report = checked.value.report
+    assert (report.geometry.passed, report.meshing.passed) == (True, False)
+    (line,) = REFUSED_ELEMENT_LINES[simulation]
+    assert report.lumped_elements == (line,)
+    assert report.render_text().endswith(f"lumped elements:\n  {line}\n")
+    sim = simulation()
+    sim.set_plan(plan.prepare())
+    sim.set_output_dir(tmp_path / "run")
+    with pytest.raises(SimulationDrcError) as meshed:
+        sim.mesh()
+    assert meshed.value.report == report
 
 
 def test_the_input_summary_shows_each_element_as_the_simulation_realizes_it(

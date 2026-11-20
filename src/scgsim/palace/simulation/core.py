@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar, Literal, TypeVar
 
@@ -386,7 +386,7 @@ class PalaceSimulation(ABC):
         if request.materials is not None:
             self._materials = request.materials
         geometry = build_route_geometry(request.source, output_dir=self.output_dir)
-        check_meshing_stage(geometry)
+        check_meshing_stage(geometry, self._lumped_element_report(plan))
         self._mesh_result = mesh_route_geometry(geometry, self.mesh_controls)
         self._resolved_ports = request.ports
         self._stage = Stage.MESHED
@@ -416,7 +416,7 @@ class PalaceSimulation(ABC):
         meshing, and cuts no port sheet.  A plan it refuses raises the error ``mesh()`` raises, unchanged.
         The bands of the plan's Surface-EPR specs are cut as ``mesh()`` cuts them; a plan without specs gets
         no bands.  The report's ``lumped_elements`` says, one line each, what the simulation does with each
-        lumped element of the plan.
+        lumped element of the plan, in the report returned and in the one a refusal carries.
 
         Only a model that built goes to the meshing stage, ``scgsim.meshing.check_fine_structure``: the fine
         edges and faces the mesher cannot use, each with its location, size, owner and fix.  A refusal there
@@ -447,8 +447,10 @@ class PalaceSimulation(ABC):
         sim._set_route(route, approximation_profile, SIMULATION_DRC)  # noqa: SLF001 -- the check is a classmethod of the same class
         snapshot = plan.prepare()
         sim.set_plan(snapshot)
-        report = run_stages(sim._build_geometry)  # noqa: SLF001 -- the check is a classmethod of the same class
-        return replace(report, lumped_elements=sim._lumped_element_report(snapshot))  # noqa: SLF001 -- the check is a classmethod of the same class
+        return run_stages(
+            sim._build_geometry,  # noqa: SLF001 -- the check is a classmethod of the same class
+            sim._lumped_element_report(snapshot),  # noqa: SLF001 -- the check is a classmethod of the same class
+        )
 
     def _build_geometry(self, output_dir: str | Path) -> RouteGeometry:
         """Run the preparation and SGB geometry build of ``mesh()`` into ``output_dir``, then stop.

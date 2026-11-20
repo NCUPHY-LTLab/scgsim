@@ -134,9 +134,9 @@ is the call's or fixed:
 - for `ElectrostaticSim`, no terminals, which are not needed before meshing,
   and no lumped element, which it leaves open.
 
-The report ends with one line per lumped element of the plan, under
-`lumped elements:`, saying what the simulation makes of it, and one per port
-sheet it leaves out.
+The report, returned or carried by a refusal, ends with one line per lumped
+element of the plan, under `lumped elements:`, saying what the simulation makes
+of it, and one per port sheet it leaves out.
 
 Without `route`, the check is Route B; `route="A"` alone uses the `thin_film`
 profile, and `route="A"` with a `substrate_face` or `metal_gap_equivalent`

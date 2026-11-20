@@ -63,7 +63,7 @@ Surface-EPR 請求的每條條帶，寬度都至少要等於 B 類的界限，�
 - `EigenmodeSim`：計畫上的集總元件作為它的集總埠；計畫沒有宣告任何元件的埠片不在模型中，也不檢查；
 - `ElectrostaticSim`：不設端子，產生網格之前用不到端子；也不實現任何集總元件，讓它們保持開路。
 
-報告最後在 `lumped elements:` 之下，為計畫的每個集總元件列一行，說明模擬把它做成什麼，並為模擬不放進模型的每張埠片各列一行。
+報告不論是回傳的，或是拒絕時錯誤所帶的，最後都在 `lumped elements:` 之下，為計畫的每個集總元件列一行，說明模擬把它做成什麼，並為模擬不放進模型的每張埠片各列一行。
 
 未傳入 `route` 時，檢查使用 Route B；只給 `route="A"` 時使用 `thin_film` 近似設定；`route="A"` 搭配 `substrate_face` 或 `metal_gap_equivalent` 時，使用該設定及其 `film_bindings`。與計畫中薄膜不相符的近似設定，會由幾何建構拒絕，錯誤與 `mesh()` 拋出的相同。Route C 不是 Palace 的 route，會像 `set_route` 一樣被拒絕；route 或近似設定被拒絕時，訊息會指向 `simulation_drc` 的呼叫。兩種 route 都要用的版圖，請對每種 route 各檢查一次。
 
