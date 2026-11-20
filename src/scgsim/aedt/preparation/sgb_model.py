@@ -46,8 +46,8 @@ from scgsim.geometry.sgb.output.exchange.guard import (
     guard_model,
     read_step_guard,
 )
-from scgsim.geometry.sgb.output.exchange.step import export_aedt_step
 from scgsim.geometry.sgb.output.sidecar.aedt import sanitise_aedt_name
+from scgsim.geometry.sgb.output.verification.ocp import require_ocp
 from scgsim.geometry.sgb.topology.routes.policy import (
     ROUTE_A_RETAINED_BODIES,
     ROUTE_C,
@@ -269,6 +269,11 @@ def prepare_sgb_model(  # noqa: PLR0913 -- the source, its stack and the AEDT mo
     modeling = modeling_from_value(modeling)
     if not isinstance(build_input, GeometryBuildInput):
         raise TypeError("build_input must be GeometryBuildInput")
+    # The STEP export needs OCP, which only the aedt extras install: refuse before the build, and import the
+    # export here, so `scgsim.aedt` and what imports it (`scgsim.visualization`) import without OCP (#291).
+    require_ocp()
+    from scgsim.geometry.sgb.output.exchange.step import export_aedt_step  # noqa: PLC0415 -- OCP is optional
+
     lumped_ports = lumped_ports_of(ports)
     rlcs = tuple(lumped_rlcs)
     if any(not isinstance(item, LumpedRlc) for item in rlcs):
