@@ -35,6 +35,9 @@ from scgsim.geometry.sgb.output.exchange.guard import StepGuard
 Point = tuple[float, float, float]
 # A LumpedRlc topology as AEDT spells it.
 _NATIVE_RLC_TOPOLOGY = {"series": "Serial", "parallel": "Parallel"}
+# AEDT's name for the unit of capacitance.  AEDT has no unit "F": it takes a bare F as the prefix femto, so
+# "1e-15F" is stored as "1e-15f" and read as 1e-30 F (#288).
+_FARAD = "farad"
 
 
 class BoundaryPlanError(ValueError):
@@ -157,7 +160,7 @@ def _junction_rlcs(
             "UseCap": bool(junction.capacitance_f),
         }
         if junction.capacitance_f:
-            branches["Capacitance"] = f"{junction.capacitance_f}F"
+            branches["Capacitance"] = f"{junction.capacitance_f}{_FARAD}"
         evidence = {
             "junction_id": junction.junction_id,
             "inductance_h": junction.inductance_h,
@@ -199,7 +202,7 @@ def rlc_branches(treatment: LumpedRlc) -> dict[str, Any]:
     for enabled, key, value, unit in (
         ("UseResist", "Resistance", treatment.resistance_ohm, "ohm"),
         ("UseInduct", "Inductance", treatment.inductance_h, "H"),
-        ("UseCap", "Capacitance", treatment.capacitance_f, "F"),
+        ("UseCap", "Capacitance", treatment.capacitance_f, _FARAD),
     ):
         branches[enabled] = value is not None
         if value is not None:
