@@ -1,6 +1,6 @@
 ---
 title: "SGB 輸出的使用契約"
-description: "build_sgb_geometry 的呼叫與回傳、五個檔案、決定性的保證（哪些測過、哪些只是論證）、sidecar scgsim.sgb.sidecar.v5 的每張表與實際節錄、Palace 與 AEDT 讀取端各自的步驟，以及每個讀取端從 sidecar 取得什麼。"
+description: "build_sgb_geometry 的呼叫與回傳、五個檔案、決定性的保證（哪些測過、哪些只是論證）、sidecar scgsim.sgb.sidecar.v6 的每張表與實際節錄、Palace 與 AEDT 讀取端各自的步驟，以及每個讀取端從 sidecar 取得什麼。"
 lang: zh-TW
 scgsim-kind: "design"
 scgsim-status: "CONVERGING"
@@ -13,7 +13,7 @@ aliases:
 
 本頁說明 SGB 交給 Palace 與 AEDT 什麼，以及它們怎麼讀：入口函式 `build_sgb_geometry`、它寫出的五個檔案、sidecar 的欄位、兩個讀取端的步驟，以及每個讀取端從 sidecar 取得什麼（[讀取端從 sidecar 取得什麼](#readers)）。
 
-這裡描述的程式是 SGB core。Palace 與 AEDT 都使用這個入口：AEDT 以它建出模型，再以 `export_aedt_step` 寫出它匯入的 STEP；本頁的 sidecar 是 production 格式 `scgsim.sgb.sidecar.v5`。每一項保證都標明是**測過**（有自動測試）、**實測**（本頁產生範例時跑過一次）還是**論證**（由程式結構推得、尚未實測）。範例都是同一個小模型：100 µm 的晶片，帶一片 ground plane、一個 20 µm 的 pad 與一個 lumped port，pad 的上表面有 0.5 與 1 µm 兩個 inset margin（三個 band）。它比其他頁的執行範例小，只為了讓節錄能完整讀完；產生方式見[補充](#reproduction-data)。
+這裡描述的程式是 SGB core。Palace 與 AEDT 都使用這個入口：AEDT 以它建出模型，再以 `export_aedt_step` 寫出它匯入的 STEP；本頁的 sidecar 是 production 格式 `scgsim.sgb.sidecar.v6`。每一項保證都標明是**測過**（有自動測試）、**實測**（本頁產生範例時跑過一次）還是**論證**（由程式結構推得、尚未實測）。範例都是同一個小模型：100 µm 的晶片，帶一片 ground plane、一個 20 µm 的 pad 與一個 lumped port，pad 的上表面有 0.5 與 1 µm 兩個 inset margin（三個 band）。它比其他頁的執行範例小，只為了讓節錄能完整讀完；產生方式見[補充](#reproduction-data)。
 
 ## 呼叫與回傳 {#call}
 
@@ -114,7 +114,7 @@ band 的幾何與 margin 規則見 [Surface EPR inset imprint](inset-imprint.qmd
 | Gmsh 的 mesh 與 Palace 的結果相同 | **不保證** | 本頁不作此宣稱；physical tag 依排序後的名稱編號，不是 identity，使用端應儲存名稱 |
 :::
 
-## Sidecar `scgsim.sgb.sidecar.v5` {#sidecar}
+## Sidecar `scgsim.sgb.sidecar.v6` {#sidecar}
 
 sidecar 是 SGB 對這個模型的完整記錄：版面畫了什麼、SGB 由此推導出什麼、最後寫進模型的又是什麼。建模用到的、mesher 與 meshing stage 需要的，都在這裡有一個欄位，讀取端只讀，不重建、不近似，也不猜 SGB 當時知道什麼。格式只有一個定義：`scgsim.contracts.sgb_sidecar` 中的 `TypedDict`。writer 依它寫出，每個讀取端都用它的 `read_sidecar` 讀入，套件內的 `sidecar.schema.json`（JSON Schema draft 2020-12）也由它產生，測試讓三者保持一致（測過）。`read_sidecar(path)` 在任何讀取端使用之前檢查這個檔案；它檢查什麼、不檢查什麼，見[下文](#reader-checks)。
 
@@ -132,7 +132,7 @@ sidecar 是 SGB 對這個模型的完整記錄：版面畫了什麼、SGB 由此
 `read_sidecar(path)` 依序做四項檢查，第一個不成立的就丟出 `SidecarError`，並指出位置：
 
 1. **是 JSON。**`NaN` 與 `Infinity` 不算。
-2. **版本。**`schema` 必須是 `scgsim.sgb.sidecar.v5`；其他版本以版本不符拒絕，訊息指出讀到的版本，並要求以目前的 SCGSim 重建幾何；不會被當成結構錯誤。
+2. **版本。**`schema` 必須是 `scgsim.sgb.sidecar.v6`；其他版本以版本不符拒絕，訊息指出讀到的版本，並要求以目前的 SCGSim 重建幾何；不會被當成結構錯誤。
 3. **結構。**每筆記錄的欄位、型別、列舉值與數值範圍符合定義。記錄是封閉的，多出的鍵是錯誤；只有 `summary.counts` 與 `summary.slivers` 可以多帶鍵。
 4. **typed reference 與表之間的規則。**每個在定義中標為 typed reference 的欄位，都指到它那張表中存在的記錄（指向 group 的還要是對的維度）；以 id 為鍵的物件與 id 的清單也算，例如 `face.entity_coverage` 與 `surface_epr_row.face_sides` 的鍵、`band_family[*].bands` 中每個 band 的 group、`band_family[*].hidden_contacts` 中每個接觸的兩個 Entity。另外有五條表之間的規則：`binding.ids_by_tag` 在每個維度恰好列出寫出的 vertex、edge、face 與已 emit 的 volume，各一次，數量等於 `summary.counts`，`summary.counts.volumes_total` 等於 `volume` 表的筆數；group 的 `tag` 在同一維度不重複，每個 group 至少有一個成員，未 emit 的 volume 不指向 group；support ring 恰好列出指向它的 primitive；face 的每個 loop 為每條 edge 標出方向，mesh feature 的每條 edge 只列一次；`outer_boundary` 恰好出現在一側 volume 為 `null` 的 face 上，它的 `domain` 是另一側 volume 的 Entity。
 

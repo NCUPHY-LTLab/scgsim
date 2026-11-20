@@ -1,4 +1,4 @@
-"""The definition of the SGB sidecar ``scgsim.sgb.sidecar.v5``: every table and record, as a ``TypedDict``.
+"""The definition of the SGB sidecar ``scgsim.sgb.sidecar.v6``: every table and record, as a ``TypedDict``.
 
 Owns the shape of the file: its tables, the fields of each record, their types, enums and bounds, the table
 each id names, and which records accept more keys.  The value types and the ids of each table are in :mod:`.values`, and the
@@ -371,7 +371,13 @@ class Port(TypedDict):
     source_name: str
     port_index: int
     direction: list[float]
-    host_entity_ids: list[EntityRef]
+    host_entity_ids: Annotated[
+        list[EntityRef],
+        Doc(
+            "The host conductors in the order ``direction`` meets them: the host at the sheet's start, then"
+            " the host it points to."
+        ),
+    ]
     source_layer: str
     target_layer: str
     z_um: float

@@ -10,7 +10,7 @@ class MeshingError(Exception):
 
 
 class SidecarError(MeshingError, ValueError):
-    """The sidecar is not a readable ``scgsim.sgb.sidecar.v5`` document."""
+    """The sidecar is not a readable ``scgsim.sgb.sidecar.v6`` document."""
 
 
 class MeshRepairError(MeshingError):

@@ -34,7 +34,7 @@ next.
                    (:func:`~scgsim.geometry.sgb.model.build_conformal_model`)
 * ``output``       S10: numbering of the shapes in ``TopExp::MapShapes`` order and the direct,
                    byte-deterministic BREP/XAO writer (no CAD kernel, no Boolean); the versioned JSON
-                   sidecar ``scgsim.sgb.sidecar.v5`` and its JSON Schema; the load-side and OCCT checks of
+                   sidecar ``scgsim.sgb.sidecar.v6`` and its JSON Schema; the load-side and OCCT checks of
                    the written files; the AEDT STEP export (OCP)
 * ``section``      the 2D section model of a validated model, cut along a line
 * ``build``        the public entry :func:`build_sgb_geometry`, exported here, which writes the model's files

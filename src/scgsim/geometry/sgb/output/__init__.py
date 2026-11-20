@@ -1,7 +1,7 @@
 """S10: the files of a validated model: BREP and XAO, the sidecar and the AEDT STEP export.
 
 In: the validated ``ConformalModel``.
-Out: the byte-deterministic BREP and XAO, the ``scgsim.sgb.sidecar.v5`` JSON that binds every planned id to its native
+Out: the byte-deterministic BREP and XAO, the ``scgsim.sgb.sidecar.v6`` JSON that binds every planned id to its native
 tag, the load-side and OCCT mismatches of a written file, and the STEP of the emitted solids with its guard.
 Next: the mesher and the solver adapters read the files.
 

@@ -31,9 +31,9 @@
 | `geometry/sgb/checks` | S9：寫出任何檔案之前對模型的檢查。 | 模型（`LabelledArrangements`、`Topology`、`RoutedModel`）。 | `ValidationReport`（不變量失敗時會丟出例外，因此不會回傳失敗的模型）與細長面報告。 | `model` 回傳通過檢查的模型；`output` 寫出它的檔案，並把細長面報告放在旁邊。 |
 | `geometry/sgb/checks/validation` | S9：排列、拓樸與 id 的結構不變量；失敗時丟出例外。 | 屬於 `geometry/sgb/checks`，請與那一列一起閱讀。 |  |  |
 | `geometry/sgb/checks/slivers` | S9：細長面報告，即各面在其精確載體上的局部特徵尺寸；只做量測。 | 屬於 `geometry/sgb/checks`，請與那一列一起閱讀。 |  |  |
-| `geometry/sgb/output` | S10：已驗證模型的檔案：BREP 與 XAO、sidecar，以及 AEDT 用的 STEP 匯出。 | 已驗證的 `ConformalModel`。 | 位元組確定的 BREP 與 XAO、把每個規劃 id 綁定到原生標記的 `scgsim.sgb.sidecar.v5` JSON、寫出檔案在載入端與 OCCT 檢查中的不一致，以及輸出實體的 STEP 與其防護紀錄。 | 網格器與求解器轉接層讀取這些檔案。 |
+| `geometry/sgb/output` | S10：已驗證模型的檔案：BREP 與 XAO、sidecar，以及 AEDT 用的 STEP 匯出。 | 已驗證的 `ConformalModel`。 | 位元組確定的 BREP 與 XAO、把每個規劃 id 綁定到原生標記的 `scgsim.sgb.sidecar.v6` JSON、寫出檔案在載入端與 OCCT 檢查中的不一致，以及輸出實體的 STEP 與其防護紀錄。 | 網格器與求解器轉接層讀取這些檔案。 |
 | `geometry/sgb/output/emission` | S10 階段：直接寫出 BREP／XAO 的寫入器（設計簡報決策 D8）。 | 屬於 `geometry/sgb/output`，請與那一列一起閱讀。 |  |  |
-| `geometry/sgb/output/sidecar` | 正式的 sidecar `scgsim.sgb.sidecar.v5`（設計簡報第 7 與 12 節，決策 D8）。 | 屬於 `geometry/sgb/output`，請與那一列一起閱讀。 |  |  |
+| `geometry/sgb/output/sidecar` | 正式的 sidecar `scgsim.sgb.sidecar.v6`（設計簡報第 7 與 12 節，決策 D8）。 | 屬於 `geometry/sgb/output`，請與那一列一起閱讀。 |  |  |
 | `geometry/sgb/output/verification` | 寫出之幾何的檢查：Gmsh 載入檢查，以及 OCCT 檢查額外涵蓋的部分。 | 屬於 `geometry/sgb/output`，請與那一列一起閱讀。 |  |  |
 | `geometry/sgb/output/exchange` | 輸出實體與其他工具的交換：AEDT 用的 STEP 匯出與其匯入防護（設計簡報決策 D4，實驗 E4）。 | 屬於 `geometry/sgb/output`，請與那一列一起閱讀。 |  |  |
 | `geometry/sgb/section` | SGB 的 2D 模型：已驗證 3D 模型沿一條切線的平面截面。 | 已驗證的 `ConformalModel`（來自 `model`）與一條 `CutLine`。 | `SectionModel`：截面的頂點、邊與面，加上切線穿過的 3D 群組、Surface-EPR 列與帶族，並已在 2D 驗證；不寫出任何檔案。 | 呼叫者在記憶體中讀取它；套件中沒有階段讀取它。 |
@@ -42,7 +42,7 @@
 
 | 資料夾 | 它是什麼 | In | Out | Next |
 | --- | --- | --- | --- | --- |
-| `meshing` | SGB 幾何的獨立網格產生：依配方決定尺寸、品質稽核與修補迴圈。 | 一次 SGB 建構的 XAO 與 `scgsim.sgb.sidecar.v5` sidecar，加上品質門檻、尺寸配方與網格器選項（來自 `palace/mesh`；`palace/simulation` 呼叫細微結構檢查）。 | 帶有 XAO 物理群組的 Gmsh 網格與它的品質報告（`MeshResult`）：沒有任何四面體低於門檻，例外是只回報的 `GmshDefaultRecipe`，它的網格只回報品質、不強制門檻；為 `simulation_drc` 則產生低於限制的細微邊與面（`FineStructureReport`）。 | `palace/mesh` 把網格轉成 `palace.msh`，並在網格清單中記錄報告。 |
+| `meshing` | SGB 幾何的獨立網格產生：依配方決定尺寸、品質稽核與修補迴圈。 | 一次 SGB 建構的 XAO 與 `scgsim.sgb.sidecar.v6` sidecar，加上品質門檻、尺寸配方與網格器選項（來自 `palace/mesh`；`palace/simulation` 呼叫細微結構檢查）。 | 帶有 XAO 物理群組的 Gmsh 網格與它的品質報告（`MeshResult`）：沒有任何四面體低於門檻，例外是只回報的 `GmshDefaultRecipe`，它的網格只回報品質、不強制門檻；為 `simulation_drc` 則產生低於限制的細微邊與面（`FineStructureReport`）。 | `palace/mesh` 把網格轉成 `palace.msh`，並在網格清單中記錄報告。 |
 | `meshing/recipes` | 尺寸配方：每個配方只決定模型的初始元素尺寸，不做其他事。 | 屬於 `meshing`，請與那一列一起閱讀。 |  |  |
 
 ### `palace`

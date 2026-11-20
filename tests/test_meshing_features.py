@@ -81,9 +81,9 @@ def test_a_fact_the_contract_does_not_define_is_refused():
 def test_another_version_is_refused_by_name():
     """A sidecar of another version is refused by its version."""
     sidecar = sidecar_with()
-    sidecar["schema"] = "scgsim.sgb.sidecar.v4"
+    sidecar["schema"] = "scgsim.sgb.sidecar.v5"
     with pytest.raises(
-        SidecarError, match="sidecar.v4.*sidecar.v5.*Rebuild the geometry"
+        SidecarError, match="sidecar.v5.*sidecar.v6.*Rebuild the geometry"
     ):
         read_features(sidecar)
 
