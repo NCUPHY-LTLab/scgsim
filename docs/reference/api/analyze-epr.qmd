@@ -1,6 +1,6 @@
 ---
-title: "analyze_epr: evaluate retained HFSS fields"
-description: "Saved-field EPR parameters, a minimal call and the current function signature."
+title: "analyze_epr: compute EPR again from saved HFSS fields"
+description: "When to use analyze_epr, a minimal call, what it returns, its parameters and its signature."
 scgsim-id: "docs/api/scgsim-aedt/analyze_epr"
 scgsim-kind: "api"
 scgsim-status: "CONVERGING"
@@ -8,9 +8,7 @@ aliases:
   - ../../api/analyze_epr.html
 ---
 
-# `analyze_epr`: saved-field EPR usage
-
-`analyze_epr` evaluates retained fields through native AEDT and requires an explicitly selected release and license; `reanalyze_epr` updates assumptions on a resolved result offline. Follow the complete [saved-fields lesson](../../guides/saved-fields.qmd) and use the [Reference overview](../index.qmd) for related references.
+[]{#analyze_epr-saved-field-epr-usage}Use `analyze_epr` to compute the EPR of an HFSS Eigenmode run again from the fields AEDT saved, for example for other Surface-EPR groups or field sides, without solving again. It opens AEDT, so it needs an AEDT release installed on the host, named by `aedt_version`, and its license. To change only the loss assumptions of a finished result, use `reanalyze_epr`, which works offline ([Change loss assumptions without solving](../../guides/offline-loss.qmd)). The [saved-fields guide](../../guides/saved-fields.qmd) runs the whole procedure.
 
 ## Minimal call
 
@@ -41,6 +39,16 @@ result = analyze_epr(
 )
 ```
 
+`result` is the `EprResult` of the saved field. It holds one evaluation per mode, so `mode=` is the only selection `show_epr` takes for it; `show_epr` draws that mode as a Plotly figure:
+
+```python
+from scgsim.aedt import show_epr
+
+show_epr(result, mode=1)
+```
+
+`theme="dark"` suits a dark notebook.
+
 ## Parameters
 
 | Parameter | Meaning |
@@ -54,7 +62,7 @@ result = analyze_epr(
 | `output_dir` | New destination for the analysis handoff and returned result. |
 | `surface_field_selectors` | Optional mapping from sidecar Surface-EPR groups (those `epr_request.surface_epr_groups` selects) to `"surface"` (the field on the row's faces) or `"adjacent"` (the field just off them). A group without a selector reads `"surface"`. |
 
-## Signature
+::: {#signature .callout-note collapse="true" title="Signature"}
 
 ```python
 def analyze_epr(
@@ -71,7 +79,9 @@ def analyze_epr(
 ) -> Any: ...
 ```
 
-[Complete generation index](../api-index.qmd).
+:::
+
+The other public names are in the [API index](../api-index.qmd).
 
 ::: {.content-hidden}
 
@@ -80,8 +90,8 @@ def analyze_epr(
 | Source | SHA-256 |
 |---|---|
 | `src/scgsim/aedt/epr/workflow.py` | `67e0c56b737aa0b7d7804b8c2836ebe107af0850573c496fe432b8658eebd760` |
-| `docs/reference/api/analyze-epr-usage.md` | `5174a09235e092568d70bb537705f05edd8370f06494b00b4dcf16fb07be15e5` |
+| `docs/reference/api/analyze-epr-usage.md` | `99d31a61922a5b4938bb2b6d5f0bc094037045b51377ee711c1683c78cd7e728` |
 
-Complete generation index, SHA-256 `6a29f999403a2b9999eaa8627f7a0b46d5e333d753c7173a919c9ee82a5e0d15`.
+Complete generation index, SHA-256 `f959364847868ee4c717697877387c99df04357066154a305d39aa1183b57f3f`.
 
 :::

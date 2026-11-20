@@ -42,7 +42,11 @@ def source_tree(tmp_path):
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(f"Source: {relative}\n", encoding="utf-8")
     (root / "docs/knowledge-sources.json").write_text(
-        json.dumps({"public_documents": public_documents}, indent=2) + "\n",
+        json.dumps(
+            {"public_documents": public_documents, "api_groups": _api_groups()},
+            indent=2,
+        )
+        + "\n",
         encoding="utf-8",
     )
 
@@ -86,13 +90,28 @@ def test_render_reads_ast_and_authored_text_without_importing_facades(source_tre
         "zh-TW/docs/reference/api/analyze-epr.qmd",
     }
     index = outputs["docs/reference/api-index.qmd"]
-    assert "### scgsim.geometry" in index
+    assert "## Task: `scgsim.geometry` {#scgsim.geometry}" in index
     assert "`PublicName`" in index
     detail = outputs["docs/reference/api/analyze-epr.qmd"]
     assert "Minimal call." in detail
     assert "saved_solution: SavedSolution" in detail
     assert "geometry_workers: int | None = None" in detail
     assert "-> Any" in detail
+
+
+def test_a_declared_name_no_group_lists_fails_generation(source_tree):
+    """The index lists every declared name under a task, so a name added to a facade without a group fails."""
+    facade = source_tree / "src/scgsim/geometry/__init__.py"
+    facade.write_text(
+        facade.read_text(encoding="utf-8").replace(
+            "['PublicName']", "['PublicName', 'NewName']"
+        ),
+        encoding="utf-8",
+    )
+    module = _load_generator(GENERATOR, "knowledge_generator_ungrouped")
+
+    with pytest.raises(ValueError, match=r"missing \['NewName'\]"):
+        module.render(source_tree)
 
 
 def test_check_mode_fails_stale_without_creating_or_rewriting_outputs(source_tree):
@@ -142,6 +161,22 @@ def test_repository_api_pages_match_the_current_sources():
         f"stdout:\n{result.stdout}\n"
         f"stderr:\n{result.stderr}"
     )
+
+
+def _api_groups() -> dict[str, dict[str, object]]:
+    """One task group per package, listing the fixture's one declared name."""
+    group = {
+        "title": "Group",
+        "title_zh": "群組",
+        "gloss": "Gloss.",
+        "gloss_zh": "說明。",
+        "page": "index.qmd",
+        "names": ["PublicName"],
+    }
+    return {
+        namespace: {"title": "Task", "title_zh": "工作", "groups": [group]}
+        for namespace in NAMESPACES
+    }
 
 
 def _render_outputs(root: Path) -> dict[str, str]:

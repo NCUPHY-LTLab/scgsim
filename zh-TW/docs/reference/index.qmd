@@ -1,48 +1,60 @@
 ---
-title: "總覽"
-description: "找到所需的模型、網格、交接與結果主題。"
+title: "參考"
+lang: zh-TW
+description: "找到回答你問題的頁面：支援的計算、版圖規則、術語、API 名稱，以及每種求解流程的確切行為。"
 sidebar: reference
+scgsim-id: "docs/reference"
+scgsim-kind: "reference"
+scgsim-status: "CONVERGING"
 aliases:
   - ../reference.html
 ---
 
-請先從[選擇模擬目標](../start/choose-a-simulation.qmd#getting-started)依目標選擇一份筆記本，再從下方主題連結尋找模型、幾何、網格、執行或結果說明。遇到專有名詞或單位需要確認時，請查閱[術語與單位](terms-and-units.qmd)。
+在下方找到你的問題；每一行列出回答它的頁面。要從頭學一個流程，請從[選擇模擬](../start/choose-a-simulation.qmd)與指南開始。
 
-## 模型與材料 {#model-materials}
+## 找到合適的參考 {#find-the-right-reference}
 
-先閱讀[物理問題](../concepts/problems.qmd)與[模型假設](../concepts/model-and-numerics.qmd#define-the-physical-model)。[物理表示契約](specs/physical-representation.qmd#typed-source-carrier-and-plan)說明來源宣告如何進入後端準備流程。
+[]{#model-materials}[]{#conductors-ports}
 
-## 導體與埠 {#conductors-ports}
+**動手畫之前**
 
-閱讀[實體、出現項與電氣集合](../concepts/geometry.qmd#entity-occurrence-and-net)，以及[Driven 響應概念](../concepts/problems.qmd#driven-response-excite-a-port-at-a-frequency)。[模型準備教學](../guides/prepare-a-layout.qmd)示範如何將這些選擇帶入指定案例；[Driven Terminal](../guides/s-parameters-hfss.qmd) 教學則呈現集總埠宣告。此版本尚未提供 Driven Modal 與波埠。
-
-## 網格與自適應 {#mesh-adaptation}
-
-[網格品質契約](specs/mesh-quality.qmd#audit)定義 `mesh()` 對每個網格稽核與記錄的內容。[後端準備教學](../guides/inspect-the-prepared-model.qmd)示範執行前如何檢視網格與原生模型準備結果。
-
-## 執行與交接 {#execution-handoff}
-
-使用[執行設定檔契約](specs/execution-profiles.qmd#handoff-lifecycle)了解可攜式交接與由呼叫端控制的求解器執行，再依照[交接教學](../guides/run-elsewhere.qmd)操作。
-
-## 結果與報表 {#results-reports}
-
-[報表契約](specs/report-model.qmd#common-envelope)說明結果識別、可用性與呈現方式。[回收結果教學](../guides/convergence-and-reports.qmd#interpret-for-scq-use)示範如何依預定用途讀取完成的執行資料夾。
-
-## 儲存場與離線損耗 {#saved-fields-offline-loss}
-
-使用[儲存場教學](../guides/saved-fields.qmd#recover-the-exact-prepared-model)評估原生場，並使用[離線 EPR 教學](../guides/offline-loss.qmd#interpret-an-assumption-change)變更已記錄結果所採用的假設。<span id="native-and-offline-epr-steps"></span>`analyze_epr` 會透過 AEDT 原生功能評估保留的儲存場，需要明確選定 AEDT 版本並具備授權；`reanalyze_epr` 則離線更新已解析 EPR 結果的假設。參數與簽章見 [analyze_epr 參考](api/analyze-epr.qmd)。
-
-## 尋找合適的參考資料 {#find-the-right-reference}
-
-| 需求 | 從這裡開始 |
+| 問題 | 頁面 |
 |---|---|
-| 確認 SCGSim 支援哪些求解流程 | [支援的計算](supported-calculations.qmd) |
-| 準備、封存並評估 AEDT 儲存場 | [AEDT：分析已保存的場](../guides/saved-fields.qmd) |
-| 離線變更既有 EPR 結果的假設 | [不重新求解即可變更損耗假設](../guides/offline-loss.qmd) |
-| 查詢 `analyze_epr` 的參數與簽章 | [analyze_epr](api/analyze-epr.qmd) |
-| 瀏覽各套件宣告的公開名稱 | [API 索引](api-index.qmd) |
-| 查看來源責任與 API 邊界 | [架構與資料流程](../contribute/architecture.qmd) |
+| 我能跑哪些計算、用哪個求解器、得到什麼？ | [支援的計算](supported-calculations.qmd) |
+| 我的版圖必須保證什麼？建構失敗時由誰修正？ | [支援範圍](supported-scope.qmd) |
+| 哪些版圖圖形經過測試？埠片如何切割？ | [支援的幾何](supported-geometry.qmd) |
+| 建構因 spline 或單點接觸而失敗：為什麼？ | [已知的幾何問題](known-geometry-problems.qmd) |
+| 某個術語或單位是什麼意思？ | [術語與單位](terms-and-units.qmd) |
 
-## 接面電容參考 {#junction-capacitance-reference}
+**建立模型**
 
-對同一模態、同一求解通過中的單一接面，$V$ 是其複數峰值相量電壓，$U_{norm}$ 是電能正規化量，不是電能與磁能的總和。$V$ 非零時，有效模態電容為 $C_{mode}=2U_{norm}/|V|^2$，支路電容為 $C_j=2U_{C,j}/|V|^2$，參與率為 $p_{C,j}=C_j/C_{mode}$。若 $V=0$，此比值未定義。[AEDT 執行契約](specs/aedt-runtime.qmd#surface-estimates-and-junction-normalization)列出完整電壓、能量與正規化定義。
+| 問題 | 頁面 |
+|---|---|
+| 哪些呼叫建立 `GeometryPlan`？它接受哪些曲線與薄片？ | [GeometryPlan 與 SGB](specs/geometry-plan.qmd) |
+| 我的薄膜是薄片還是體積？高度如何改變？ | [物理表示](specs/physical-representation.qmd) |
+| 如何設定 Palace 電容計算、網格與收斂？ | [Palace Electrostatic、網格與收斂](specs/palace-electrostatic-sgb.qmd) |
+| 如何設定 Palace 模態、埠與 Surface-EPR 邊距？ | [Palace Eigenmode 與 EPR](specs/palace-eigenmode.qmd) |
+| 哪些 AEDT 版本、`solid` 還是 `thin_film`、每種 AEDT 計算回傳什麼？ | [AEDT：執行什麼、回傳什麼](specs/aedt-runtime.qmd) |
+
+[]{#mesh-adaptation}[]{#execution-handoff}[]{#results-reports}
+
+**執行與讀取**
+
+| 問題 | 頁面 |
+|---|---|
+| 我的網格夠好嗎？ | [四面體網格品質](specs/mesh-quality.qmd) |
+| 要給 Palace 哪些資源？會執行什麼命令？ | [執行設定檔](specs/execution-profiles.qmd) |
+| 結果的執行、物理量與成本視圖顯示什麼？ | [讀取一次計算：三個視圖](specs/report-model.qmd) |
+
+[]{#saved-fields-offline-loss}[]{#native-and-offline-epr-steps}
+
+**函式與名稱**
+
+| 問題 | 頁面 |
+|---|---|
+| `analyze_epr` 接受什麼？它以 AEDT 與授權，從 AEDT 已儲存的場重新計算 EPR。 | [analyze_epr](api/analyze-epr.qmd) |
+| 每個套件匯出哪些公開名稱？ | [API 索引](api-index.qmd) |
+
+要在不使用 AEDT 或 Palace 的情況下，改變已完成 EPR 結果的損耗假設，`reanalyze_epr` 可離線運作；見[不重新求解，改變損耗假設](../guides/offline-loss.qmd)。SCGSim 的內部建構方式在[參與貢獻](../contribute/index.qmd)之下。
+
+[]{#junction-capacitance-reference}接面的電容參與比與其有效模態電容，與其他 EPR 公式一起定義於 [EPR 如何正規化](specs/aedt-runtime.qmd#surface-estimates-and-junction-normalization)。

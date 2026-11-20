@@ -1,0 +1,143 @@
+---
+title: "執行與報告記錄"
+lang: zh-TW
+description: "Palace 計算寫出的記錄（預檢、網格清單、索引對照、收斂計畫與執行器決定），以及結果讀取與報告視圖如何使用它們。"
+scgsim-kind: "implementation"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/contribute/internals/report-records"
+---
+
+本頁寫給 `scgsim.palace` 執行準備與結果讀取，以及 AEDT 結果視圖的貢獻者。它記錄 Palace 計算寫出並讀回哪些檔案、結果讀取如何判定哪個資料夾是哪一個回合（pass）、哪些記錄承載邊距列，以及各視圖在顯示數字前檢查什麼。各視圖給使用者看什麼，見[讀取一次計算：三個視圖](../../reference/specs/report-model.qmd)；使用者的 Palace 設定見 [Palace Electrostatic](../../reference/specs/palace-electrostatic-sgb.qmd)與 [Palace Eigenmode](../../reference/specs/palace-eigenmode.qmd)。
+
+## 哪個資料夾是哪一個回合 {#pass-folders}
+
+一個 AMR 回合是 Palace 的一次求解，從 1 起算：第 1 回合求解輸入網格。`results/palace` 中哪個資料夾是哪個回合，只依它的檔案是什麼來決定一次，可信度報告與收斂檢查都用這個規則：
+
+- `iteration<k>/` 是第 $k$ 回合，條件是它自己的 `palace.json` 記錄 `Problem.Iteration` $k$，且它的表格都是一般檔案。Palace 0.18.1 在再次細化之前，會把求解 $k$ 的表格移到這裡。
+- 最上層只有在它的 `palace.json` 與每個表格都是含資料列的一般檔案時，才是自己的一個回合；編號是它記錄的迭代。這是自行結束的執行的最後一次求解。
+- 最上層的表格若是指向 `iteration<k>/` 的連結，它存的是第 $k$ 回合的檔案，不是自己的求解：執行在第 $k$ 回合之後立刻被停止。若連結與新檔案混雜，或有只含標題列的表格，就是一次進行中的求解，不算回合。
+- 兩個資料夾記錄同一個回合時，若表格逐位元組相同（例如以會跟隨連結的工具複製被停止的執行），就是同一個回合；否則兩者的讀值互相矛盾，該回合不被讀取。
+- 自己的記錄缺少、無法讀取，或記錄的是別的回合的資料夾，不算回合。編號從不取自資料夾在清單中的位置。
+- 讀不了的表格（沒有權限，或內容不是文字）不會讓列舉中止。最上層若有這樣的表格，會連同原因被擱置；同一個回合的兩個資料夾若因此無法比對，該回合不被讀取；宣告的數若在這樣的表格裡，在該回合標為不可用。其他資料夾照常讀取。
+
+可信度報告的每條 AMR 回合軸都這樣計數。變化只在兩個編號相鄰且可讀的回合之間量測。判定會列出讀到的回合、判定之前沒有讀到的回合，以及每個被擱置的資料夾或未讀取的回合與原因。
+
+## 部分回傳的計算 {#partly-returned-runs}
+
+`inspect_run_trustworthiness()` 支援完成、失敗及只回傳一部分的執行資料夾。它保留紀錄的憑證狀態，可揭露最新可讀資料，但不將未完成執行提升為完成。嚴格的 `resolve_palace_result(..., expected_handoff_id=...)` 路徑只接受交接、憑證、求解器及產物雜湊均驗證通過的完成執行資料夾。
+
+無法無歧義讀取的數字（重複某欄的表格，或兩列有相同索引）標為不可取得並附原因，永遠不算成立。存在但未經交接封存、或封存後變動的計畫，兩種讀取器都會拒絕。
+
+## Palace Surface EPR 的邊距列 {#palace-margin-rows}
+
+檢查與嚴格解析的區分，也適用於 Palace 邊距列。邊距列是涵蓋 SGB 在該邊距及更外側切出之各帶的 `Dielectric` 列，因此和基準列放在同一張 `surface-Q.csv` 表。`inspect_run_trustworthiness()` 可檢查完成、失敗或只回傳一部分的執行資料夾，並將不可用的邊距資料標為不可用，不改變憑證狀態。每個來源把它的邊距列當成一個全有或全無的快照讀取：若其表格無法讀取，或與索引映射不符，該來源就沒有邊距快照。對要求表面列的執行進行嚴格完成解析時，需要同一必要結果來源中已封存的 `surface-Q.csv`；缺少檔案會阻止嚴格解析，既有憑證或產物 SHA-256 不符仍為致命錯誤。
+
+`PhysicsQuantitiesReport.snapshots` 保持只含基準的介面。型別化的 `PhysicsQuantitiesReport.margin_snapshots` 提供 `SurfaceMarginEprSeriesSnapshot` 值，每個值含 `SurfaceMarginEprRecord` 資料列，記錄介面、邊距值（`margin_um`）與序號（`margin_index`）、所屬基準列（`baseline_index`）、涵蓋的帶、其 entity 與 Net、模態或激發、細化回合、原生索引及來源身分。每個邊距列都是其基準列的替代評估之一；重複要求的邊距仍可分別追溯，不是損耗總量中的重複貢獻。
+
+## EPR 視圖檢查什麼 {#epr-view-checks}
+
+科學鍵值，而非顯示標籤，識別圖中資料。圖形間使用共用的可讀標籤；懸停資料及中繼資料保留完整群組、成員、側別與來源身分。
+
+AEDT `ResolvedRun` 以 `epr_result()` 提供綁定的 EPR 紀錄，以 `show_all_results(show_details=False)` 提供整合式執行檢視；後者回傳 `None`。檢視使用實際最後完成回合的所有要求模態，並包含自適應歷史。缺少或部分值維持不可用；呈現不退回較早的完整回合。它依解析時擷取的雜湊檢查使用的結果 CSV 與基準資料，不查詢即時模擬物件或重讀原生 AEDT 狀態。嚴格解析與缺少產物行為請見 [AEDT 執行期參考](aedt-runtime.qmd)。
+
+自適應頻率具有自己的可用性規則：即使該模態 EPR 資料列為部分資料，只要頻率是有限正數且不是布林值，就會繪出。參與率與能量仍要求完整資料列；資料列狀態、完整性檢查、回合選取及歷史圖中的缺口維持不變。
+
+從原始執行資料夾解析的 Palace 與 AEDT 物理量，仍綁定至各自適用的憑證、產物雜湊、交接及求解器身分。獨立 Palace EPR 結果保留原始產物身分及雜湊參照，但這些參照不驗證該獨立 JSON 本身。呈現不弱化來源綁定，也不宣稱數值收斂或跨求解器一致。
+
+## Palace 報告中的網格資訊 {#palace-mesh-context}
+
+Palace 報告讀取與外觀介面及已解析執行相同的獨立 `mesh_summary()` 資料來源。它將紀錄的尺寸配方、修復策略、網格器選項、品質門檻與在線性網格（升階之前）量得的 minSICN，連同 Gmsh 版本、原生節點／元素／區域數量、輸出網格的階數、高階最佳化結果及邊長統計，綁定至網格與清單身分。較高幾何階數的回報邊長是主角點弦長，不是曲邊長度。本徵模態自由度值是拓撲估計，不是求解器回報的數量。
+
+## Palace 計算的記錄 {#palace-run-records}
+
+### dry-run 預檢 {#palace-preflight}
+
+產生的腳本開始求解之前，會以原生 `--dry-run` 選項，將確切複製的 `config.json` 傳給選定 Palace 執行檔。只有對這些確切位元組成功執行 dry-run，才建立設定／執行期相容性。相容性產物及回傳憑證保留設定雜湊與觀察的原生 GitTag。若設定的執行檔可直接且如實解析為 Palace 二進位檔，也會保留其檔名與 SHA-256。SCGSim 不穿透包裝器尋找隱藏的二進位檔。GitTag、提交及可用的二進位雜湊，是供重現與診斷的來源資訊；其存在或數值不是執行期資格門檻。
+
+若此前置檢查失敗，回傳憑證記錄 `execution_stage="config_compatibility"`、`solver_invoked=false`、分開的前置檢查與管線結束碼，以及 `solver_exit_code=null`。只有實際呼叫求解器命令之後，憑證才使用 `execution_stage="solver"`。
+
+### 模擬的分階段狀態 {#staged-state}
+
+相對於此分階段狀態，設定器具有原子性。Airbox、Surface EPR 與 Eigenmode 控制先驗證所有提供值，才變更任何欄位。因此驗證失敗會保留原設定，以及快取網格、已解析埠、設定檔及交接狀態。成功變更保留既有網格／設定失效邊界；這不改變 `mesh()` 或 `write_config()` 內部的操作失敗行為。
+
+共用的分階段失效與逐檔持久化見[架構](../architecture.qmd#palace-preparation-lifecycle)。失效不承諾整個流程在磁碟上原子替換。
+
+### 屬性與網格清單 {#mesh-manifest}
+
+執行資料夾包含 SGB 模型（`geometry/`，內有 XAO 與其 sidecar）、網格化報告（`mesh/`，有 JSON 與文字兩種）、`palace.msh`，以及網格清單（`metadata/`）。`palace.msh` 是 Gmsh MSH 2.2 ASCII 檔，即 Palace 讀取的格式。Palace 只根據 sidecar，把 SGB 的具名群組降階為求解器屬性：只有當同一個表面群組的面被不同的 Surface EPR 列或側邊積分時才會拆開，因此屬性會分割這些面，不會重複計算。電氣身分是 Net；Terminal 與 Ground 綁定使用 sidecar 中確切的 Net。
+
+網格清單（`schema_version` 2）記錄路徑及其策略、sidecar 結構與模型身分摘要、Surface EPR 內縮請求及其產生的帶族與 SGB 略過的面、配方（名稱、版本與參數）、修復策略、網格器選項、預算與門檻、品質報告的路徑與 SHA-256，以及每個求解器屬性一筆、註明來源 SGB 群組的項目。它也記錄 Gmsh 版本、節點與元素類型、物理區域元素數量及邊長統計。高階網格的邊長會明確標為主角點弦長，以微米回報；它們不是曲邊弧長。
+
+兩個 Palace 外觀介面及已解析的 Palace 執行都提供 `mesh_summary()`。它回傳綁定網格與清單身分的獨立值。Palace 報告讀取相同摘要依據。Eigenmode 包含根據主角點四面體拓撲與設定 FEM 階數計算的 Nédélec 拓撲自由度估計。這不是實際求解器自由度數量；變更 FEM 階數會更新估計，不重新產生網格。Electrostatic 的 H1 估計不可用。SCGSim 沒有任何紀錄量測彎曲高階元素的品質。
+
+### 網格的版本識別 {#mesh-version-identities}
+
+配方版本只在配方要求的尺寸改變時才會提高。`FeatureRecipe` 開始為每一條 Surface-EPR 條帶邊界曲線設尺寸時，版本從 `features/1` 變成 `features/2`。因此，兩份報告的配方版本與參數都相同時，它們要求的初始尺寸就相同，即使出自不同的套件發行版；配方版本不同，代表兩個網格出自不同的尺寸規則。配方版本只涵蓋初始尺寸：修復策略記錄在每份報告中，Gmsh 版本記錄在網格清單中。
+
+這些版本彼此分開，是因為整個網格模組若只有一個版本，任何一個配方改變時它都會改變，卻無法說出是哪一個配方改了。`FeatureRecipe` 改變時，使用 `UniformBoundaryRecipe` 的執行仍保有原本的版本，因此它的報告在這次改變前後仍可互相比較。
+
+舉例來說，對帶有 0.5 與 1 µm 條帶的覆晶量子位元（OrcaPen SC PDK 的 `disk_flip_chip_qubit`，置於共用接地平面下，採 Route B），同樣使用預設的 `FeatureRecipe()`，在兩個版本下會得到不同的網格：
+
+::: {.askr-table-compact}
+| | `scgsim.meshing.features/1` | `scgsim.meshing.features/2` |
+|---|---|---|
+| 要求的尺寸 | 801 條薄膜側壁曲線上 1.30 µm | 3,104 條曲線上 1.30 µm：薄膜側壁與每一條條帶邊界曲線 |
+| 第一次網格 | 402,784 個四面體，1 個低於品質門檻 | 569,325 個四面體，沒有低於門檻者 |
+| 結果 | 一輪修復後合格：407,093 個四面體，82.5 s | 第一次網格即合格：569,325 個四面體，53.4 s |
+:::
+
+兩份品質報告記錄的配方版本不同，因此網格的差異來自尺寸規則，而不是這次執行的其他部分。
+
+### 索引對照的列、側與 crack 薄片 {#index-map-rows}
+
+::: {.callout-note collapse="true" title="列、側與裂開的 sheet"}
+索引映射（結構 v3）為每個表面列記錄 `row` 與 `group`、`interface_type`、`band`、`side`、`face_sides`、`entities`、`net` 與 `attributes`，並以譜系成員資格作為歸屬資訊：譜系不加權任何東西。單側列把 `above` 或 `below` 對應到 Palace 後處理的側。兩側都是真空的 Route A sheet 是一個從兩側積分的面，需要 Palace 的內部邊界裂開；SCGSim 恰好在某個已設定的列有 `shared_face_group` 時寫出 `Model.CrackInternalBoundaryElements`；沒有在 sheet 上設定 `MA` 或 `MS` 膜層的執行，會保留 Palace 的預設值。在不同位置分別位於真空與介電質之上的 sheet，會在不同屬性上得到各自的 `MA` 與 `MS` 列。
+:::
+
+### 表面薄膜的產生器 {#surface-film-producer}
+
+表面薄膜輸入將確切的來源表面及物理屬性綁定至 Palace `MA`、`MS` 或 `SA` 類型及其薄膜假設。`thickness`（原生模型單位）與 `film_thickness_m`（透過 `Model.L0` 轉換）必須恰好提供一項；數值 `permittivity` 與能解析至明確介電材料的 `material_id` 也必須恰好提供一項。`loss_tangent` 可直接提供，或從該材料讀取；未知值在 SCGSim 索引中仍可辨別。目前的 `surface-film.v2` 產生器會拒絕缺少或重複的表面及物理屬性身分，不將它們丟棄或去重。薄膜厚度設定表面模型，而[內縮邊距](../../reference/specs/palace-eigenmode.qmd#surface-epr-margins)設定靠近間隙處要求的排除範圍。
+
+Palace 0.18.1 根據設定類型及相鄰求解元素建立原生表面被積函數：`MA` 與 `SA` 使用真空側的場跡，`MS` 使用基板側的場跡。`MA` 使用法向電場；`MS` 使用基板介電率加權的法向場；`SA` 則依薄膜介電率結合切向與法向項。原生映射請見 Palace 0.18.1 的[設定](https://github.com/awslabs/palace/blob/0dc74cdf8c36c58b69b21c4a06e816048ec0b83f/palace/utils/configfile.cpp#L624)及[鄰接材料規則](https://github.com/awslabs/palace/blob/0dc74cdf8c36c58b69b21c4a06e816048ec0b83f/palace/fem/coefficient.hpp#L331)。請選擇符合預定原生介面模型的 `MA`、`MS` 或 `SA`。
+
+### 收斂計畫 {#convergence-plan-record}
+
+有宣告時，宣告的準則取代 Palace 自己的容許誤差。`write_config()` 把 `Model.Refinement.Tol` 寫成最小的正規雙精度浮點數，使得只有 `amr_max_passes` 會結束執行，並寫出 `SaveAdaptIterations: true`，讓 Palace 把每個回合保留在 `results/palace/iteration<k>`。它把檢查的計畫寫到 `metadata/palace_convergence_plan.json`：每條準則在報告中顯示的標籤；每個數的結果表、列、欄位與欄位的組合方式（參與率是其各列欄位的總和）；檢定、門檻，以及 `minimum_converged_passes`。一個量由哪些欄位組成，只在這裡、依同一份設定寫出的索引對照表條目決定一次。`prepare_handoff()` 把計畫與其他輸入一起封存，因此回傳的執行若計畫已改變會被拒絕。沒有宣告時，以上都不會寫出，設定檔只由 AMR 控制決定。
+
+### 收斂執行器 {#convergence-runner}
+
+執行腳本透過收斂執行器 `metadata/run_palace_until_converged.py` 啟動求解器命令；`prepare_handoff()` 把它複製到執行資料夾，它只需要 Python 標準函式庫。執行器：
+
+1. 在它自己的 session 中啟動指令碼原本會執行的求解指令；Palace 的輸出照舊進入日誌；
+2. 每秒查看一次 `results/palace`。某個回合的 `iteration<k>/` 資料夾在兩次查看之間沒有變化時，才算這個回合；每多一個回合，執行器就執行與讀取結果時相同的檢查；
+3. 判定為已收斂時，先寫出 `metadata/palace_convergence_decision.json`，再對求解器的 session 送出 SIGTERM，並等到它全部結束：指令本身、它啟動的啟動器，以及由啟動器結束的各個 rank。60 秒後仍有任何一個在執行，就送出 SIGKILL；
+4. 求解器結束後（停止之後，或在 `amr_max_passes` 自行結束），再寫一次決定紀錄，內容是 `results/palace` 當時的回合與求解器的結束碼。
+
+執行器不會留下無人看管的求解器。被要求結束時（SIGTERM、SIGINT 或 SIGHUP），它先結束求解器並記下原因。來不及這麼做就被結束時（執行器本身或指令碼的整個行程群組收到 SIGKILL），求解器交給它的守護行程：執行器與求解器一同啟動、位於自己 session 中的行程，一旦執行器不在，就以同樣的方式結束求解器的 session。
+
+Palace 0.18.1 先在 `iteration<k>/` 完成第 $k$ 回合，才為第 $k+1$ 回合細化網格，因此停止發生在這段細化期間，或下一次求解開始時；已完成回合的檔案都不會改變。停止的要求在資料夾出現後一到兩秒送出（執行器每秒查看一次，第二次查看時才計入該回合），Palace 在要求之後約一秒內結束。回執要到這時才寫出，所以不會有求解器的行程在回執之後寫入檔案。
+
+耗時短於這一到兩秒的回合仍然會執行。執行器會把它和前一個回合一起計入：判定指出執行在哪個回合收斂、其後又讀到幾個回合，Palace 在最後一個之後被停止，結果就是最後那個回合。所有回合都這麼短的執行，在執行器查看之前就已結束；它照 Palace 結束的樣子算完成。停止省下的是每一個比這更長的回合，時間都花在那裡：每個回合的元素數是前一個的二到三倍。
+
+回執記載求解器如何結束（`ending`），並保留求解器自己的結束碼：
+
+| `ending` | 情況 | 回執 |
+|---|---|---|
+| `solver_ended` | Palace 結束時 SCGSim 沒有停止它 | 所有結束碼為 0 時 `completed`，否則 `failed` |
+| `stopped_at_convergence` | 執行器在判定已收斂的回合之後停止它，且它在等待時間內結束 | `completed`，結束碼是停止造成的那一個：Palace 的 `palace` 包裝指令碼被訊號結束時為 143，直接啟動 `mpirun` 時為 1，由 `srun` 啟動時為 137（`srun` 會結束它的 step） |
+| `stop_escalated` | 它沒有因 SIGTERM 結束，被強制終止 | `failed` |
+| `runner_terminated` | 執行器自己被要求結束，並因此結束了 Palace。若 Palace 已在收斂停止後的收尾中才被要求結束，停止照樣成立 | `failed` |
+| `not_recorded` | 執行器沒有留下完整的決定紀錄 | `failed` |
+
+在收斂時停止的執行，其結果是最後一個回合：讀取結果時從 `iteration<k>/` 取得表格與成本，因為頂層放的是指向它的連結，或正在進行的求解。Palace 也可能剛好在執行器做出決定的那一刻完成最後一次求解。如果它那時已經自行結束（結束碼 0，最後一次求解在頂層），就沒有任何東西被停止，執行記為自行結束。如果停止仍然送到它，執行就是被停止的，結果是頂層的那最後一次求解。
+
+讀取結果時會從回傳的檔案重新計算檢查；下列情況會拒絕這個執行，並說出不一致之處：
+
+- 回合或判定與決定紀錄不同，或決定紀錄不是回執所綁定的那一份；
+- 決定紀錄與回執記載的結束方式不同，或求解器的結束碼不同；
+- 頂層是連結或正在進行的求解，回執卻說 Palace 自行結束；
+- 沒有計畫卻有決定紀錄，或有計畫卻沒有決定紀錄；
+- 結果的某張表格（在頂層或在 `iteration<k>/`）不在回執記載的輸出之中。
+
+在 Slurm 上，`--` 之後的指令是 `srun` 那一行，日誌由排程器寫出。執行器在它自己的 session 中啟動那個指令，並在宣告的準則收斂後以 SIGTERM 停止它；`srun` 的回應是結束它的 step，所以 Palace 的任務會被終止，`srun` 以 137 結束。接著指令碼以回執的判定結束（完成的執行為 0），因為在收斂時停止的求解器即使執行已完成，結束碼也不是 0。它也會在求解前移除先前的 `metadata/palace_convergence_decision.json`。沒有宣告時，指令碼不變：由它自己啟動求解指令。
+

@@ -1,6 +1,6 @@
 ---
-title: "Execution Profiles and Local/Manual-HPC Handoff"
-description: "Exact launch profiles, caller resources, handoff identity and return requirements."
+title: "Execution profiles: where Palace runs"
+description: "The three Palace launch profiles with an example resources mapping and the command each generates, the convergence runner, and how a handoff is carried, run and read back."
 scgsim-kind: "contract"
 scgsim-status: "STABILIZED"
 scgsim-id: "docs/execution-profiles"
@@ -8,129 +8,135 @@ aliases:
   - ../../execution-profiles.html
 ---
 
-Follow [execute a handoff](../../guides/run-elsewhere.qmd) for the preparation-to-return procedure. This page owns profile/resource and identity requirements.
+`prepare_handoff(profile=..., executable=..., resources=...)` writes the script
+that runs Palace. Choose one of three profiles: `direct-local` runs the script
+on one machine, `slurm-single-node` and `slurm-multi-node` submit it to Slurm.
+This page gives, for each, the resources you supply and the command the script
+then runs. SCGSim never submits a job or starts Palace itself; you run the
+script. [Run a prepared model](../../guides/run-elsewhere.qmd) walks through
+the whole round trip.
 
-SCGSim prepares portable handoffs; the caller owns where and how a prepared
-solver runs. A profile records the launch shape and the resources supplied by
-the caller. It does not submit a scheduler job or open a native desktop.
+## The profiles {#fixed-handoff-profiles}
 
-## Fixed handoff profiles
-
-Profile names describe launch shape, not a site or hostname.
-
-| Profile | Intended use | Recorded evidence |
+| Profile | Use it to | You supply in `resources` |
 |---|---|---|
-| `direct-local` | Run the generated Palace shell script on one host | Executable, inputs, environment, exit state, and artifacts |
-| `slurm-single-node` | Submit the generated Palace batch script for one node | Job identity, requested resources, launch shape, and artifacts |
-| `slurm-multi-node` | Submit the generated Palace batch script for multiple nodes | Job identity, node/resource request, launch shape, and artifacts |
+| `direct-local` | Run `run_palace.sh` on one host | Optionally `processes` and `threads` (1 each by default) and `command_style` |
+| `slurm-single-node` | Submit `run_palace.sbatch` for one node | `nodes=1`, `ntasks`, `cpus_per_task` |
+| `slurm-multi-node` | Submit `run_palace.sbatch` for two or more nodes | `nodes` of at least 2, `ntasks`, `cpus_per_task`, and `mem` or `mem_per_cpu` |
 
-The Palace caller supplies a non-empty resource mapping. Slurm profiles
-require `ntasks`, `cpus_per_task`, and `nodes`. `slurm-single-node` requires
-one node; `slurm-multi-node` requires at least two and a `mem` or
-`mem_per_cpu` request. Resource sizing is the caller's responsibility. Slurm
-allocation keys such as `ntasks`, `cpus_per_task`, `nodes`, and `mem` become
-`#SBATCH` directives. Scheduler output and error logs remain bound to the
-handoff's Palace log. The caller also supplies the executable, any host setup
-commands, and optional launcher tokens. None of these values is a SCGSim
-site-wide default.
+`resources` must not be empty. Sizing it is your choice; SCGSim has no
+site-wide default. You also give the Palace `executable`, and optionally
+`setup_commands` (shell lines run before Palace, such as loading modules) and
+`petsc_options`.
 
-## Palace command shapes
+## The command each profile runs {#palace-command-shapes}
 
-The generated command depends on the profile and `resources.command_style`:
+Each block below holds, among the script's other lines, the ones that
+SCGSim's script writer generates for the `resources` shown, with `executable` set to Palace's binary or to its
+`palace` wrapper.
 
-| Selection | Generated launch behavior |
-|---|---|
-| `direct-local` + `binary` | Calls the configured executable with `config.json`; `threads` sets `OMP_NUM_THREADS`. SCGSim adds no MPI launcher or rank argument, so use this only when direct invocation matches the host's Palace build. |
-| `direct-local` + `wrapper` | Calls the configured Palace MPI wrapper with `-np <processes> -nt <threads> config.json`. The installed `palace` script wraps an MPI launcher (by default `mpirun`) and accepts these controls; see the [Palace runner guide](https://awslabs.github.io/palace/stable/run/) and [parallelism guide](https://awslabs.github.io/palace/stable/guide/parallelism/). |
-| Either Slurm profile | Writes `run_palace.sbatch` with the caller's scheduler resources and invokes the configured launcher (default `srun`) before the Palace executable and `config.json`. Slurm profiles require `command_style="binary"`; wrapper mode is rejected. |
+**`direct-local` with `command_style="binary"`** (the default):
+`resources={"command_style": "binary", "threads": 4}` gives
 
-For Slurm, the user submits the prepared script with `sbatch`; the script's
-default `srun` launches the Palace binary inside the allocation. `srun` is the
-scheduler launcher, not the Palace MPI wrapper. Do not stack the Palace
-`-np`/`-nt` wrapper on top of the Slurm launcher. The required
-`cpus_per_task` sets `OMP_NUM_THREADS` unless the caller separately supplies a
-`threads` value; keep an override aligned with the scheduler allocation. The
-configured executable, launcher, and site setup commands must match the
-target host. SCGSim does not guess an MPI setup.
+```sh
+PALACE_PROCESSES=1
+PALACE_THREADS=4
+export OMP_NUM_THREADS="$PALACE_THREADS"
+"$PALACE_EXECUTABLE" "$PALACE_CONFIG" 2>&1 | tee -a "$PALACE_LOG"
+```
 
-The Palace script performs a native `--dry-run` compatibility check on the
-exact handoff `config.json` before the solve command. A failed check records a
-preflight failure and does not invoke the solver. Successful preparation alone
-does not establish that the executable, config, or native geometry is valid.
+SCGSim adds no MPI launcher, so use it only when calling the binary directly
+suits the host's Palace build.
 
-The named profiles above describe Palace launch shapes. AEDT prepared-native
-BatchSolve is a separate EPR package workflow, not a new `ExecutionProfile` or
-SCGSim scheduler submission.
+**`direct-local` with `command_style="wrapper"`**, the
+[First simulation](../../start/first-simulation.qmd)'s choice:
+`resources={"command_style": "wrapper", "processes": 4, "threads": 1}` gives
+
+```sh
+PALACE_PROCESSES=4
+PALACE_THREADS=1
+export OMP_NUM_THREADS="$PALACE_THREADS"
+"$PALACE_EXECUTABLE" -np "$PALACE_PROCESSES" -nt "$PALACE_THREADS" "$PALACE_CONFIG" 2>&1 | tee -a "$PALACE_LOG"
+```
+
+Palace's `palace` script starts the MPI launcher itself (`mpirun` by default); see the
+[Palace runner guide](https://awslabs.github.io/palace/stable/run/).
+
+**`slurm-single-node`**:
+`resources={"nodes": 1, "ntasks": 16, "cpus_per_task": 1, "time": "02:00:00"}`
+gives
+
+```sh
+#SBATCH --nodes=1
+#SBATCH --ntasks=16
+#SBATCH --cpus-per-task=1
+#SBATCH --time=02:00:00
+#SBATCH --output=logs/palace-%j.log
+#SBATCH --error=logs/palace-%j.log
+#SBATCH --open-mode=append
+PALACE_PROCESSES=16
+PALACE_THREADS=1
+export OMP_NUM_THREADS="$PALACE_THREADS"
+srun "$PALACE_EXECUTABLE" "$PALACE_CONFIG"
+```
+
+**`slurm-multi-node`**:
+`resources={"nodes": 2, "ntasks": 64, "cpus_per_task": 1, "mem_per_cpu": "4G"}`
+gives the same script with `#SBATCH --nodes=2`, `--ntasks=64` and
+`--mem-per-cpu=4G`.
+
+Every other key of `resources` becomes an `#SBATCH` line, as `time` does here;
+`launcher`, `command_style`, `threads` and `processes` are the script's own,
+and `output`, `error` and `open_mode` stay bound to the run's log.
+Submit the script with `sbatch`. `srun` is the launcher (set another with
+`launcher`), so the Slurm profiles take the Palace binary and
+`command_style="binary"`; the wrapper is refused there. `OMP_NUM_THREADS` is
+`cpus_per_task` unless you give `threads`. The executable, launcher and setup
+commands must suit the target host; SCGSim does not guess an MPI setup.
+
+Before the solve, each script runs Palace with `--dry-run` on the copied
+`config.json`; if Palace refuses it, nothing is solved and the receipt records
+why ([details](palace-electrostatic-sgb.qmd#electrostatic-calls)).
 
 ## With a convergence declaration {#convergence-runner}
 
-When the simulation [declared its convergence](palace-electrostatic-sgb.qmd#convergence-stop),
-the script starts the solver command of the table above through the
-convergence runner the handoff copies into the run folder:
+When the simulation [declared its convergence](palace-electrostatic-sgb.qmd#convergence-declaration),
+the same command is started through SCGSim's convergence runner, which stops
+Palace once the criteria hold:
 
-```bash
-python3 metadata/run_palace_until_converged.py "$(pwd)" -- "$PALACE_EXECUTABLE" "$PALACE_CONFIG" 2>&1 | tee -a "$PALACE_LOG"
+```sh
+python3 metadata/run_palace_until_converged.py "$(pwd)" -- "$PALACE_EXECUTABLE" -np "$PALACE_PROCESSES" -nt "$PALACE_THREADS" "$PALACE_CONFIG" 2>&1 | tee -a "$PALACE_LOG"
 ```
 
-On Slurm the command after `--` is the `srun` line, and the scheduler writes
-the log. The runner starts that command in a session of its own and stops it
-with SIGTERM once the declared criteria have converged; `srun` answers by
-ending its step, so the Palace tasks are killed and `srun` exits with 137. The
-script then exits with the receipt's verdict (0 for a
-completed run), because a solver stopped at convergence exits non-zero although the run completed. It
-also removes an earlier `metadata/palace_convergence_decision.json` before the
-solve. Without a declaration the script is unchanged: it starts the solver
-command itself.
+On Slurm the command after `--` is the `srun` line, and Slurm writes the log. A job stopped at
+convergence still ends as completed, and the script exits 0, although the
+solver itself exited non-zero when it was stopped. Run a run folder once at a
+time: two runs of one folder would write one results folder, and neither could
+be trusted. Jobs that run side by side each take a run folder of their own,
+from their own `prepare_handoff()`. How the runner watches and stops Palace is
+in [the internals](../../contribute/internals/report-records.qmd#convergence-runner).
 
-A run folder is run once at a time. Its script started again while it runs
-would have two solvers write one results folder and two runners write one
-decision record, and neither result could be trusted. Jobs that run side by
-side each take a run folder of their own, from their own `prepare_handoff()`.
+`slurm-single-node` has been run under Slurm with a declaration; a job ended
+with `scancel` leaves no receipt, so result reading refuses its folder.
+`slurm-multi-node` takes the same path and has not been run on more than one
+node.
 
-::: {.callout-note title="Run under Slurm on one node"}
-`slurm-single-node` has been run under Slurm on one node: a declared run
-stops after the pass at which it converges, and a job ended with `scancel`
-leaves no receipt, so result reading refuses its folder. `slurm-multi-node`
-goes through the same path and has not been run on more than one node.
-:::
+## Carry, run and read back {#handoff-lifecycle}
 
-## Handoff lifecycle
+1. Prepare the handoff and note its ID outside the run folder:
+   `handoff = sim.prepare_handoff(...)`, then keep `handoff.handoff_id`.
+2. Copy the whole run folder (or the `.tar.gz` beside it) to the host that runs
+   Palace, and run the script there.
+3. Copy the whole returned run folder back.
+4. Read it: `resolve_palace_result(run_dir, expected_handoff_id=handoff.handoff_id)`.
 
-```text
-configure model -> inspect input summary -> prepare handoff
--> transfer the complete package -> run on the target host
--> retrieve the complete returned package -> resolve and show results
-```
+The ID is your check that the folder you read is the one you prepared: take it
+from your own notes, never from files that came back with the folder.
 
-For Palace, retain `handoff.handoff_id` in preparation-side notes outside the
-transferred package. After the full returned run folder is retrieved,
-`resolve_palace_result(run_dir, expected_handoff_id=...)` checks it against
-that independently retained identity before showing results. Do not learn the
-expected identity from files that arrived with the returned package.
+### AEDT {#aedt-prepared-native-epr-stages}
 
-### AEDT prepared-native EPR stages
-
-| Stage | Host responsibility | Desktop and package boundary |
-|---|---|---|
-| Prepare and package | Workstation prepares the selected model version, saves and reads back the native EPR model, then creates one `NativeBatchPackage` per model | PyAEDT transaction owns Desktop; a JSON-only handoff is not the native project package |
-| Solve | Solver host runs the standalone one-host AEDT BatchSolve recipe with the same explicitly requested AEDT release and its solver license | Uses the packaged `.aedt` and dependencies; no SCGSim, PyAEDT, model-building environment, or usable Desktop session is needed for this stage |
-| Collect and resolve | Workstation returns the full package and attempt, then collects the complete adaptive history and saved-field EPR | Existing transaction owns a Desktop on copies; no geometry rebuild or Analyze; strict result resolution follows collection |
-
-Each package is one independent model. A sweep may transfer its separate
-package archives together, but each package has its own solver attempt and
-collection. The [HPC EPR sweep guide](../../guides/hpc-sweep.qmd) gives the
-operation sequence; the [AEDT runtime contract](aedt-runtime.qmd#prepared-native-hfss-epr-batch)
-defines its package and completion requirements. Copying only an EPR JSON or
-frequency export does not replace the full return.
-
-For the direct AEDT path, transfer the prepared run folder to the AEDT host
-and retrieve the complete returned run folder.
-`resolve_results(run_dir)` verifies the receipt-bound artifacts;
-`ResolvedRun.show_all_results()` displays the verified primary, benchmark, and
-requested EPR evidence. Copying only an EPR JSON file is not a substitute for
-resolving the returned run folder.
-
-External gdsfactory/cloud execution is unsupported and is never a fallback.
-Palace preparation does not silently submit a scheduler job or open AEDT. The
-[Palace tutorial](../../guides/xmon/palace.qmd) and [AEDT tutorial](../../guides/xmon/aedt.qmd)
-show their backend-specific handoff and return steps.
+These profiles are Palace's. An AEDT handoff is run with
+`python -m scgsim.aedt.run ... --execute` on a host with AEDT, and read with
+`resolve_results(run_dir)`; HFSS EPR can also be solved by AEDT's batch solver
+on another host. Both are on
+[AEDT: what runs and what comes back](aedt-runtime.qmd#prepared-native-hfss-epr-batch).

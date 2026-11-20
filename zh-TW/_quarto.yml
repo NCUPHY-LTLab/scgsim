@@ -15,10 +15,10 @@ project:
   - docs/reference/api/*.qmd
   - docs/reference/specs/*.qmd
   - docs/contribute/*.qmd
+  - docs/contribute/internals/*.qmd
   - docs/contribute/research/*.qmd
   - docs/contribute/research/*/*.qmd
   - docs/contribute/history/*.qmd
-  - docs/contribute/internals/*.qmd
   - docs/contribute/sgb-design/*.qmd
 execute:
   enabled: false
@@ -168,6 +168,9 @@ website:
       contents:
       - docs/contribute/internals/geometry.qmd
       - docs/contribute/internals/api-owners.qmd
+      - docs/contribute/internals/aedt-runtime.qmd
+      - docs/contribute/internals/geometry-plan.qmd
+      - docs/contribute/internals/report-records.qmd
     - section: SGB 設計
       contents:
       - docs/contribute/sgb-design/index.qmd

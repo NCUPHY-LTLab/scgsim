@@ -1,6 +1,6 @@
 ---
-title: "Tetrahedral Mesh Quality"
-description: "The quality audit that mesh() runs, the report it writes, edge statistics and the version identities of a mesh."
+title: "Tetrahedral mesh quality"
+description: "Is the mesh good enough: the minSICN check mesh() runs on every tetrahedron, the quality report it writes with a real example, edge statistics, and the versions that tell two meshes apart."
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/mesh-quality"
@@ -8,96 +8,100 @@ aliases:
   - ../../mesh-quality.html
 ---
 
-For the preparation-stage reading sequence, use [solver observations](../../guides/inspect-the-prepared-model.qmd). This page owns what a Palace run records about the quality of its mesh.
+`mesh()` checks every tetrahedron against a quality threshold (0.01 by
+default) and, with the default `FeatureRecipe()` or any other recipe that
+enforces the threshold, delivers no mesh that fails it; the report it writes in
+the run's `mesh/` folder says what it found. `GmshDefaultRecipe` is the
+exception: it records the quality without enforcing the threshold. This page explains the measure, shows a real
+report, and lists what the report and the mesh summary record.
+[Inspect the prepared model](../../guides/inspect-the-prepared-model.qmd) shows
+where to look before you run a solver.
 
-## What `mesh()` audits {#audit}
+## What `mesh()` checks {#audit}
 
-`mesh()` meshes the SGB model with `scgsim.meshing`, which audits every
-tetrahedron of each round's mesh. The measure is the minimum signed inverse
-condition number (minSICN) of each element, taken on the linear mesh before
-any elevation to the geometry order. Every tetrahedron must reach the mesh's
-`quality_threshold` (default `0.01`); elements below it are refined in the next
-round of the repair loop, within the budgets of
-[Palace mesh controls](palace-electrostatic-sgb.qmd#palace-mesh-controls).
-A mesh that cannot be brought to the threshold stops `mesh()`, and no
-`palace.msh` is delivered. The sizes the audited mesh starts from, including
-those at film walls and on Surface-EPR band boundary curves, are the sizing
-recipe's ([Sizing recipes](palace-electrostatic-sgb.qmd#palace-mesh-recipes)).
+The measure is the minimum signed inverse condition number, **minSICN**, of
+each tetrahedron. It is 1 for a regular tetrahedron, falls towards 0 as the
+element flattens, and is negative for an inverted one. Every tetrahedron must
+reach `quality_threshold`, 0.01 unless you set another with `set_mesh`. For
+scale: the real report below has a lowest minSICN of 0.04212; in the
+[band-boundary measurement](palace-electrostatic-sgb.qmd#palace-mesh-band-edges)
+delivered meshes reached 0.08 to 0.23 with the multiple 2 and 0.014 to 0.019
+on the pad with the multiple 8, while a mesh that stalled held elements of
+0.003 to 0.004.
 
-The threshold is the meshing module's acceptance check for a valid element. It
-is not a scientific acceptance gate: convergence of a result is read from the
-solver's own outputs.
+With `FeatureRecipe`, `GlobalSizeRecipe` or `UniformBoundaryRecipe`, elements
+below the threshold are refined in the next repair round, within the
+[budgets](palace-electrostatic-sgb.qmd#palace-mesh-controls), and a mesh that
+cannot be brought up to the threshold stops `mesh()`: no `palace.msh` is
+delivered. `set_mesh(recipe=GmshDefaultRecipe())` meshes once without repair
+and delivers the mesh whatever its quality; the report still records the
+minSICN and the tetrahedra below the threshold, and its `stop` is
+`report_only` when there are any. The check is made on the linear mesh,
+before any raising to the geometry order.
+
+A mesh that passes is a mesh of valid elements, not a converged result:
+convergence is read from the solver's passes
+([the convergence declaration](palace-electrostatic-sgb.qmd#convergence-declaration)).
 
 ## The quality report {#quality-report}
 
-Each run writes the report to the run's `mesh/` folder as JSON
-(`<model>.quality.json`) and as a short text summary (`<model>.quality.txt`).
-The mesh manifest records the report's path and SHA-256.
+Each run writes the report to `mesh/` as JSON (`<model>.quality.json`) and as a
+short text (`<model>.quality.txt`). This is the text of a real report:
+SCGSim's test model of a 20 µm pad in a 40 µm ground cutout on a 100 µm die,
+Route B with MA, MS and SA bands at 0.5 and 1.0 µm, meshed by the meshing
+module with Gmsh 4.15.2 and the default settings:
+
+```text
+scgsim.meshing scgsim.meshing.features/2: clean after 0 refinement rounds
+  quality measure minSICN, threshold 0.01
+  19722 tetrahedra, min quality 0.04212, 0 below the threshold (linear mesh before elevation); algorithm 1, geometry order 1
+  143 sized curves, 0 local sizes, smallest -
+  total 1.7 s; limit 180 s, target 60 s for 0.0196 mm2
+```
+
+Read the first three lines first: how the repair ended (`clean`, or the stop
+reason), the lowest quality, and how many elements are below the threshold.
+The JSON holds the full record:
 
 ::: {.askr-table-compact}
 | Field | Records |
 |---|---|
 | `quality_measure`, `threshold` | `minSICN` and the threshold the run was held to. |
-| `stop`, `rounds`, `history` | How the repair loop ended and what each round changed. |
-| `mesh` | Tetrahedron and node counts, `min_quality`, `bad_count` below the threshold, `measured_on` (`linear mesh before elevation`), the delivered `geometry_order` and the 3D algorithm. `null` when no round produced a mesh. |
-| `meshing_stage` | Every finding of the meshing-stage check of the model, with the limits it used, as `simulation_drc` reports them. `null` for a delivered mesh. |
-| `remaining_bad`, `stop_places` | The elements still below the threshold, with location, groups and feature kinds, and where they cluster in micrometres with the fine edges or faces found there. Empty for a clean stop. |
+| `stop`, `rounds`, `history` | How the repair ended and what each round changed. |
+| `mesh` | Tetrahedron and node counts, `min_quality`, `bad_count` below the threshold, `measured_on` (`linear mesh before elevation`), the delivered `geometry_order` and the 3D algorithm. `null` when no round made a mesh. |
+| `meshing_stage` | Every finding of the meshing-stage check, with the limits it used, as `simulation_drc` reports them. `null` for a delivered mesh. |
+| `remaining_bad`, `stop_places` | The elements still below the threshold, with their place, groups and feature kinds, and where they cluster, with the fine edges or faces found there. Empty for a clean stop. |
 | `recipe`, `repair`, `mesher`, `budgets`, `time_budget` | The settings the run used. |
-| `timing` | Total, per-round, meshing and audit seconds. Kept under one key, so two runs of the same input compare equal without it. |
+| `timing` | Total, per-round, meshing and check seconds, kept under one key so that two runs of the same input compare equal without it. |
 :::
 
-minSICN is measured before elevation, so the report does not describe curved
-high-order elements of the delivered `palace.msh`. The manifest records the
-order and the native element types of the mesh that was written.
+The mesh manifest records the report's path and SHA-256, the order of the
+written mesh and its element types. The report says nothing about curved
+high-order elements, since it measures the linear mesh.
 
 ## Edge statistics {#edge-statistics}
 
-The Palace
-[mesh summary](palace-electrostatic-sgb.qmd#mesh-manifest-and-detached-summary)
-records each physical region's unique primary-corner edge count and minimum,
-mean, and maximum straight chord lengths in micrometres. These remain chords on
-curved high-order elements; they are not curved arc lengths or a higher-order
-quality metric. Point regions have zero edges and no length extrema. Missing
-historical statistics remain `not_recorded`.
+The [mesh summary](palace-electrostatic-sgb.qmd#mesh-manifest-and-detached-summary)
+gives each physical region's number of edges and the shortest, mean and
+longest edge length in micrometres, measured as straight chords between corner
+nodes, also on curved elements.
 
-## Version identities of a mesh {#version-identities}
+## Telling two meshes apart {#version-identities}
 
-A mesh that `mesh()` writes carries three versions. Read them to tell whether
-two meshes were made the same way.
+A mesh carries three versions; compare them to tell whether two meshes were
+made the same way.
 
 ::: {.askr-table-compact}
-| Identity | Example | Where it is recorded | When it changes |
+| Identity | Example | Where it is recorded | Changes |
 |---|---|---|---|
-| Package version | `scgsim 3.0.0rc4` | `scgsim_version` in the run's provenance (`metadata/route_b_provenance.json`, or `route_a_…` on Route A) | With every release of SCGSim. |
-| Recipe version | `scgsim.meshing.features/N` for `FeatureRecipe`, `scgsim.meshing.uniform-boundary/N` for `UniformBoundaryRecipe`, `scgsim.meshing.global-size/N` for `GlobalSizeRecipe` | `recipe.version` in each quality report and in the mesh manifest, beside `recipe.parameters` | Only when the sizes the recipe asks for change. |
-| Report format | `scgsim.meshing.report/N` | `report_version` in each quality report | When the fields of the quality report change. |
+| Package version | `scgsim <version>` | `scgsim_version` in the run's provenance (`metadata/route_b_provenance.json`, or `route_a_…` on Route A) | With every release of SCGSim |
+| Recipe version | `scgsim.meshing.features/2` for `FeatureRecipe`; `uniform-boundary/N`, `global-size/N` for the others | `recipe.version` in each quality report and in the mesh manifest, beside `recipe.parameters` | Only when the sizes the recipe asks for change |
+| Report format | `scgsim.meshing.report/N` | `report_version` in each quality report | When the report's fields change |
 :::
 
-A recipe's version goes up only when the sizes it asks for change. `FeatureRecipe`
-went from `features/1` to `features/2` when it began to size every Surface-EPR
-band boundary curve. So two reports with the same recipe version and the same
-parameters asked for the same initial sizes, even when they were made by
-different package releases; a different recipe version means the meshes were
-made by different sizing rules. The recipe version covers the initial sizes
-only: the repair policy is recorded in each report, and the Gmsh version in the
-mesh manifest.
-
-The versions are separate because one version for the whole meshing module
-would change whenever any recipe changed, and could not say which one did. A
-run with `UniformBoundaryRecipe` keeps its version when `FeatureRecipe` changes,
-so its reports stay comparable across that change.
-
-For example, the same default `FeatureRecipe()` on a flip-chip qubit with bands
-of 0.5 and 1 µm (the OrcaPen SC PDK `disk_flip_chip_qubit` under common ground
-planes, Route B) gives two different meshes under the two versions:
-
-::: {.askr-table-compact}
-| | `scgsim.meshing.features/1` | `scgsim.meshing.features/2` |
-|---|---|---|
-| Sizes asked for | 1.30 µm on the 801 film-wall curves | 1.30 µm on 3,104 curves: the film walls and every band boundary curve |
-| First mesh | 402,784 tetrahedra, 1 below the quality threshold | 569,325 tetrahedra, none below it |
-| Result | clean after one repair round: 407,093 tetrahedra, 82.5 s | clean in the first mesh: 569,325 tetrahedra, 53.4 s |
-:::
-
-The two quality reports name different recipe versions, so the different mesh
-comes from the sizing rules, not from anything else in the run.
+Two reports with the same recipe version and the same parameters asked for the
+same starting sizes, even from different SCGSim releases; a different recipe
+version means different sizing rules. The repair settings are in each report
+and the Gmsh version in the mesh manifest. Why the versions are kept apart,
+with a measured example of two recipe versions, is in
+[the internals](../../contribute/internals/report-records.qmd#mesh-version-identities).

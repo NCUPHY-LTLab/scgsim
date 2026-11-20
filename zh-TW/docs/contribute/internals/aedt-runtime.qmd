@@ -1,0 +1,347 @@
+---
+title: "AEDT 執行期內部實作"
+lang: zh-TW
+description: "AEDT 執行期如何準備、執行並讀回一次計算：交易、記錄格式與執行期來源、原生建構與讀回規則、Q3D 停止記錄，以及接面切分。"
+scgsim-kind: "implementation"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/contribute/internals/aedt-runtime"
+---
+
+本頁寫給 `scgsim.aedt` 的貢獻者。它記錄執行期如何準備交接、擁有 AEDT Desktop、建立模型、讀回並封存執行結果，以及寫出哪些記錄。使用者要準備、執行與讀取的內容在 [AEDT：執行什麼、回傳什麼](../../reference/specs/aedt-runtime.qmd)，本頁不重複。
+
+## 交易 {#transaction}
+
+SCGSim 負責唯一的可攜式 AEDT 生命週期：
+
+```text
+PDK geometry and material identities
+-> immutable handoff
+-> explicit local execution
+-> native AEDT readback
+-> hashed receipt
+-> strict result resolution
+```
+
+公開生命週期由單一交易負責者及三個私有系列管線組成：
+
+```text
+run.py: validate cohort -> write running receipt -> own Desktop -> dispatch
+family: prepare native model -> solve explicit setup -> export/read back
+run.py: release Desktop -> write final receipt
+```
+
+一般命令與僅準備路徑使用相同的私有系列準備函式及交易負責者。Q3D、HFSS EPR、HFSS Eigenmode 與 Driven Terminal 都接受 `--execute --prepare-only`，兩條路徑都不新增第二個 Desktop 負責者。
+
+每個系列在原生準備前只綁定要求一次。私有已綁定要求固定絕對執行工作區及獨立不可變規格酬載；後續即使 `chdir`，相對規格路徑仍以該工作區為基準，絕對來源路徑則保留原文字身份。系列準備只解析綁定酬載，再回傳含原生應用程式控制代碼及獨立準備讀回的承載物件。求解與匯出只接受此物件。匯出輔助函式使用另外的副本，因此輔助函式失敗或回傳結果被修改，都不能更動承載物件保留的準備證據。
+
+專案名稱有兩種明確表示。直接 Python 編寫沿用檔名正規化：移除所提供檔名最後的副檔名。標準 JSON 酬載保存已正規化專案名稱，因此反覆解析與序列化時保持逐位元組一致，包含名稱內的句點及本身以 `.aedt` 結尾的文字。交接準備原樣複製標準名稱。
+
+### 版本選擇與傳輸 {#release-transport}
+
+AEDT 2023.2 的 PyAEDT 1.3.0 使用同節點 gRPC 相容路徑，設定為 `use_grpc_api=True`、`grpc_secure_mode=False`、`grpc_local=True` 及 `grpc_listen_all=False`。交易在該次作業設定 `PYAEDT_USE_PRE_GRPC_ARGS="True"`，先保存既有傳輸環境，並在所負責 Desktop 釋放後還原，包含失敗清理。AEDT 2024.2 不覆寫傳輸設定。2023.2 要求不會降版或默默改送 2024.2；此契約也不新增遠端 Desktop 或排程器執行路徑。
+
+已儲存來源的版本、要求的 AEDT 版本與實際連線版本各自獨立。若產物沒有記錄來源，來源維持 `None`；仍允許分析，不要求補回這項歷史事實。SCGSim 不查找、猜測或遷移未知來源。明確要求選擇本機執行期，實際版本則來自已連線的 AEDT 應用程式，不直接採用要求值。PDK 超導體會轉換為 PEC，但保留來源材料身份。原生 HFSS 實體使用 `pec` 材料並停用 Solve Inside；原生 HFSS 片使用 `SCGSimPEC` Perfect E 邊界。完成時需重新讀回原生物件型別、材料或邊界型別、指定對象，以及完整面覆蓋。其他材料使用 PDK 提供的精確 AEDT 材料庫名稱；SCGSim 不自行編造數值材料性質。
+
+### 只準備模型 {#model-only-preparation}
+
+Q3D、HFSS Eigenmode 與 HFSS Driven 的公開幾何準備函式，以及 `EigenmodeSim.set_eigenmode()`，在要求只建構並讀回原生模型、不求解時，接受 `run_control=None`。標準 JSON 規格仍包含 `run_control` 成員；`null` 是明確的僅模型值。既有非 null 酬載編碼與雜湊意義不變。設定 `null` 時，準備不建立求解設定、EPR 快取或頻率掃描；它建構指定模型與指派、儲存專案、釋放所負責 Desktop，並記錄實際準備讀回。
+
+即使執行只選準備階段，提供完整執行控制仍會編寫要求的求解設定。`--prepare-only` 選擇執行階段，不移除或編造要求控制。求解要求缺少完整控制時，會在開啟 AEDT 前失敗。無分析、僅模型的 `HfssEprSpec` 可接受 `run_control=None`；EPR 分析／快取要求則必須有完整 Eigenmode 控制，不能用 `run_control=None` 跳過設定。
+
+## 記錄格式 {#current-formats}
+
+此版本已沒有原生 AEDT 建構器，它的執行資料夾不會被讀取：`execute_handoff`、`resolve_results()` 與 `analyze_epr()` 會拒絕其交接、要求與已儲存解，訊息說明請以此版本重新準備並執行研究。酬載帶有 `geometry`（原生建構器的）的要求、GDS 匯入路徑的 v1 HFSS 交接，以及缺少 `sgb_model_sha256` 與 `sgb_model_files` 的來源紀錄，都以這種方式遭拒。
+
+| 記錄 | 目前格式 |
+|---|---|
+| 交接中繼資料 | Q2D 與 Q3D 為 `scgsim.aedt.handoff.v1`；HFSS Driven Terminal、Eigenmode 與 EPR 為 `scgsim.aedt.handoff.v2` |
+| 交接清單 | `scgsim.aedt.handoff-manifest.v1` 與 `.v2`，與上列交接配對 |
+| 收據 | `scgsim.aedt.receipt.v3`，初始與完成皆同 |
+| 執行期來源 | `scgsim.aedt.runtime-source.v30`（[規則](#runtime-source)） |
+| HFSS EPR 要求 | `scgsim.aedt.hfss-eigenmode-epr.v2`；帶一個運算式快取收斂控制時為 `.v3`，帶一組時為 `.v4` |
+| 儲存場分析要求 | `scgsim.aedt.hfss-eigenmode-epr-analysis.v2`；帶表面場選擇器時為 `.v3` |
+| EPR 結果與模態能量列 | `scgsim.aedt.epr-result.v2` 與 `scgsim.aedt.epr-mode-energy.v2` |
+| 儲存解清單與收據 | `scgsim.aedt.saved-solution-manifest.v2` 與 `scgsim.aedt.saved-solution-receipt.v2` |
+
+每個 HFSS 三維與 Q3D 要求都帶明確的 `modeling`，以及準備它的 SGB 模型（位於交接的 `model/` 資料夾）；物理詮釋在模型之內。表面貢獻一律記錄 `loss_tangent`、`source` 與 `preset`，EPR 分析要求一律記錄 `bulk_domain_ids`。
+
+每個收據讀取器（執行、`resolve_results()` 與已準備模型讀取器）都先檢查收據結構版本，以及其中每筆執行期來源記錄的結構版本。`scgsim.aedt.receipt.v1` 或 `.v2` 收據，或執行期來源為較早結構版本的 V3 收據，會遭拒，訊息說明它由較早的 SCGSim 寫入並指出如何讀取。此檢查在讀取任何要求或結果之前進行，因此舊結果由這一條規則拒絕，而不是由它接著碰到的某個較舊格式拒絕。單獨讀取的 v1 EPR 結果或 v1 儲存解清單，也以相同訊息遭拒。
+
+新交接在中繼資料與清單寫入 `expected_receipt_schema: scgsim.aedt.receipt.v3`，其初始 V3 收據包含 `prepared_runtime_source`，即準備它之程式碼的[執行期來源](#runtime-source)。寫入 `running` 前，共用交易要求具兩個 V3 預期標記、標準清單及目前執行期來源的 V3 收據。每次新的 Q3D 或 HFSS 三維執行都需明確 `modeling`；`thin_film` 還必須在修改收據前提供對應來源宣告。
+
+驗證過的初始收據雜湊及準備清單雜湊，會以 `preparation_cohort: prepared_v3` 複製到可變 V3 收據。最終收據刻意不與初始雜湊比較，因為執行本來就必須修改收據。未知版本、混合或不完整標記、非標準成員與雜湊不符，都在修改收據前拒絕。
+
+每份完成收據都有另外的 `runtime_source` 記錄，`stage` 為 `actual`，識別實際執行它的程式碼。`resolve_results()` 先驗證精確相容群組、標記、標準準備清單、初始收據綁定及完整實際執行期清單，再套用系列結果檢查；HFSS 完成要求封存的原生 PEC 綁定證據。這些無簽章的一致性檢查，無法對抗能重寫所有成員的行為者以驗證產物真偽。
+
+純初始收據編解碼器負責精確 V3 成員順序、兩個空白的 JSON 縮排與結尾換行；準備來源資訊位於 `source` 與 `outputs` 之間。
+
+### 執行期來源 {#runtime-source}
+
+執行期來源列出組成一次 AEDT 執行的 SCGSim 原始碼檔案，以及每個檔案的 SHA-256。它在每次使用時計算，而不是凍結的清單：從 `scgsim/aedt` 下的每個模組，以及兩個 AEDT 視覺化載入器 `scgsim/visualization/loaders/aedt.py` 與 `aedt_receipt.py` 出發的靜態匯入閉包。走訪會跟隨每個指向 `scgsim` 模組的 `import` 與 `from ... import`（包含函式內的匯入），並加入沿途的每個套件初始化檔。`src` 中 AEDT 沒有匯入的檔案不會列入，因此移動、更名或刪除這類檔案不影響 AEDT 的準備或執行。
+
+每筆記錄有五個欄位：
+
+| 欄位 | 意義 |
+|---|---|
+| `schema_version` | `scgsim.aedt.runtime-source.v30` |
+| `stage` | 寫入交接時為 `prepared`，開始執行時為 `actual` |
+| `modules` | 每個檔案一筆 `module`、`path` 與 `sha256`，依路徑排序 |
+| `content_sha256` | `modules` 標準 JSON 的 SHA-256 |
+| `revision_observation` | 一個物件：`{"status": "available", "revision": "<40 位十六進位 Git commit>"}`，或 `{"status": "unavailable"}`（例如沒有 VCS 中繼資料的 wheel） |
+
+讀取器在下列條件全部成立時接受一筆記錄：
+
+- `schema_version` 為目前版本，`stage` 為預期的階段；
+- 路徑排序且不重複，每條都位於 `src/scgsim/` 之下且不含 `..`，每個 `module` 都是其路徑的點分名稱；
+- 路徑包含 `src/scgsim/__init__.py` 與 `src/scgsim/aedt/__init__.py`。每個 AEDT 匯入都經過這兩個套件初始化檔，缺少其一的清單就不是 AEDT 閉包；模組在 `scgsim/aedt` 內移動時，它們也不會移動；
+- `content_sha256` 與記錄的 `modules` 相符；
+- `revision_observation` 必須恰為 `{"status": "unavailable"}`，或是只含 `status`（`"available"`）與 `revision`（40 位十六進位 commit）兩個鍵的物件。
+
+讀取器不把記錄的雜湊與已安裝套件比較：它們陳述實際執行的位元組，而已安裝的程式碼之後可能不同。`revision_observation` 的狀態為 `unavailable` 本身不會使記錄失敗。
+
+結構版本較早（`runtime-source.v1` 至 `v29`）的記錄會遭拒，訊息說明它由較早的 SCGSim 寫入。請以寫入該結果的 SCGSim commit 讀取它；Git 可用時，`revision_observation` 會記下該 commit。`runtime-source.v30` 之前寫入的每份收據或交接，都帶有較早的結構版本。
+
+執行在收據綁定的失敗交易內、匯入 PyAEDT 或建立 Desktop 前，計算 `actual` 記錄。缺少原始碼檔案或記錄損壞時，會在不啟動 Desktop 的情況下產生失敗 V3 收據，而不是逸出收據收尾。`prepared` 與 `actual` 記錄是不同時間的證據，不要求兩者相等。
+
+系列儲存契約維持明確失敗原則。求解前 `save_project()` 回傳 false，會在原生執行前中止；匯出後回傳 false，則在報告完成前中止。SCGSim 不把任何一種狀態改成部分成功收據，也不推定原生專案位元組可用。
+
+## 集總埠片、Net 名稱與 EPR 積分 {#hfss-shared-lumped-support}
+
+`LumpedRlc` 與 `LumpedTerminalPort` 指名一個 `port_sheet_id`：計畫中的一個埠片，SGB 模型把它記成 `PORT::<port_sheet_id>` group，與 Palace 的集總元件相同。不再有另外的支撐紀錄。`prepare_sgb_model()` 把每一個綁到它的 group；模型中沒有該 group 的名稱會被拒絕，接面、RLC 或集總埠共用同一個埠片也會被拒絕。在 HFSS 中，每個埠片都必須帶有一個接面、一個 RLC 或一個集總 Terminal 埠。
+
+HFSS 匯入把每個 `LumpedRlc` 放在它的埠面上，方式與接面相同：在匯入的 face 上建立一個 Lumped RLC，電流線沿 sidecar 的 `direction`，連接這些 face 自身兩端 edge 的中點。
+
+SGB 流程的 handoff 帶著它的模型：STEP、寫出它的 BREP、sidecar 與 guard 複製到 handoff 的 `model/` 資料夾，要求中記錄的是這個相對資料夾。在執行 AEDT 的機器上，匯入任何東西之前，每個檔案都會依記錄的 SHA-256 再檢查一次。handoff 的來源紀錄綁定模型的識別與四個檔案的雜湊；沒有這些的紀錄屬於原生建構的模型，會被拒絕。
+
+SGB 模型的 EPR 不經 AEDT，從 sidecar 與準備好的紀錄讀出要積分的對象（`scgsim.aedt.epr.sgb_source`）。區域是匯入的介電實體（以 AEDT 物件名稱為鍵）與 `Region`：不論方盒內有幾個真空體積（橫跨整個方盒的基板會把真空分成上下兩塊），都只有一個 `Region` 區域，因為 Region 是一個方盒，這些體積必須共用一種材料。導體實體是 PEC，內部沒有場。每一列已宣告型別的 sidecar Surface-EPR 列各積分一次，積分在由它的面複製出的非模型 sheet 上；sheet 列的面只取其 `face_sides` 列出的那些，所以懸空在真空上的 sheet，其 `MS` 列不含懸空的面。回報的貢獻依 Palace `Dielectric` 列的方式分組：每個介面型別與表面單元（一列沒有條帶的列，或一個條帶 family 的全部條帶）有一個涵蓋全部列的 baseline，每個 inset 邊距另有一項涵蓋從該邊距的條帶起到最後的條帶，名稱與 Palace 的項目相同；一項的能量是其各列能量之和。AEDT 沒有 Palace 的 `Model.L0`，所以以 Palace 原生 `thickness` 給的 film 會被拒絕；請給 `film_thickness_m`。junction 電壓是沿其 port 在 sidecar 中的 `direction` 的場的面積分，除以 port sheet 橫跨該方向的寬度，寬度讀自 sidecar 的 port 紀錄；`PlanarJunction` 的 `width_um` 與此寬度相差超過模型的 `tolerance_um` 時，`prepare_sgb_model()` 會拒絕。每一列在它的 sheet 上有三個運算式（電場法向與切向積分及面積）；一列可能包含多個朝向的面與曲面牆，所以法向量取 sheet 在每一點自己的法向（`Operation('Normal')`），而非單一向量。junction 電壓在由其 port 面複製出的非模型 sheet 上積分。公開的 HFSS Eigenmode 流程以此執行（見 [Eigenmode 已儲存場](#eigenmode-saved-fields-and-surface-epr-direction)）。
+
+在 AEDT 中，`modeling="thin_film"` 建立 Route A，並把有限 body（bump、post）保留為導體 solid（`ROUTE_A_RETAINED_BODIES`；sidecar 的 `route_policy.conductor_volumes` 為 `retained`），匯入時設為 PEC，與 Route B 請求以 Route C 建立的方式相同。這種 body 所站的 sheet face 會在 body 與基板上各匯入一份；它的 Surface-EPR row 讀取基板那一份，也就是 body 被排除時它唯一的那一份。
+
+## HFSS Driven Terminal 的建構 {#hfss-driven-terminal-sgb}
+
+`prepare_hfss_driven_from_geometry(model=...)` 為一個 `PreparedSgbModel` 準備 Driven Terminal 交接，其 `lumped_ports` 就是它的兩個埠（`prepare_sgb_model(..., ports=...)`）。`HfssDrivenGeometrySpec`（結構 `hfss-driven-geometry.v1`，模式 `terminal`）攜帶此模型；它的 `ports` 就是模型的埠。要求必須有埠 1 與 2，名稱不同，並共用一個有序參考；每個埠片的兩個宿主 Entity，必須是該埠的一個訊號 Entity 與一個參考 Entity，且一個埠的任何 Entity 不得同時是兩者，讓兩個宿主分擔兩個角色。Driven 模型不帶接面、集總 RLC 或 Surface-EPR 規格。交接在 `model/` 中攜帶模型的四個檔案，收據來源綁定 `sgb_model_sha256` 與 `sgb_model_files`，與 HFSS Eigenmode 相同。帶有 `geometry`（原生建構器的）的要求酬載會遭拒，並說明原因。
+
+在 AEDT 中，執行會把 STEP 匯入空白的 Driven Terminal 設計（`import_sgb_model`），Region、其 Perfect H 與每個 Route A Net 的 Perfect E 都與 Eigenmode 相同。帶有集總 Terminal 埠的模型只匯入 Driven Terminal 設計，而 Driven Terminal 設計也只接受帶有這些埠的模型。接著每個埠依序為：
+
+1. **薄片。** 位於匯入實體上的埠面，會依 guard 中每個面的精確頂點迴圈重新畫成一個薄片物件 `port_sheet_<port_sheet_id>`，並與 guard 的面積比對；不是其頂點所成平面多邊形的面會遭拒。AEDT 2024.2 匯入的基板面與旁邊導體實體相距約 2e-8 µm，Terminal 埠找不到這些導體。自由面本身已是這樣的薄片。
+2. **埠。** 一個 Terminal `Lumped Port`，以要求中的名稱命名，覆蓋薄片各面，使用要求的阻抗與 `renormalize`。
+3. **Terminal。** `<name>_T1`，位於薄片在訊號宿主一端、沿 sidecar `direction`（由薄片第一個宿主指向第二個）的直線邊上；這些邊必須構成一條連續線段。AEDT 會把帶積分線的集總埠做成沒有 Terminal 的 Modal 埠，即使在 Driven Terminal 設計中亦然，因此 Terminal 指派在邊上。
+
+儲存後，每個埠都從已儲存的設計讀回：一個正好位於其各面上的 Terminal `Lumped Port`，以及它唯一的 Terminal，即正好位於其各邊上的已儲存子項。AEDT 若記錄了參考導體，它們必須是各埠參考宿主的導體實體；AEDT 2024.2 在兩種路徑上都沒有記錄任何參考導體，而 Route A 的宿主是 Perfect E 薄片，不是實體。收據保留這些紀錄、原生屬性與 AEDT 記錄的參考導體。結果讀取要求收據的幾何就是請求的模型匯入後的樣子（其識別與 guard 的實體）、每筆埠紀錄就是匯入所建立的那一筆，以及所宣告掃頻的有序 S 參數與 Touchstone。
+
+`LumpedRlc` 要求明確 `series` 或 `parallel` 拓樸。R、L、C 分別選擇，`None` 停用對應元件；每個啟用的一般 R、L、C 值，在數值轉換後必須有限。零仍表示啟用，有限負值保留。目前建構器會拒絕含非有限值的歷史一般 RLC 酬載，包含解碼；限制只適用於這些一般 RLC 元件，不延伸到其他電路或 EPR 量。`EigenmodeSim.add_lumped_rlc()` 加入模型負責的集合，每個埠片一個處理，`HfssEprSpec` 只投影準備清單，不建立第二份可編輯副本。模型來源雜湊包含 RLC 資料。此一般線性網路不是 Josephson 接面，不建立 `PlanarJunction`、接面參與率或 EPR 貢獻；既有接面與已儲存場 EPR 結果契約保持分開。
+
+## 原生設定對應 {#aedt-family-setup-controls}
+
+公開執行控制模型表達呼叫者意圖，不揭露可變 AEDT 設定屬性字典。私有系列映射把每個型別化控制轉成該求解器的原生設定與已儲存屬性讀回。上述雙版本契約在 AEDT 2023.2／2024.2 與 PyAEDT 1.3.0 下維持相同控制詞彙。
+
+| 系列 | 公開執行控制 | 原生設定映射 |
+|---|---|---|
+| HFSS Eigenmode，包含 EPR | `EigenmodeRunControl` | `scgsim.aedt.runtime.native.hfss_eigenmode` 的唯一私有映射，把七個控制對應至 `MinimumFrequency`、`NumModes`、`MaxDeltaFreq`、`MaximumPasses`、`MinimumPasses`、`MinimumConvergedPasses` 與 `PercentRefinement`，一般 Eigenmode 與 EPR 共用。 |
+| HFSS Driven Terminal | `HfssRunControl` | Driven-HFSS 自適應設定與頻率掃描在 HFSS 系列內轉譯。 |
+| Q3D | `MatrixRunControl` | Q3D 負責自己的 `Cap` 區塊；`AC` 與 `DC` 區塊保持停用。 |
+| Q2D | `MatrixRunControl` | Q2D 負責自己的 `CGDataBlock` 與 `RLDataBlock` 控制。 |
+
+共用的 Q3D／Q2D 要求詞彙，不表示原生區塊可互換。同樣地，共用原生執行期負責 Desktop 生命週期、ACF／資源處理及已儲存 `AnalysisSetup` 樹的存取；取得原始屬性不解釋求解器欄位，也不取代各系列自己的儲存設定讀取器。EPR 將運算式快取項目加入共用 Eigenmode 基礎設定，並負責這項擴充，不另建第二份自適應場映射。
+
+各系列都不能只根據要求中的 PyAEDT 物件屬性報告完成。收據記錄直接 AEDT 狀態，並雜湊每個已解析輸出。解析器拒絕不支援系列、部分輸出、混合執行身份、未解析原生指派，以及路徑／雜湊不符。同樣地，僅有 `completed` 標籤和 `.aedt` 檔，不能證明存在或可重用已儲存場；只有封存並經解析器檢查的版本化系列證據才有此意義。
+
+## solid 與 thin_film 的物理解讀 {#aedt-solid-thin-film}
+
+所選 PDK／來源宣告 `PhysicalLayerDeclaration`，包含物理身份、來源 level／選取器、來源區間、材料身份、`feature_kind`、物理尺寸與編寫的接觸事實。特徵種類為 `stack_film`、`local_film`、`finite_volume`。來源承載欄位為 `physical_layer`；新的 `aedt_modeling` 中繼資料與角色推導路徑分類已退役。不從名稱、Net、材料、大小、鄰近或相同 Z 值推定分類。同一物理層身份在多邊形與放置實例間共用，沒有另外的 stack 識別字；輸入使用唯一明確編寫的 LayerStack 組裝座標系。
+
+只有來源選取的物理 level 進入解讀宣告集合；未使用的目錄膜不會讓模型坍縮。已選取且具來源身份的橋接入射關係保留為來源證據；一般未編寫的 bridge／bump 接觸仍為缺少。兩者都不能建立原生連通性或 HFSS 場側對應。
+
+明確 `ApproximationProfile` 與共用 `PhysicalRepresentationPlan` 負責座標映射、逐本體解讀、層綁定支撐投影，以及完整要求的包絡。有限體積映射自己的實際本體端點，不直接採用整個名目層跨度。膜物理厚度仍是來源法向厚度；TSV 壁的徑向厚度不是軸向跨度。沒有層宣告的明確 Solid 幾何，可使用共用恆等計畫，不編造物理 ID。
+
+兩種模式都保留來源 XY 外框、孔洞、材料身份、物件與 Net 名稱，以及 Net-to-Objects 一對多關係。不在 Net 層級聯集幾何。來源幾何、有效幾何、介電介面、埠、Region 放置與 EPR 幾何共用有效堆疊映射，同時保留分開的來源／有效來源資訊。來源物理事實不被有效表示覆寫。
+
+對由 GeometryPlan 轉換的幾何，衍生子物件的 Ground 身份仍限於來源元件實例。保留來源外框、孔洞、呼叫者 Net 成員及所記錄實例變換，且只套用變換一次。不從父物件、Net 名稱或外接框推定物理 Ground。物理 Ground 角色與求解器原生 Net 型別是兩項分開的明確事實。
+
+理想超導體由層疊的材料紀錄決定，並保留 Al、Nb 等原材料 ID。實體映射到原生 `pec`；薄 Q3D 本體使用 `ThinConductor`、材料 `pec` 與具有明確單位的宣告物理厚度；薄 HFSS 本體使用 `Perfect E`。非超導介電與真空指派採明確 PDK AEDT 材料庫對應。不支援的材料模型明確失敗，不改用室溫材料或損耗模型。
+
+## 掃描點數的保管 {#hfss-driven-sweep-count}
+
+綁定點數同時約束原生掃描設定、匯出與回傳資料讀回／讀取器筆數。回傳頻率及有順序的網路資料必須屬於該要求，並保留既有端點、單位、埠順序、來源／讀回及雜湊綁定。對其他要求點數，不存在隱藏的 20,000 點匯出或讀取器假設；不重新取樣、內插或備援至其他掃描。
+
+有效的歷史 20,000 點資料及其標準輸入／收據綁定，仍依既有身份有效。數值 `20000.0` 不會只因原生 API 使用整數計數，就變成無效歷史要求。改變呼叫者點數會建立另一個要求，不重新標記舊回傳資料。此點數方向不改變 Q2D／Q3D 行為；資格判定由下方獨立 HFSS 收斂觀察方向規範。取樣是否足夠仍由呼叫者作研究判讀，不由 SCGSim 選一個點數門檻。
+
+## 收斂判定 {#hfss-convergence-observations}
+
+此觀察契約只涵蓋 HFSS Driven 與 Eigenmode。原生收斂狀態、呼叫者編寫的準則及變更、回報 delta、最終回合（pass）與可用原生記錄，都保持為觀察。Eigenmode 的 `Current Consecutive Passes` 及原生收斂歷史，仍保留在雜湊綁定的 `adaptive-convergence.prop` 匯出。解析器讀取並檢查此計數結構；既有正規化結果／報告不揭露該計數，也不重現完整原始歷史。SCGSim 只移除下列三項額外資格拒絕：
+
+- 原生判定已收斂時，不會僅因最終回報 delta 超過呼叫者目標而拒絕：Driven 為最大 delta-S 幅值（比率），Eigenmode 為頻率變化（百分比）。
+- 原生判定未收斂時，不會僅因最終回合不等於設定最大值而拒絕。
+- Eigenmode 原生判定已收斂時，不會僅因回報連續回合數低於要求最小值而拒絕。
+
+原生分類與當時數值一起保留，不獨立認證準則或研究充分性。單憑回合數無法解釋原生作業停止原因；未知原因保持未知，不標為 OOM、walltime 或成功提前停止。實際 OOM／walltime 中斷、原生 analyze／save 失敗及不完整／損壞回傳產物，維持真實失敗意義。這項變更不把失敗／未完成作業標成完成，也不重新分類舊 FAILED 收據。
+
+要求設定身份（C4）、跨匯出自洽性（C5）、原生／來源身份、必要格式與產物雜湊仍會檢查。要求控制與回傳證據仍必須屬於同一次執行。下方獨立的 [Q2D／Q3D 觀察契約](#q2d-q3d-convergence-observations)負責矩陣系列資格。呼叫者依[結果閱讀課程](../../guides/convergence-and-reports.qmd#interpret-for-scq-use)針對預定 SCQ 用途解讀數值／歷史；此方向不新增數值充分性門檻或科學認證。
+
+### Q2D 與 Q3D {#q2d-q3d-convergence-observations}
+
+Q2D／Q3D 契約將原生觀察方向套用到下列兩項額外資格，和先前僅 HFSS 的範圍分開：
+
+- 原生判定已收斂時，不會僅因最終回報 delta 超過設定目標而拒絕。
+- 原生判定未收斂時，不會僅因完成回合數不等於設定最大值而拒絕。
+
+原生狀態、目標、最終 delta、完成回合與來源，仍記為觀察。針對預定研究解讀矩陣量時，應保留呼叫者實際控制及變更。原生分類不獨立認證準則或研究充分性。僅有回合數不能辨識 OOM、walltime 或成功提前停止，未知原因仍維持未知。
+
+原生 analyze／save／export 失敗及缺少／損壞產物，保留失敗意義，既有 FAILED 收據不重新分類。必要指標／控制格式、設定控制身份、原生／來源身份及產物綁定仍會檢查。Q2D 單檔主要矩陣匯出、有限 C/G/L/R 資料、單位、頻率、導體順序與歷史讀取器不變。此行為不改 API／結構或數值精度，也不建立研究門檻或科學認證。
+
+## HFSS Eigenmode 頻率匯出 {#hfss-eigenmode-native-frequency-export}
+
+共用 HFSS Eigenmode 匯出器接受三欄的純實數模式列（`mode`、實數 `frequency_ghz`、原生 `Q`），以及六欄複數頻率列（`mode`、實頻率、`+` 或 `-`、虛部幅值、小寫 `j`、原生 `Q`）。儲存的 `frequency_ghz` 是實部。解析器驗證虛部為有限值，但不把它轉為阻尼或計算 Q，而是保留原生 Q token 的數值。原始 `eigenmodes.eig` 保留在雜湊輸出清單，因此複數虛部符號與幅值仍可作原始來源資訊使用。
+
+正規化 `eigenmodes.csv` 欄位仍為 `mode`、`frequency_ghz`、`q_factor`；`result_readback.eigenmodes` 欄位及收據結構不變。一般 Eigenmode、EPR 求解與已儲存場 EPR 分析共用此匯出器；已儲存場分析評估各模式時使用頻率實部。
+
+版本、設計、設定及表格標頭仍必填。表格標頭後可有空白與註解列。非註解主體列若形狀不支援、模式非正或不是 ASCII 整數、分隔符號錯誤、數值欄位無效／非有限、實頻率非正或 Q 為負，就會以指明行號的格式錯誤／無效列錯誤失敗。有效列仍必須精確為要求的 `1..num_modes` 順序；缺少、重複或亂序模式索引，會由另一項原生模式數／順序檢查拒絕。因此，格式錯誤列不會被報為缺少求解器模式。這些只描述解析器行為，不建立私有消費端求解或 EPR 結果。
+
+## 效能記錄的擷取 {#native-simulation-benchmark}
+
+每次新完成的 HFSS Driven Terminal、Eigenmode（含 EPR）、Q3D、Q2D 求解，都在所負責 AEDT 工作階段內寫入版本化 `results/simulation-benchmark.v1.json`，執行收據記錄名稱與雜湊。`status` 區分完整原生效能資料、無法提供資料，以及效能 API／格式錯誤；後兩者不會把成功物理求解改成求解器失敗。聲稱的 JSON 無法寫入或雜湊，則屬產物完整性失敗。沒有此輸出的歷史完成收據仍可讀，顯示 `not_recorded`，不合成舊效能測量；聲稱存在但缺檔或雜湊不符，會被 `resolve_results()` 拒絕。
+
+效能資料保留精確原生設定、variation、求解程序群組、自適應回合與階段身份。只記錄可取得的原生 real／elapsed 與 CPU 時間、原生 Memory 的格式化字串和 PyAEDT 轉換，以及明確標示的四面體、求解元素或線性矩陣大小。終端結果矩陣維度不稱為求解器矩陣大小。階段峰值取最大值而不相加；父子時間可能重疊，不累加。缺少指標及 Q3D 自適應效能限制保留為無法提供，不填零。SCGSim 收據 wall time 與原生作業時間分開。擷取直接走訪原生 `results/profile` OO 樹，使原生讀取失敗成為效能資料錯誤，而非默默略過群組；也保留帶原生 variation 身份的設定根節點純量屬性。
+
+記憶體單位轉換不代表量的適用範圍。[v242 HFSS 作業效能定義](https://ansyshelp.ansys.com/public/Views/Secured/Electronics/v242/en/Subsystems/HFSS/Content/ReportsandPostProc/ViewingaSolutionProfile.htm)將 Memory 定義為執行該作業之執行檔使用的實體 RAM 峰值。SCGSim 只在以下情況把擷取的 `results/profile` 列認定為合格作業列：原生 `Name` 符合列身份、`Real time`／`Cpu time`／`Memory` 作業欄存在且可解析時間指標，並且不在明確 HPC 資源子樹內。不合格的 Memory（含 HPC Machine 資訊）保留原生值並標示範圍未知，不推定為主機容量或用量。階段記憶體峰值只納入合格作業列，沒有時維持無法提供；它是觀察到的作業峰值最大值，不是整台主機峰值或總和。唯一純獨立投影同時供擷取、驗證過的離線讀取及直接 Report 顯示使用。Receipt V3 與 benchmark v1 帶有此共用歸屬葉節點。
+
+## Q2D 矩陣匯出 {#q2d-native-combined-matrix-export}
+
+新 Q2D 執行的標準結果集合只含一個矩陣產物：`results/q2d/rlgc_matrix.csv`。既有 2024.2 原生匯出映射使用 PyAEDT 1.3.0 `Q2d.export_matrix_data(problem_type="CG, RL")`。這項版本專屬方法參考不設定預設版本，要求仍依上述規則明確選擇 AEDT。產物主要結果區塊為電容（C）、電導（G）、電感（L）及電阻（R）矩陣；同一匯出可含原生耦合或 Spice 區塊，但它們不是額外主要結果矩陣。
+
+原 `results/q2d/cg_matrix.csv`、`results/q2d/rl_matrix.csv` 與正規化 `results/q2d/matrices.csv` 已被取代，不出現在新執行清單，SCGSim 不產生相容副本。`resolve_results()` 綁定唯一原生產物，`result.primary_csv` 指向該檔；`result.physics_results()` 揭露解析後主要 C/G/L/R 列，不建立第二份產物。
+
+解析要求已連線 AEDT／PyAEDT 版本、宣告設定與 `LastAdaptive` 解、頻率、每單位長度單位、導體順序及每個主要矩陣值，都符合封存執行且數值有限，否則明確失敗。
+
+## Q3D 的建構 {#q3d-extraction-and-region-ground-candidate}
+
+目前 Q3D 要求只使用 `scgsim.aedt.q3d.v3`。`Q3dSpec` 攜帶 AEDT 匯入的 `PreparedSgbModel`，以及該模型每個 Net 各一個 `Q3dNetSpec`（[SGB 模型上的 Q3D](#q3d-sgb-model)）；不宣告本體、GDS 匯入或逐片綁定。下述其餘專案、Net、執行控制、Region 及擷取控制保持既有意義。
+
+`Q3dNetSpec.name` 是 Net 的 AEDT 名稱（清理後的 ID），`Q3dNetSpec.object_names` 指向模型中屬於該 Net 的導體物件，因此一個 Net 可含多個物件，每個導體物件恰屬一個 Net。Net 不帶源或匯。
+
+Region 接地時，SCGSim 從名為 `Region` 的 AEDT 物件六個原生面，恰建立六張 PEC `ThinConductor` 片。片維持分開、邊接觸的幾何物件，只指派給產生的 Region 包絡 Net；不聯集或新增物理橋。宣告的物理 `Ground` Net 與原生物件指派不變。
+
+建構仍使用 PyAEDT 1.3.0 公開 API。求解前專案儲存後，執行期呼叫原生 AEDT `ValidateDesign`；收據封存成功驗證、產生 Net 與片指派。另綁定精確 `+X`、`-X`、`+Y`、`-Y`、`+Z`、`-Z` 方向；建立片前的 Region 物件與面身份、中心、法向；另外讀回的最終 Region 面；已建片物件身份與名稱；薄導體邊界名稱；Region 邊界；產生 Net 身份；以及原生 Net／邊界指派讀回。
+
+解析器要求封存指派與原生讀回精確一致，確認產生 Net 和宣告物理 Net 的指派互斥，並驗證宣告物理 `Ground` 指派未變。缺少、重複、不符、非原生或不成功的驗證證據，都會拒絕執行。最終求解後專案儲存之後，會再次讀取同一份原生 Region 與邊界證據，才使其成為收據依據。
+
+模型片放在 Region 面上後，AEDT Region 歷史會再次擴張。因此 SCGSim 先保存 Region 的原生面，在該處建立六張片，再以零額外偏移重建最終原生 Region。最終 Region 保留模型的 `VACUUM_REGION` 邊界與匯入 Region 的材料；收據明確記錄零偏移收尾。
+
+沒有相容備援、物理橋或聯集路徑。
+
+### 匯入 SGB 模型 {#q3d-sgb-model}
+
+交接在 `model/` 資料夾中攜帶模型的 STEP、BREP、sidecar 與 guard，清單中列於 `aedt_spec.json` 之後；收據來源綁定 `sgb_model_sha256` 與 `sgb_model_files`。在 AEDT 機器上，要求會對照該資料夾解碼，並再次檢查每個檔案。宣告原生建構 `bodies` 或 `region_padding_um` 的要求，或缺少模型鍵的收據來源，會附理由拒絕；不轉換舊 Q3D 要求。
+
+執行期把受 guard 保護的 STEP 匯入空的 Q3D 設計（`import_sgb_model`）：物件必須恰為 guard 的實體，每個面對應到其規劃面，材料與 Region 建立後讀回。在 Route A 中，先把每個導體片群組（`SHEET`）從其所在面複製重建為一個以群組命名的片物件，並設為厚度取自堆疊層薄膜物理厚度（`PreparedSgbModel.sheet_thickness_um`）的 PEC `ThinConductor`，再讀回。接著以各 Net 的 Q3D 類型指派要求的 Net，並讀回每個 Net 的物件。
+
+結果讀取要求收據的幾何帶有模型身份與 guard 的實體，Net 是要求的那些，且 Region 在讀回容差內為模型的 `VACUUM_REGION` 方盒。
+
+### 只建構不求解 {#q3d-native-build-only-execution}
+
+Q3D v3 透過既有 `python -m scgsim.aedt.run --handoff <run-dir>/metadata/aedt_handoff_metadata.json --execute --prepare-only` 入口，提供明確啟用的原生僅建構操作。它沿用求解路徑的模型匯入、材料／Net 指派、Region 與設定建立／讀回、專案儲存及所負責 Desktop 釋放，不呼叫原生 `Analyze`、建立求解器網格、求解，或匯出矩陣／收斂資料。收據記錄 `status="native_preparation_only"`、`solver_invoked=false` 及 `resources.status="not_used_prepare_only"`，唯一原生輸出是已儲存 AEDT 專案。此次執行會消耗一次性交接，後續求解需重新準備交接。嚴格 `resolve_results` 仍要求已完成求解結果，不把僅準備收據解析成結果。一般 Q3D `--execute` 行為不變。
+
+v3 交接的允許路徑為 `run_aedt.sh`、`aedt_spec.json`、`model/` 下模型的四個檔案，以及三個 metadata 檔案；清單 `members` 略過自身路徑，其他檔案的順序與雜湊不變，共九條允許路徑、八筆成員。
+
+### 停止／中止並儲存的記錄 {#q3d-stop-abort-ledger}
+
+兩種要求與它們的命令列動作見[使用者頁面](../../reference/specs/aedt-runtime.qmd#q3d-user-requested-stopabort-and-save)。
+
+請以其中一種操作取代 `--execute`；兩種模式互斥，也不能與 `--prepare-only`、Analyze／Solve 控制或 `--cores`、`--ram-limit-percent` 等資源覆寫同時使用。兩者共用私有控制 ledger 與穩定鎖。請求器是獨立的本機 Linux 程序，綁定精確的作用中交易：Desktop 建立識別（起始時間、開機識別與 UID）、PID、連接埠、完整專案、設計、設定、執行階段／輸入識別及 nonce。它不會連線至預設或最新 Desktop。重複已提交的模式具冪等性；衝突模式會遭拒，不再呼叫原生 RPC。不支援的平台會在連接 Desktop 前失敗。
+
+在 Linux 上，停止管理型 Q3D 執行模式會在建立 Desktop 前拒絕 PyAEDT 文件產生模式（`PYAEDT_DOC_GENERATION`），因為該模式會覆寫排他交易擁有權所需的 Desktop 關閉旗標。
+
+Recorder 會保留阻塞中的 Analyze。Clean Stop 呼叫 PyAEDT `Desktop.stop_simulations(clean_stop=True)`（原生 `oDesktop.StopSimulations(True)`）；Abort 則以 `clean_stop=False` 中斷目前工作。收據會分別記錄模式／意圖、RPC 結果及原始原生回應。RPC 正常返回並非確認；回應不作解讀，不能證明已中斷或成功。Analyze 的返回／例外及 Stop／Abort RPC 都不能證明原生求解已停止或已成功儲存。
+
+Analyze 結束後，recorder 關閉新請求並觀察一次原生 `odesktop.AreThereSimulationsRunning(True)`。其 `True` 引數包括執行中與待執行的模擬；只有原生 `False` 才確認已停止。若原生狀態仍在執行、未知或不可用，或控制 ledger 關閉／讀寫／回讀結果不確定，流程便失敗，並以非關閉 detach 保留 Desktop（`release.ok=false`），延後 Save／匯出；不會捏造意圖、`normal_stop_saved` 或 `abort_saved` 狀態，不寫入執行後封存，也不自動清理保留的 Desktop。後續處置仍由擁有者明確決定。
+
+原生已停止且控制 ledger 狀態明確時，recorder 會先嘗試本次交易的明確 Save；準備階段的存檔不符合此要求。接著獨立嘗試並記錄所要求且可用的已完成結果矩陣與原生收斂匯出。即使匯出或讀取解析失敗，實際產生的原始原生檔案仍會保留，並如實記錄可用性與錯誤。選用輸出不代表遭中斷的通過已完成，也不保證可復原或完整。只有明確 Save 成功才會關閉／釋出 Desktop。Save 失敗時收據為 `FAILED`；recorder 會以 `release.ok=false` 與原因 `save_failed` 非關閉 detach，保留專案、Desktop、可取回產物及擁有權／錯誤證據，不產生執行後封存，也不自動清理。成功釋出後才能封存實際釋出的識別資訊。
+
+`normal_stop_saved` 與 `abort_saved` 必須符合相符的已提交意圖、RPC 回傳、Analyze 成功、已確認原生停止、明確 Save 與 Desktop 釋出成功，以及執行後封存。它們僅表示停止／中止並儲存流程完成，不代表物理求解完成，也不證明請求造成終止；Analyze 也可能自然結束。Analyze 失敗或例外仍是主要錯誤，因果關係未知；控制模式／意圖、ACF 還原、RPC、Save／匯出及釋出錯誤分別保留。選用匯出錯誤不決定停止／中止流程狀態，也不會使流程成為已完成求解結果。嚴格的 `resolve_results()` 與 Report 行為維持不變，不新增部分結果讀取器或 Report API。不進行輪詢、等待、再次 Stop／Abort、重試或自動清理。此控制僅適用於此執行階段新登記的執行，不回溯套用於舊執行。沒有請求意圖的一般 Q3D、HFSS、Q2D、Eigenmode EPR 與非 Linux 流程維持不變；Eigenmode EPR 不自動部分儲存的規則也維持不變。
+
+## HFSS Eigenmode 與 EPR 的建構 {#eigenmode-saved-fields-and-surface-epr-direction}
+
+HFSS Eigenmode 在 Palace 網格化的同一個 SGB 模型上執行。`EigenmodeSim.prepare_handoff()` 以 `prepare_sgb_model()` 從 plan 及其 junction、集總 RLC 與 Surface-EPR specs 建出模型，並寫出攜帶它的交接資料；之後 `EigenmodeSim.prepared_model` 就是交接資料中的模型。在執行 AEDT 的位置，請求以交接資料夾為基準讀取，模型的四個檔案再檢查一次，然後依下列順序建立 Eigenmode 設計：
+
+1. `import_sgb_model()` 匯入受 guard 保護的 STEP，將每個面對應到規劃的面，重建 free faces，實現材料與 Region，並指派 Perfect E、junction 的 Lumped RLC 與一般 RLC；
+2. 對 EPR 請求，從匯入的面複製出每個選取的 Surface-EPR 列一張非模型 sheet，每個 junction 一張電壓 sheet；
+3. 建立 setup；
+4. 從 sidecar 的列編譯 EPR 運算式並一次載入，並提交所要求的運算式快取；
+5. 儲存專案並讀回 setup。
+
+收據的幾何紀錄就是匯入紀錄：每個規劃的實體與其 AEDT 物件、每個規劃面的匯入副本、重建的 sheet、每一項指派、選取用的 sheet 與模型識別。讀取結果時，模型識別、guard 實體或綁定檔案雜湊與請求的模型不符的收據會被拒絕。
+
+儲存場分析（`analyze_epr(model=...)`）複製已儲存的專案並以名稱重新綁定：guard 的實體、Region，以及其運算式讀取的每一張列與 junction sheet 都必須在已儲存的設計中，且已儲存的解必須指向相同的模型識別。`surface_field_selectors` 以相同的群組為鍵：`surface` 讀取列在其 sheet 上的場（`EnterSurface`），`adjacent` 讀取緊鄰其外的場（`EnterAdjacentSurface`）；兩者的面積都是 sheet 的面積。原生建模器的交接資料、已儲存的解或收據會被拒絕。
+
+每個所需場量都在明確綁定的 setup、`LastAdaptive` 解、模態、頻率、相位與激發條件下評估，並與數值一同讀回；單靠已儲存的運算式名稱或摘要不構成解的識別，因為未評估的計算器堆疊可能跟隨之後的條件改變。
+
+### 模態綁定與回合快取 {#mode-binding-and-pass-cache}
+
+Eigenmode 後處理使用完整原生順序來源向量。數值控制向量以無因次相對權重 `1` 選一項，其他項設為 `0`，每項相位都明確指定。這些是原生 `EigenPeakElectricField` 來源控制，不是測量或宣稱 `1 V/m`。快取形式改為建立原生後處理變數，將名稱填入相同來源幅值，並為每個計算脈絡提供具體 one-hot 變數指派。路徑不把 `GetAllSources` 當成前置需求，也不把 `Mode` 傳作計算器 intrinsic。兩種形式都經原生 `EditSources` 提交，再讀回已保存的數值／符號來源項目、原生後處理變數值及解脈絡；然後對 modes 1、2 評估有區辨能力的局部積分，再還原 mode 1。這些變數只屬後處理狀態，不是設計 variation；幅值不能成為另一個獨立笛卡兒 variation 空間。
+
+模式檢查和自適應回合快取分開。EPR 執行期編譯完整快取項目集合，以一次 setup edit 提交，不假設反覆啟用會追加項目。未要求運算式收斂時，每個基元項目提交 `IsConvergence=False`，這只描述提交設定。儲存後，SCGSim 記錄每個儲存快取項目實際含有的原始收斂欄位，缺欄標為無法提供；不推定 `false`，也不以提交值補缺。較早標記 `NOT_VERIFIED_SERIALIZED_OMISSION` 的記錄不回補。儲存設定只描述配置，不證明 AEDT 用它控制求解。快取項目由命名空間定義及綁定脈絡識別，不只靠顯示標題。多面量使用驗證過的原生 face list，或明確加總各別綁定面。
+
+### 運算式快取收斂的記錄 {#expression-cache-records}
+
+`ExpressionCacheConvergenceSet(controls=(...))` 攜帶非空、有順序的單一 `ExpressionCacheConvergence` 控制集合。公開 setter 與準備函式都接受單一控制或集合。集合序列化為 `scgsim.aedt.hfss-eigenmode-epr.v4`；單一控制序列化為 V3，沒有控制的要求為 V2。同目標／模式的重複配對會拒絕。
+
+各啟用項目保留控制身份、運算式／快取身份、模式、要求準則，以及另外觀察的儲存準則欄位。原生 `Pass=All` 快取列保留每個目標的回傳座標、數值與缺值。設定讀回使用釘選、無快取的 PyAEDT `load_entire_aedt_file` 讀取精確儲存專案，選擇綁定 HFSS 設計與設定，並記錄檔案雜湊；不使用 `setup.props` 或應用程式專案屬性快取。要求的原生欄位、實際儲存欄位、原始表示差異及無法提供欄位保持分開，旁邊也記錄儲存頻率／回合控制。設定相符不代表目標滿足準則。
+
+各回合場保留狀態未知；LastAdaptive 已儲存場身份另外處理。不編造離線百分比 delta。
+
+單一目標時，setter 為呼叫者選取的模式及明確準則啟用一個快取項目，交接以 `scgsim.aedt.hfss-eigenmode-epr.v3` 記錄；集合則如前述使用 V4；沒有控制的要求使用 V2。沒有控制時，不編寫輔助運算式，仍提交原本不參與收斂的基元快取項目。低階 `prepare_hfss_eigenmode_from_geometry()` 必須提供 `aedt_version` 與 `modeling`，並接受同一個 `expression_convergence` 引數。
+
+標籤屬於運算式身份，原生名稱由編譯器分配。自訂操作序列必須適用於準備的原生設計。兩種目標都為所選模式新增輔助快取項目，依要求控制提交 `IsConvergence`、`UseRelativeConvergence`、`MaxConvergenceDelta`、`MaxConvergeValue`。其他模式快取保持不參與收斂。儲存設定讀回記錄各項存在的原始欄位，另外列出無法提供欄位，不從要求補缺。輔助值及快取標題留在既有 `adaptive-mode-history.json` 快取集合，不解碼成基元 EPR 積分，也不改變 EPR 原始積分完整性。每項保留所選模式既有 one-hot intrinsic 脈絡。
+
+提交記錄起始為 `native_readback.status="PENDING_SAVED_SETUP_READBACK"`。既有儲存之後，`serialized_readback.convergence_fields` 記錄逐項原始 `values` 及 `unavailable` 清單。儲存配置仍不能建立求解器實際套用準則或改變自適應停止；這些成果需要實際目標執行觀察。
+
+### 已儲存場與回合的選擇 {#saved-fields-pass-selection}
+
+EPR 與一般 Eigenmode 執行使用相同 `EigenmodeRunControl` 設定映射與儲存讀回；唯一設定擴充是運算式快取組態。準備讀回七個 Eigenmode 控制值，不建立 `SaveAnyFields` 或 `SaveRadFieldsOnly`；AEDT 若序列化任一屬性，保留為觀察值，缺失屬性仍缺失。設定讀回與請求政策皆不證明場資料已儲存。
+
+實際求解後，EPR 驗證精確設定的 `LastAdaptive` Fields 解，再儲存專案與完整結果資料夾、釋放擁有的 Desktop，並封存儲存位元組。儲存場分析開啟已驗證副本，在其中驗證請求計算器定義與儲存場評估，不再次求解。分析既有解不重新建立設定屬性。結果資料夾缺失、運算式定義不可用、情境不符或觸發受防護求解嘗試，皆封閉失敗。分析回執區分宣告、規劃、觀察及評估資訊，不將正常執行回執重寫為成功。
+
+一般結果解析預設使用最後完成求解回合。呼叫端可明確選取其他記錄回合與模態，但缺值不退回較早回合。歷史快取資料與獨立驗證的最終儲存場結果維持不同報告輸入：求解後新增邊距只能使用最終場結果，不可插入自適應歷程曲線。
+
+方法參考固定為 AEDT 2024.2 Fields Calculator 幾何、一般與純量命令、PyAEDT 1.3.0 已安裝來源，以及僅供比較的 Palace 原始碼與 pyEPR 1.0.1。pyEPR 不是執行期相依套件，也不取代上述公式的權威。
+
+## 自動矩形接面切分 {#aedt-automatic-junction-partition}
+
+此 AEDT 路徑將宣告的矩形接面片分割為兩個端點側導體端部，以及一個保留完整宣告寬度的中央 RLC 矩形。完整原始電感與電容僅指定給中央矩形。最終 RLC 矩形必須恰有兩個相對端點接觸邊；宣告片本身可在四邊接觸端點。A 到 B 的方向與軸來自宣告矩形與埠方向，SCGSim 不交換端點來配合分割。此契約不增加手動切割位置、固定 50-nm 間隙、縮窄寬度備援或一般矩形最佳化器。
+
+「最大」只表示此矩形拓樸中，經驗證淨空區間內最長的有效中央矩形，不涵蓋所有可能版圖。與任一端點的封閉接觸包含面積、線段與點接觸。座標使用宣告矩形的局部座標框架及 A 到 B 方向。令 `L` 為來源接觸端點 A 的最大 `s` 座標，`U` 為接觸端點 B 的最小座標；區間必須滿足 `L < U`。
+
+完整寬度走廊及其側邊界必須沒有其他金屬。A 端只可接觸端點 A，B 端只可接觸端點 B；跨端點或第三 Net 接觸皆拒絕。若前提不成立，實作回報不支援的拓樸／搜尋假設，而非宣稱普遍不可行。
+
+搜尋使用分割資訊所記錄的來源局部 DBU `h`；它必須有限且為正，缺少精度時失敗而不猜測。令 `s_min` 為來源局部下界，候選座標由整數局部索引推得 `s_min + k*h`。演算法檢查每個對齊區間端點，以及每側最近且嚴格位於內部的網格點（每側至多兩個候選），再選擇最小有效 A 索引與最大有效 B 索引，要求 `a < b`。
+
+此固定大小搜尋依賴已驗證的淨空走廊：在其中移動切口，只增加完整寬度條帶，不改變切口後方拓樸或接觸。它不掃描 DBU 網格，也不將衍生座標重新貼合笛卡兒 GDS 網格。記錄的索引、局部座標、框架、精度、布林輸出與偏差，將索引算術與幾何核心的獨立精度分開。布林縮塌或拓樸改變屬數值幾何失敗，不證明所有切口皆無效。
+
+原生讀回逐座標比較，使用單一絕對容差 `1e-5 µm`，相對容差為零。同一政策涵蓋接面中點、來源／原生頂點與邊座標、直線性、Z／擠出、集總線座標及接觸檢查。比較不貼合 DBU、不移動模型，也不改變來源或快取身分；觀察值與偏差仍保留為讀回資訊。此 SCGSim CAD／API 差異允許量為情境中 1 nm 來源 DBU 的 1%，不是 AEDT 精度保證。接觸判定受此讀回解析度限制，無法證明低於解析度的間隙或接觸不存在。拓樸、孔洞、指定，以及實際間隙、短路、重疊與曲率仍受既有檢查。電感與電容使用各自維度適當的數值比較，不使用此長度容差。
+
+原生邊讀回失敗時，既有執行回執的 `error` 保留 `RuntimeError` 文字。它區分無效或不符的中點與原生長度檢查，包含逐條件代碼與殘差、邊／面識別碼、端點座標、觀察及預期中點、原生長度、直線弦長與 `model_units` 值（`um`）。
+
+長度／弦長或中點比較失敗表示讀回不一致，不證明 CAD 邊為曲線。PyAEDT 的 [`EdgePrimitive.length` API](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modeler.cad.elements_3d.EdgePrimitive.length.html)說明，兩頂點邊的長度以模型單位表示，否則回傳 `False`；已安裝的 1.3 包裝將 `GetEdgeLength` 轉為 `float`，呼叫拋出例外時回傳 `False`。此 API 未提供數值精度界限，SCGSim 的 `1e-5 µm` 座標政策不是 AEDT 邊長精度保證。
+
+擠出側關聯使用原生面—邊入射，不只依距離投影區間。PyAEDT 的 [`FacePrimitive.edges` API](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modeler.cad.elements_3d.FacePrimitive.edges.html)透過 `GetEdgeIDsFromFace` 回傳面的 `EdgePrimitive` 物件。只有兩面回報相同目前 `EdgePrimitive.id` 時，SCGSim 才將原始水平側邊關聯至端蓋邊，再以既有 `1e-5 µm` 絕對、零相對政策比較關聯 XYZ。每個實際端蓋邊必須恰有一次側面入射；缺失、重複入射及座標不符皆為硬性失敗。此方式保留原始細分並區隔鄰近邊界。僅依距離投影可能將鄰近平行側條帶錯配至端蓋區間，回報假重疊；那是關聯歧義，不是實體 CAD 缺陷證明。這些 ID 是目前物件的讀回資訊，不保證跨儲存穩定，也不屬來源／快取身分。
+
+邊界比較也容許等價直邊細分：其餘相符的直線鏈可以有不同數量的共線頂點。比較不重寫準備來源、實際原生座標或快取身分。中央 RLC 面仍為四邊矩形；真正轉角、孔洞、材料與 Z 指定、接觸及實際 Route B 擠出幾何，仍以相同 `1e-5 µm` 絕對、零相對座標政策檢查。這是比較的規則，不是實際 AEDT 讀回的證據。
+
+令 `S` 為宣告來源片，`Arm_A` 與 `Arm_B` 為已接受端點臂幾何。共用模型座標建構先形成有效片 `E = S - (Arm_A ∪ Arm_B)`，再分割為 `E = PEC_A ∪ R ∪ PEC_B`，其中 `R` 是完整寬度中央矩形。既有 2+2 來源局部切口選擇器不變。選定切口後，來源／臂交集及切口在模型座標中組裝，共用邊界節點只輸出一次。共邊抵消一次，建立原生 PEC 端部與 RLC 矩形及其擁有者／目錄支撐的迴圈。同一 Ground 上各接面節點先累積，再完成迴圈；接觸／覆蓋檢查使用這些輸出迴圈。支撐不獨立重新網格化，也不經局部座標往返重建。
+
+各片必須完整覆蓋 `E`，內部互不相交。不得丟棄細片或殘留袋狀區來強迫覆蓋。只有端部殘留幾何為空，且原始臂覆蓋完整指定中央端邊時，才可省略該端部。非空端部必須連通，僅點連接的碎片不算；孔洞與所有元件皆保留，無效拓樸失敗而不丟棄片段。覆蓋要求正確端點組件覆蓋精確指定端邊，不只總共邊長相等。指定端邊的兩角屬該邊，因此允許正確端點角接觸；錯誤 Net 的角、部分邊、孤立角，或開放側的線／點接觸皆拒絕。中央 RLC 矩形不含 PEC 面積。
+
+分割僅用於 AEDT，在擁有者／路徑正規化後、表面目錄、內縮與快取之前執行。每個端部繼承無歧義來源 Entity 的材料與幾何譜系；同 Net 擁有者若材料或高度不同，SCGSim 不任意選擇。衍生端部附加於該來源 Entity 下，沿用導體與介面支撐路徑，不創造另一個 Net 擁有者。Route A 端部繼承有效平面，Route B 端部保留來源實體的高度、厚度與材料。原始來源多邊形、材料／堆疊指定及快照不變，既有側壁 EPR 排除仍有效。版本化分割意圖與準備輸入資訊，以及來源／模型雜湊，將衍生幾何綁定至來源，不增加科學結果結構。原生 RLC 物件、集總線與面積積分選擇仍位於中央矩形，既有依寬度計算電壓與能量正規化不變。
+
+幾何綁定期間，建立 EPR 運算式或快取之前，`_native_junction_live_readback()` 檢查中央形狀、端點接觸、PEC／RLC 指定與目標，以及即時 `RLC Type`、`Use Induct`、`Use Resist`、`Use Cap` 屬性與電氣值。既有專案儲存後，`_read_saved_junction_lines()` 在回傳 `PreparedEprHfss` 或允許求解之前，對所有接面進行一次全新 `load_entire_aedt_file()` 解析。它將每個已儲存端點與來源推導線及實際中央端邊中點比較。對附著的 `EdgeCenter`，所記錄實體 ID 必須符合從實際中央面重新列舉的邊；端點來自該邊中點，忽略紀錄的 XYZ 欄位。未附著的 `AbsolutePosition` 使用專案模型單位的已記錄 XYZ。邊缺失或歧義、其他附著種類與端點不符皆封閉失敗。儲存場分析在建立運算式之前，也於已驗證工作副本重複此檢查。兩路徑皆不以建立字典或快取邊界屬性替代儲存檔資訊，且不增加儲存／重開循環。
+
+必要原生屬性不可用或無法讀取，既有型別、旗標、單位、有限值或幾何檢查失敗，或選定純量比較不符時，接面 RLC 讀回仍立即使準備失敗。正規化 SI 電感與電容以完全相等為快速路徑，記錄為 `method="exact_si"`，並標記此路徑未執行標準值處理。否則，對有限運算元，僅比較運算元使用局部 `Decimal` 情境與 `ROUND_HALF_EVEN`，對稱轉為 `sys.float_info.dig` 位有效十進位數字。標準化運算元完全相等決定 `representation_equal_si` 與 `matches_si`；若原始正規化 SI 值不同，`exact_equal_si` 仍為 false。宣告請求與原生值不四捨五入或重寫，也無絕對／相對容差或逐研究覆寫。位於捨入區間邊界兩側的值，依此規則仍可不相等。
+
+成功的 `electrical_readback.scalar_comparisons` 記錄每個純量比較的觀察與請求 SI 十進位值、`exact_equal_si`、政策、方法、選定有效位數與捨入模式、標準化觀察與請求運算元、`representation_equal_si` 及 `matches_si`。相同比較資訊也保留於失敗的 `junction_rlc_readback=<JSON>` 例外附註；成功儲存的 `partition_readback` 原樣帶入電氣資訊。失敗附註另保留 `requested`、`observed`（可用性、原始值、值型別與讀取狀態）、`available_property_names`、`normalized`（只有執行到該步才包含解析數字、型別、單位、尺度及 SI 十進位字串）、`checks`（已評估及通過狀態，其餘標為未評估）、`failed_checks` 與 `stage`。不可用、未讀取或未成功轉換的屬性如實回報，不以假定預設值替代。原始讀回例外仍是 `error` 的第一項；交易儲存／釋放及傳輸還原處理不變。非有限運算元不做標準化，既有立即失敗檢查仍有效。
+
+這項比較規則是 SCGSim 選定的浮點表示政策，不是 AEDT 儲存精度保證或物理準確度主張。Python 的 [`sys.float_info.dig` 文件](https://docs.python.org/3.12/library/sys.html#sys.float_info)定義選用的十進位往返精度，未說明 AEDT 內部儲存或格式。AEDT `GetPropValue` 文件不保證這些屬性的精確文字或十進位表示。因此標準化一致不代表原生位元相同，捨入區間邊界仍是比較解析度限制。這項比較不會觸發自動重試或求解器 `Analyze`。
+
+儲存檔使用 PyAEDT 1.3.0 的 [`load_entire_aedt_file()` 解析器](https://github.com/ansys/pyaedt/blob/v1.3.0/src/ansys/aedt/core/internal/load_aedt_file.py)讀取。[pyEPR 1.0.2 的公開已儲存專案範例](https://github.com/zlatko-minev/pyEPR/blob/1.0.2/_example_files/pyEPR_tutorial1.aedt)顯示 `CurrentLine` 以附著實體的 `GeometryPosition` 紀錄儲存。該範例只顯示格式，不是跨版本的 AEDT 序列化契約。
+
+![宣告來源片與準備後導體片：淺色為既有 A、B 端點，深色為新增 A、B 側導體端部，中央為 RLC 矩形。](../../assets/junction-partition-generic.svg){fig-alt="一般宣告片，含淺色既有端點金屬、深色新增導體端部與中央 RLC 矩形。" fig-cap="未執行求解器的一般準備幾何；淺色端點填色仍屬各完整導體。這不是原生 AEDT 讀回或求解證據。" width="95%"}
+
