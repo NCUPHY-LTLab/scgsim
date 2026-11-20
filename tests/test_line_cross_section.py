@@ -15,10 +15,15 @@ from test_located_refusals import places
 from test_sgb_section import by_type
 from test_simulation_drc import BANDED, LAYER_STACK, NO_VACUUM_STACK, layout_plan
 
-from scgsim.geometry import CutLine, LineCrossSection
 from scgsim.geometry.exact.errors import InputError
 from scgsim.geometry.exact.grid import exact_z
-from scgsim.geometry.models.section import LineConductor, LineDielectric, LineGap
+from scgsim.geometry.models.section import (
+    CutLine,
+    LineConductor,
+    LineCrossSection,
+    LineDielectric,
+    LineGap,
+)
 from scgsim.geometry.sections import build_plan_model, cross_section_at
 from scgsim.geometry.sgb.model import build_model_from_catalogue
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue, PrismRecord

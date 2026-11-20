@@ -8,8 +8,8 @@ gap [96, 102], ground [102, 182] um along the cut, Al 0.1 um on Si 500 um.  Rout
 
 import pytest
 
-from scgsim.geometry import CutLine, GeometryPlan
-from scgsim.geometry.models.section import LineConductor, LineGap
+from scgsim.geometry import GeometryPlan
+from scgsim.geometry.models.section import CutLine, LineConductor, LineGap
 from scgsim.geometry.sections import cross_section_at
 
 MARGINS_UM = [0.5, 1.0]
