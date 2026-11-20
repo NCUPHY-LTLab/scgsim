@@ -39,12 +39,17 @@ def test_a_public_module_imports_without_ocp_or_pyaedt(statement):
     assert run.returncode == 0, run.stderr
 
 
-def test_preparing_an_aedt_model_without_ocp_names_the_extra_before_building(tmp_path, monkeypatch):
+def test_preparing_an_aedt_model_without_ocp_names_the_extra_before_building(
+    tmp_path, monkeypatch
+):
     """The refusal comes before the SGB build writes anything, and says which extra installs OCP."""
     monkeypatch.setattr(ocp, "ocp_available", lambda: False)
     source, stack = rectangular_junction_source("VACUUM_REGION")
     with pytest.raises(ocp.OcctUnavailable, match=r"`aedt` or `aedt-epr` extra"):
         prepare_sgb_model(
-            source, prepared_stack=stack, modeling="solid", output_dir=tmp_path / "model"
+            source,
+            prepared_stack=stack,
+            modeling="solid",
+            output_dir=tmp_path / "model",
         )
     assert not (tmp_path / "model").exists()
