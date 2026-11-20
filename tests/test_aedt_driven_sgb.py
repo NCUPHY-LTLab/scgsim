@@ -56,6 +56,7 @@ from scgsim.aedt.runtime.families.sgb_ports import assign_lumped_port  # noqa: E
 from scgsim.aedt.specs.common import LumpedTerminalPort  # noqa: E402
 from scgsim.aedt.specs.parse import parse_aedt_spec  # noqa: E402
 from scgsim.contracts.sgb_sidecar import read_sidecar  # noqa: E402
+from scgsim.geometry import LumpedPort  # noqa: E402
 from scgsim.geometry.sgb.output.exchange.guard import read_step_guard  # noqa: E402
 
 pytestmark = pytest.mark.occt
@@ -437,7 +438,8 @@ def _signal_first_two_port_plan(monkeypatch):
     The component declares its pads before its ground and the plan its signal Nets first, as an OrcaPen SC PDK
     layout does, so the source finds each sheet's pad before its ground (issue #282).  Pad ``k`` spans
     y = 0..20 um and the ground y = -30..-10 um; sheet ``Pk`` reaches 5 um into both, so what remains of it
-    runs from the ground edge (y = -10) to the pad edge (y = 0), along +y.
+    runs from the ground edge (y = -10) to the pad edge (y = 0), along +y.  Each sheet is declared on the plan
+    as a 50 ohm port referenced to the ground's Net ``G``.
     """
     import gdsfactory as gf  # noqa: PLC0415 -- optional layout stack, imported only by the tests that need it
 
@@ -470,7 +472,10 @@ def _signal_first_two_port_plan(monkeypatch):
         "ports": ports,
     }
     nets = {"P1": ("chip/pad_1",), "P2": ("chip/pad_2",), "G": ("chip/ground",)}
-    return layout_plan(component, nets=nets).prepare()
+    ports = [
+        LumpedPort(f"chip/P{k}", reference_net="G", impedance_ohm=50.0) for k in (1, 2)
+    ]
+    return layout_plan(component, nets=nets, lumped_elements=ports).prepare()
 
 
 def _conductor(name, layer, inside):
@@ -492,22 +497,13 @@ def test_the_terminal_is_on_the_signal_edge_when_the_layout_declares_its_signal_
     So on Route C and Route A each Terminal is on its pad edge (y = 0), not on the ground edge (y = -10).
     """
     snapshot = _signal_first_two_port_plan(monkeypatch)
-    sheet = {
-        region.metadata["source_name"]: region.port_sheet_id
-        for region in snapshot.geometry_input.port_sheet_regions
-    }
-    ports = tuple(
-        LumpedTerminalPort(
-            k, f"p{k}", sheet[f"chip/P{k}"], (f"chip/pad_{k}",), ("chip/ground",), 50.0
-        )
-        for k in (1, 2)
-    )
+    lumped = hfss_driven_inputs(snapshot)
     model = prepare_sgb_model(
-        snapshot.geometry_input,
+        lumped.build_input,
         prepared_stack=snapshot.stack,
         modeling=modeling,
         output_dir=tmp_path / "model",
-        ports=ports,
+        ports=lumped.lumped_ports,
     )
     sidecar = read_sidecar(model.path("sidecar"))
     guard = read_step_guard(model.path("guard"))

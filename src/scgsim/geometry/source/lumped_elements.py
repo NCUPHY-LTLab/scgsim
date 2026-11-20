@@ -26,7 +26,7 @@ from scgsim.geometry.models.junctions import (
     junction_net_id,
     junction_occurrence_path,
 )
-from scgsim.geometry.models.regions import PortSheetRegionRecord
+from scgsim.geometry.models.regions import PortSheetRegionRecord, hosts_along_direction
 from scgsim.refusal import Declared, shown
 
 _SET_LUMPED_ELEMENTS = "the call to GeometryPlan.set_lumped_elements"
@@ -282,7 +282,7 @@ def _resolved(
     region = _authored_sheet(declaration, build_input, grid_um)
     box = _box(region)
     where = _refusal_subject(declaration, region, box, grid_um)
-    hosts = tuple(dict.fromkeys(item.host_semantic_id for item in region.overlaps))
+    hosts = hosts_along_direction(region)
     if len(hosts) != 2:
         raise ValueError(
             Declared(where, _FIX_THE_LAYOUT).refusal(
@@ -292,10 +292,7 @@ def _resolved(
                 "one at each end"
             )
         )
-    start, end = sorted(
-        (_terminal(entities[host]) for host in hosts),
-        key=lambda item: _along_direction(region, item.source_entity_id),
-    )
+    start, end = (_terminal(entities[host]) for host in hosts)
     if start.net_id == end.net_id:
         raise ValueError(
             Declared(where, "the layout or the call to GeometryPlan.set_nets").refusal(
@@ -377,22 +374,6 @@ def _terminal(entity: SemanticEntitySpec) -> JunctionTerminalBinding:
         source_occurrence_path=junction_occurrence_path(entity.metadata),
         net_id=junction_net_id(entity),
     )
-
-
-def _along_direction(region: PortSheetRegionRecord, host: str) -> float:
-    """The mean position of the sheet's landing on ``host``, measured along the authored direction.
-
-    The rule Palace's partition orders a sheet's two terminals by (``scgsim.palace.source.ports``), so both
-    solvers cut the same rectangle; issue #282 makes it one rule in the geometry package.
-    """
-    dx, dy = region.metadata["direction"][:2]
-    points = [
-        point
-        for overlap in region.overlaps
-        if overlap.host_semantic_id == host
-        for point in overlap.overlap_loop
-    ]
-    return sum(x * dx + y * dy for x, y in points) / len(points)
 
 
 def _box(region: PortSheetRegionRecord) -> tuple[float, float, float, float]:

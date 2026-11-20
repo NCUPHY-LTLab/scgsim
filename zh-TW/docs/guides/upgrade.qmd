@@ -26,7 +26,7 @@ SCGSim 3.0 的每個預發行版都改了一些呼叫，而且沒有相容層：
 
 ## 從 3.0.0rc4 升級 {#from-3-0-0rc4}
 
-[]{#lumped-elements-on-the-plan}集總元件（接面、電阻、電容，或量測所驅動的埠）是元件本身的事實，對每個求解器都相同，所以現在它只在 `GeometryPlan` 上宣告一次，以它所在集總埠片的名稱指名。Palace 與 AEDT 都從快照讀取它；任何模擬都不再自己宣告。其餘沒有改變：用舊方式與新方式寫的研究建出同一個模型，逐位元組相同（網格、Palace 設定與 AEDT 模型檔，已在 roster 的 Eigenmode 版圖與 HFSS EPR 驗收案例上確認）。
+[]{#lumped-elements-on-the-plan}集總元件（接面、電阻、電容，或量測所驅動的埠）是元件本身的事實，對每個求解器都相同，所以現在它只在 `GeometryPlan` 上宣告一次，以它所在集總埠片的名稱指名。Palace 與 AEDT 都從快照讀取它；任何模擬都不再自己宣告。不論用舊方式或新方式宣告，研究都建出同一個模型，逐位元組相同（網格、Palace 設定與 AEDT 模型檔，已在 roster 的 Eigenmode 版圖與 HFSS EPR 驗收案例上確認）。這個版本另有兩項改變，列在本節最後：[用 3.0.0rc4 準備的東西](#models-from-rc4)。
 
 1. 把 Palace 的 `sim.add_port(name, layer=..., layout_sheet=True, inductance=L)` 換成 `plan.set_lumped_elements([...])` 中的 `LumpedElement(name, inductance_h=L)`，在 `plan.prepare()` 之前。`layer` 拿掉了：計畫知道埠片所在的圖層。元件保持你給的順序，所以第一個仍是 Palace 的 `P1`。
 2. 把 AEDT 的 `sim.add_junction(planar_junction_from_port(...))`，以及你交給 `plan.set_rectangular_junctions(...)` 的 `RectangularJunctionSpec`，換成計畫上的一個 `LumpedElement(sheet, inductance_h=L, capacitance_f=C)`。計畫自己找出埠片的兩個導體及其 Net。接面的 id 現在就是其埠片的名稱：在 `EprAnalysisRequest(junction_ids=...)` 中寫這個名稱，結果中也以它讀取。
@@ -69,6 +69,11 @@ hsim.set_epr_request(EprAnalysisRequest(junction_ids=("chip/J1",)))
 | `prepare_hfss_driven_from_geometry(model=...)` | `prepare_hfss_driven_from_geometry(snapshot, modeling=..., ...)` |
 
 錯誤現在來自 `prepare()`，並指出元件、其埠片的圖層與以 µm 表示的位置：版圖沒有畫出的埠片、落在不只或少於兩個導體上的埠片、同一個 Net 的兩個導體，或 `reference_net` 不是任一導體之 Net 的埠。紀錄見[集總元件](../reference/specs/geometry-plan.qmd#lumped-elements)，每種計算如何使用它們見[支援的計算](../reference/supported-calculations.qmd#lumped-elements)。
+
+[]{#models-from-rc4}另有兩項改變，會影響你用 3.0.0rc4 準備或執行的東西：
+
+- **重新準備。** SGB 模型現在標示為 `scgsim.sgb.sidecar.v6`。用 3.0.0rc4 或更早版本準備的模型、Palace 執行資料夾或 AEDT 交接資料夾，在 SCGSim 讀取其模型時都會被拒絕，錯誤訊息會請你重建。舊模型可能以相反的順序列出埠片的兩個導體，現在讀取會把 HFSS 的 Terminal 放在錯的邊上。請呼叫 `plan.prepare()`，重新準備模擬。
+- **重新執行 HFSS Driven Terminal**，如果版圖先宣告埠的訊號導體、再宣告接地，例如 OrcaPen SC PDK 的 launcher。3.0.0rc4 把 Terminal 放在埠片靠接地的那一邊；現在它在靠訊號的那一邊。
 
 ## 從 3.0.0rc3 升級 {#from-3-0-0rc3}
 
