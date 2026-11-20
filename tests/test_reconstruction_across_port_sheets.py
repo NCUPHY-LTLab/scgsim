@@ -337,7 +337,9 @@ def test_an_open_reconstruction_through_a_mirrored_occurrence_lands_on_its_drawn
     chip.info["component_semantics"] = {"schema_version": 2, "conductor_regions": []}
     (pad,) = [
         p
-        for p in device_plan_snapshot(chip, reference).geometry_input.polygons
+        for p in device_plan_snapshot(
+            chip, reference, inductance_h=None
+        ).geometry_input.polygons
         if p.layer == "1/0"
     ]
     mirrored = [grid_key((x, -y)) for x, y in drawn]
@@ -573,7 +575,9 @@ def test_a_mirrored_occurrence_carries_the_mirrored_drawn_walk(monkeypatch):
     chip.info["component_semantics"] = {"schema_version": 2, "conductor_regions": []}
     (pad,) = [
         p
-        for p in device_plan_snapshot(chip, reference).geometry_input.polygons
+        for p in device_plan_snapshot(
+            chip, reference, inductance_h=None
+        ).geometry_input.polygons
         if p.layer == "1/0"
     ]
     (ring,) = pad.drawn_rings

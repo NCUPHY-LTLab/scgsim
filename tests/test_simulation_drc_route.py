@@ -12,8 +12,6 @@ import json
 import pytest
 from test_palace_route_and_surface_epr import ROUTE_B, SUBSTRATE_FACE, THIN_FILM
 from test_simulation_drc import (
-    LAYER_STACK,
-    MATERIALS,
     SIMULATIONS,
     MeshingReached,
     check,
@@ -23,7 +21,6 @@ from test_simulation_drc import (
 )
 
 import scgsim.palace.mesh.build as build_module
-from scgsim.geometry import GeometryPlan
 from scgsim.palace.simulation import core
 
 # The Route A profiles the check is compared on: the default, and one with film bindings.
@@ -59,14 +56,7 @@ def meshed_until_the_mesher(  # noqa: PLR0913 -- the layout, the test fixtures, 
     def meshing_reached(*_args, **_kwargs):
         raise MeshingReached
 
-    plan = GeometryPlan(
-        component,
-        root_id="chip",
-        layer_stack=LAYER_STACK,
-        material_records=MATERIALS,
-        coupon_padding_um=0.0,
-    )
-    sim = configured(simulation, plan.prepare())
+    sim = configured(simulation, layout_plan(component).prepare())
     sim.set_route(route, approximation_profile=approximation_profile)
     sim.set_output_dir(tmp_path / "run")
     monkeypatch.setattr(build_module, "mesh_sgb", meshing_reached)

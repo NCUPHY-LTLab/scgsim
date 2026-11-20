@@ -1,6 +1,6 @@
 ---
 title: "GeometryPlan 與 SGB"
-description: "如何建立 GeometryPlan：依序的呼叫與各自的檢查、格點、重疊、真空區域、規劃接受的曲線與接面薄片、路徑，以及二維截面。"
+description: "如何建立 GeometryPlan：依序的呼叫與各自的檢查、格點、重疊、真空區域、集總元件、規劃接受的曲線、路徑，以及二維截面。"
 scgsim-kind: "contract"
 scgsim-status: "ACCEPTED"
 scgsim-id: "docs/geometry-sgb"
@@ -9,7 +9,7 @@ aliases:
   - ../../geometry-sgb.html
 ---
 
-`GeometryPlan` 保存版圖中所有求解器共用的內容：畫好的元件、它的層堆疊與材料、你宣告的 Net、真空區域，以及 Surface-EPR 薄膜。`plan.prepare()` 把它凍結成 *快照*，每個模擬再以 `set_plan` 取得這份快照。接著 SCGSim 的幾何建構器 SGB 由它建立三維模型，Palace 與 AEDT 用的是同一個模型。本頁依序列出呼叫、各呼叫檢查什麼、規劃接受哪些曲線與接面薄片，以及如何切出二維截面。實際的規劃見[準備版圖](../../guides/prepare-a-layout.qmd)；規劃的內部做法見 [GeometryPlan 內部實作](../../contribute/internals/geometry-plan.qmd)。
+`GeometryPlan` 保存版圖中所有求解器共用的內容：畫好的元件、它的層堆疊與材料、你宣告的 Net、真空區域、Surface-EPR 薄膜，以及集總元件。`plan.prepare()` 把它凍結成 *快照*，每個模擬再以 `set_plan` 取得這份快照。接著 SCGSim 的幾何建構器 SGB 由它建立三維模型，Palace 與 AEDT 用的是同一個模型。本頁依序列出呼叫、各呼叫檢查什麼、如何宣告集總元件、規劃接受哪些曲線，以及如何切出二維截面。實際的規劃見[準備版圖](../../guides/prepare-a-layout.qmd)；規劃的內部做法見 [GeometryPlan 內部實作](../../contribute/internals/geometry-plan.qmd)。
 
 ## 建立規劃 {#component-to-backend-geometry-contract}
 
@@ -36,7 +36,7 @@ sim.set_plan(plan.prepare())
 | `set_nets({net_id: (entity_id, ...)})` | 宣告每個 Net 由哪些 Entity 組成。Net 是一塊具名、作為同一個導體的金屬；SCGSim 從不由彼此接觸的形狀推論 Net。一個 Entity 最多屬於一個 Net；不在任何 Net 中的 Entity 保持未指派。含有未知 Entity，或把一個 Entity 放進兩個 Net 的更新，整筆被拒絕。 |
 | `set_vacuum_region(padding=...)` | 模型周圍的真空區域，單位 µm：一個數、一組 (x, y, z)，或每個面一個值。 |
 | `set_surface_epr(specs)` | 依介面類型給出 Surface-EPR 薄膜及其邊距；見 [Eigenmode 參考](palace-eigenmode.qmd#surface-epr-margins)。 |
-| `set_rectangular_junctions(specs)` | 把接面薄片綁定到它的兩個端點；見[下方](#explicit-rectangular-junctions)。 |
+| `set_lumped_elements(elements)` | 元件的集總元件，每個都放在版圖所畫的一張集總埠片上：接面或 R、L、C 元件，或激發埠；見[下方](#lumped-elements)。 |
 | `set_entity_priorities({entity_id: priority})` | 決定同一 Net 中兩個重疊的 Entity 誰擁有重疊區；見[下方](#overlap-priority)。 |
 | `prepare()` | 檢查各項宣告並回傳快照：正規化幾何、堆疊、GDS 位元組與出現實例記錄，不保留對元件的即時參照。 |
 
@@ -67,11 +67,27 @@ sim.set_plan(plan.prepare())
 
 子元件可以把金屬加到根元件的接地平面，例如 Xmon 接地伸進淨空區的那段臂。它宣告 `component_semantics.ground_plane_contributions`：每筆記錄恰好包含 `local_id`、`plane_id`（它併入的根平面）、`level`（導體層，必須與該平面相同）、`layer` 與 `selector_point_um`。這塊金屬成為該平面的一部分；它不是獨立的 Entity，也沒有自己的 Net。記錄如何解析，見[內部實作](../../contribute/internals/geometry-plan.qmd#ground-plane-contributions)。
 
-### 矩形接面 {#explicit-rectangular-junctions}
+### 集總元件 {#lumped-elements}
 
-當一張埠片代表矩形接面時，用 `scgsim.geometry` 的 `RectangularJunctionSpec` 與 `JunctionTerminalBinding` 把它綁定到兩個端點，再於下一次 `prepare()` 之前呼叫 `plan.set_rectangular_junctions(specs)`。請先準備一次規劃，讀出要綁定的埠片、多邊形、出現實例、Entity 與 Net 的確切名稱。
+[]{#explicit-rectangular-junctions}集總元件是模型不畫成金屬的元件部分：以電感表示的約瑟夫森接面、電阻、電容，或量測所驅動的埠。每個集總元件都放在元件所畫、並在其 `component_semantics` 的 ports 中宣告的一張集總埠片上，連接該埠片落在其上的兩個導體。每個集總元件在規劃上以其埠片的完整名稱宣告一次；每種模擬都從快照讀取它們：
 
-`RectangularJunctionSpec` 指名 `junction_id`、`port_sheet_id`、`source_polygon_id` 與 `source_occurrence_path`，以及 `terminal_a` 與 `terminal_b`。每個 `JunctionTerminalBinding` 指名一個 `source_entity_id`、它的 `source_occurrence_path` 與 `net_id`。兩個端點必須是不同 Net 中的不同 Entity。SCGSim 不搜尋端點，也不依距離猜測。對已正規化的 `GeometryBuildInput`，`with_rectangular_junctions(build_input, specs)` 回傳綁好接面的要求。Palace 的 `add_port(...)` 仍依埠名稱設定電感。
+```python
+from scgsim.geometry import LumpedElement, LumpedPort
+
+plan.set_lumped_elements([
+    LumpedElement("chip/o_junction_lumped", inductance_h=10e-9),
+    LumpedPort("chip/o_launcher", reference_net="ground", impedance_ohm=50.0),
+])
+```
+
+| 紀錄 | 它是什麼 |
+|---|---|
+| `LumpedElement(sheet, *, resistance_ohm=None, inductance_h=None, capacitance_f=None)` | 並聯的電阻、電感與電容，單位為歐姆、亨利與法拉；至少給一個。接面是帶有電感、以及（若你建模的話）電容的元件。 |
+| `LumpedPort(sheet, *, reference_net, impedance_ohm)` | 激發埠：位於 `reference_net` 的導體是它的參考，另一個是訊號，`impedance_ohm` 是它的參考阻抗。 |
+
+埠依你給的順序先編號：埠 1 是第一個 `LumpedPort`，也就是 S 矩陣的第 1 列與第 1 行。其他元件依序接在後面，所以在沒有埠的計算中，第一個元件就是 Palace 的埠 `P1`。`prepare()` 會拒絕以下情況，並指出元件、其埠片的圖層與以 µm 表示的範圍：版圖沒有畫出的名稱；落在不只或少於兩個導體上的埠片；同一個 Net 的兩個導體；`reference_net` 不是任一導體之 Net 的埠。結果放在 `snapshot.lumped_elements`，每個元件一筆 `LumpedElementRecord`，含埠片、依埠片方向排列的兩個導體（`start`、`end`）及其 Net。
+
+每種模擬如何處理每個元件，見[支援的計算](../supported-calculations.qmd#lumped-elements)；簡言之，Palace Eigenmode 與 HFSS Eigenmode 會實現每個元件，並把埠當成其阻抗的負載；Palace Electrostatic 與 Q3D 讓它們保持開路；HFSS Driven Terminal 取用那兩個埠。每個被實現元件的埠片，都會切成其兩個導體之間的矩形，Palace 與 AEDT 相同。規劃沒有宣告任何元件的埠片，不屬於 Palace 或 HFSS 的模型。對在規劃之下建立、已正規化的 `GeometryBuildInput`，`with_rectangular_junctions(build_input, specs)` 以 `RectangularJunctionSpec` 與 `JunctionTerminalBinding` 把埠片綁定到它的兩個端點。
 
 ## 來源曲線 {#source-curves}
 
@@ -169,6 +185,6 @@ with preparation_resources(max_workers=30):
 
 ## 輸入摘要 {#pre-solve-input-summary}
 
-`sim.input_summary()` 在寫出任何檔案之前，顯示模型將會是什麼樣子：來源、Entity、出現實例、Net、材料、高度、真空、埠、EPR 要求與求解設定，以筆記本卡片呈現，獨立的資料在 `.data`。在 Palace 上，它顯示 `mesh()` 將建立的輸入，已套用規劃的真空、模擬的埠與路徑。未知的值保持未知，絕不當成零。`scgsim.geometry.summarize_geometry_input(build_input, *, prepared_stack)` 對正規化輸入給出同樣的摘要。
+`sim.input_summary()` 在寫出任何檔案之前，顯示模型將會是什麼樣子：來源、Entity、出現實例、Net、材料、高度、真空、埠、EPR 要求與求解設定，以筆記本卡片呈現，獨立的資料在 `.data`。在 Palace 上，它顯示 `mesh()` 將建立的輸入，已套用規劃的真空、集總元件與路徑；`.data["backend"]["lumped_elements"]` 說明模擬把每個元件做成什麼。未知的值保持未知，絕不當成零。`scgsim.geometry.summarize_geometry_input(build_input, *, prepared_stack)` 對正規化輸入給出同樣的摘要。
 
 []{#internal-semantic-projection}[]{#identity-requirements}[]{#shared-source-facts-for-aedt}[]{#accepted-q3d-source-normalization}SGB 如何投影來源、交接保留哪些身分、AEDT 從快照讀取的事實，以及 Q3D 空橋記錄，見 [GeometryPlan 內部實作](../../contribute/internals/geometry-plan.qmd)。

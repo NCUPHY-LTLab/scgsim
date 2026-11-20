@@ -96,10 +96,12 @@ Below the facade the modules carry responsibility names. The grid engine is
 `scgsim.geometry.grid`, with `grid_cache`, `tagged_grid`, `tagged_grid_faces`,
 `tagged_grid_operations` and `polygon_ops`; source preparation is
 `scgsim.geometry.source`, with `normalization`, `occurrence` and
-`plan_assembly`. Rectangular junctions are declared with
-`RectangularJunctionSpec`, `JunctionTerminalBinding` and
-`with_rectangular_junctions` from `scgsim.geometry` and derived by
-`interpret_physical_geometry`; the shared contact service
+`plan_assembly`. Lumped elements are declared with `LumpedElement` and
+`LumpedPort` and resolved into `LumpedElementRecord`s by
+`scgsim.geometry.source.lumped_elements`; each simulation binds its sheets for
+the rectangular partition with `RectangularJunctionSpec`,
+`JunctionTerminalBinding` and `with_rectangular_junctions` from
+`scgsim.geometry`, derived by `interpret_physical_geometry`; the shared contact service
 (`JunctionContactRequest`, `junction_contact_inventory`) lives in
 `scgsim.geometry.junctions.contact` and is not exported.
 
@@ -118,18 +120,17 @@ map to their owners as follows; listing a module here does not make it public.
 | `scgsim.aedt.spec` | `scgsim.aedt.specs.q3d` | `Q3dNetSpec`, `Q3dSpec` |
 | `scgsim.aedt.spec` | `scgsim.aedt.specs.parse` | `AedtSpec`, `parse_aedt_spec` |
 | `scgsim.aedt._epr_models` | `scgsim.aedt.epr.models` | `EprResult` |
-| `scgsim.aedt._epr_models` | `scgsim.aedt.specs.epr` | `EprAnalysisRequest`, `ExpressionCacheConvergence`, `NativeExpressionDefinition`, `NormalizedSurfaceEprTotal`, `PlanarJunction`, `SavedSolution` |
+| `scgsim.aedt._epr_models` | `scgsim.aedt.specs.epr` | `EprAnalysisRequest`, `ExpressionCacheConvergence`, `NativeExpressionDefinition`, `NormalizedSurfaceEprTotal`, `SavedSolution` |
 | `scgsim.aedt.handoff` | `scgsim.aedt.preparation.handoff` | `HandoffPlan`, `prepare_handoff` |
-| `scgsim.aedt.handoff` | `scgsim.aedt.preparation.geometry` | `prepare_hfss_eigenmode_from_geometry`, `prepare_q3d_from_geometry` |
+| `scgsim.aedt.handoff` | `scgsim.aedt.preparation.geometry` | `prepare_hfss_driven_from_geometry`, `prepare_hfss_eigenmode_from_geometry`, `prepare_q3d_from_geometry` |
 | `scgsim.aedt.handoff` | `scgsim.aedt.epr.workflow` | `analyze_epr` |
 | `scgsim.aedt.eigenmode` | `scgsim.aedt.eigenmode` | `EigenmodeSim` |
 | `scgsim.aedt.resolve` | `scgsim.aedt.results.resolve` | `ResolvedRun`, `resolve_results` |
-| `scgsim.aedt._epr_geometry` | `scgsim.aedt.preparation.planar_junctions` | `planar_junction_from_port` |
 | `scgsim.aedt._epr_results` | `scgsim.aedt.epr.reanalysis` | `reanalyze_epr` |
 | `scgsim.aedt._epr_results` | `scgsim.aedt.results.epr` | `resolve_epr_result`, `resolve_saved_solution` |
 | `scgsim.aedt._epr_results`, `_presentation` | `scgsim.aedt.presentation.epr` | `plot_epr_result`, `show_epr` |
 | `scgsim.aedt.run` | `scgsim.aedt.run` | `main` |
-| (new in 3.0.0rc3) | `scgsim.aedt.preparation.sgb_model` | `PreparedSgbModel`, `prepare_sgb_model` |
+| (new in 3.0.0rc3) | `scgsim.aedt.preparation.sgb_model` | `PreparedSgbModel` |
 
 The responsibility tree:
 

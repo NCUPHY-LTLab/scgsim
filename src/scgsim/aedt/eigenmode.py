@@ -1,9 +1,10 @@
 """``EigenmodeSim``: configure an Eigenmode or EPR run on a geometry plan and prepare its handoff.
 
 The source is a ``GeometryPlan`` snapshot only (``set_plan``): it carries the layout, the stack with its vacuum
-region and the plan's Surface-EPR specs.  ``prepare_handoff`` builds the plan's SGB model for AEDT
-(:func:`prepare_sgb_model`) and writes the HFSS Eigenmode handoff that carries it (issue #67);
-``prepared_model`` is then the model in that handoff.
+region, the plan's Surface-EPR specs and its lumped elements.  ``prepare_handoff`` builds the plan's SGB model
+for AEDT (:func:`prepare_sgb_model`), with each lumped element as HFSS Eigenmode realizes it
+(:func:`~scgsim.aedt.preparation.lumped_elements.hfss_eigenmode_inputs`), and writes the HFSS Eigenmode handoff
+that carries it (issue #67); ``prepared_model`` is then the model in that handoff.
 """
 
 from __future__ import annotations
@@ -17,14 +18,10 @@ from typing import Any
 from scgsim.aedt.epr.models import (
     EprResult,
 )
-from scgsim.aedt.specs.common import (
-    LumpedRlc,
-)
 from scgsim.aedt.specs.epr import (
     EprAnalysisRequest,
     ExpressionCacheConvergence,
     ExpressionCacheConvergenceSet,
-    PlanarJunction,
 )
 from scgsim.geometry import (
     GeometryPlanSnapshot,
@@ -36,12 +33,12 @@ from scgsim.geometry.source.plan import GeometryPlan, simulation_plan
 from .drc import (
     SimulationDrcReport,
     check_eigenmode_model,
-    fixed_port_rlcs,
     run_geometry_stage,
 )
 from .epr.reanalysis import reanalyze_epr
 from .preparation.geometry import prepare_hfss_eigenmode_from_geometry
 from .preparation.handoff import HandoffPlan
+from .preparation.lumped_elements import HfssLumpedInputs, hfss_eigenmode_inputs
 from .preparation.sgb_handoff import SGB_MODEL_DIR
 from .preparation.sgb_model import PreparedSgbModel, prepare_sgb_model
 from .presentation.epr import show_epr
@@ -63,8 +60,6 @@ class EigenmodeSim:
     design_name: str | None = None
     run_control: EigenmodeRunControl | None = None
     resources: AedtResources | None = None
-    junctions: tuple[PlanarJunction, ...] = ()
-    lumped_rlcs: tuple[LumpedRlc, ...] = ()
     epr_request: EprAnalysisRequest | None = None
     expression_convergence: (
         ExpressionCacheConvergence | ExpressionCacheConvergenceSet | None
@@ -93,8 +88,8 @@ class EigenmodeSim:
     def set_plan(self, snapshot: GeometryPlanSnapshot) -> None:
         """Bind the prepared ``GeometryPlan`` snapshot the model is built from, and discard the prepared model.
 
-        The snapshot brings the plan's vacuum region (AEDT's Region) and Surface-EPR specs
-        (``GeometryPlan.set_vacuum_region``, ``GeometryPlan.set_surface_epr``).
+        The snapshot brings the plan's vacuum region (AEDT's Region), Surface-EPR specs and lumped elements
+        (``GeometryPlan.set_vacuum_region``, ``set_surface_epr``, ``set_lumped_elements``).
         """
         if not isinstance(snapshot, GeometryPlanSnapshot):
             raise TypeError("set_plan requires a GeometryPlanSnapshot")
@@ -151,24 +146,6 @@ class EigenmodeSim:
         self.resources = resources
         self.handoff_plan = None
 
-    def add_lumped_rlc(self, treatment: LumpedRlc) -> None:
-        """Apply an electrical treatment to one lumped-port sheet of the plan."""
-        if not isinstance(treatment, LumpedRlc):
-            raise TypeError("treatment must be LumpedRlc")
-        if treatment.port_sheet_id in {item.port_sheet_id for item in self.lumped_rlcs}:
-            raise ValueError("port sheet already has an RLC treatment")
-        self.lumped_rlcs = (*self.lumped_rlcs, treatment)
-        self._invalidate_model()
-
-    def add_junction(self, junction: PlanarJunction) -> None:
-        """Append one junction after rejecting duplicate source identities."""
-        if not isinstance(junction, PlanarJunction):
-            raise TypeError("junction must be PlanarJunction")
-        if junction.junction_id in {item.junction_id for item in self.junctions}:
-            raise ValueError("junction ID is already configured")
-        self.junctions = (*self.junctions, junction)
-        self._invalidate_model()
-
     def set_epr_request(self, request: EprAnalysisRequest | None) -> None:
         """Set the optional EPR request and discard a stale handoff plan."""
         if request is not None and not isinstance(request, EprAnalysisRequest):
@@ -210,8 +187,7 @@ class EigenmodeSim:
             if self.resources is None
             else self.resources.to_payload(),
             "surface_epr_specs": self.surface_epr_specs,
-            "junctions": [item.to_payload() for item in self.junctions],
-            "lumped_rlcs": [item.to_payload() for item in self.lumped_rlcs],
+            "lumped_elements": _summarized_elements(self._plan_snapshot),
             "epr_request": (
                 None if self.epr_request is None else self.epr_request.to_payload()
             ),
@@ -238,14 +214,11 @@ class EigenmodeSim:
         with TemporaryDirectory(prefix="scgsim-aedt-model-") as build_dir:
             model = self.prepared_model
             if model is None:
-                model = prepare_sgb_model(
-                    snapshot.geometry_input,
-                    prepared_stack=snapshot.stack,
-                    modeling=self.modeling,
-                    output_dir=build_dir,
-                    junctions=self.junctions,
-                    lumped_rlcs=self.lumped_rlcs,
-                    surface_epr_specs=self.surface_epr_specs,
+                model = _eigenmode_model(
+                    snapshot,
+                    hfss_eigenmode_inputs(snapshot),
+                    self.modeling,
+                    Path(build_dir),
                 )
             plan = prepare_hfss_eigenmode_from_geometry(
                 aedt_version=self.aedt_version,
@@ -274,24 +247,23 @@ class EigenmodeSim:
 
         ``plan`` is the ``GeometryPlan`` the simulation will be given, unprepared: the check prepares it, as
         ``set_plan(plan.prepare())`` is given it, and leaves the caller's plan as it was.  Its Nets,
-        instances, coupon padding, vacuum region, Surface-EPR specs, port sheets and rectangular junctions
-        are used as the simulation uses them; the check adds none of its own.  A plan without ``set_vacuum_region`` is
+        instances, coupon padding, vacuum region, Surface-EPR specs, port sheets and lumped elements are used
+        as the simulation uses them; the check adds none of its own.  A plan without ``set_vacuum_region`` is
         refused with the error ``prepare_handoff()`` raises, since AEDT's Region is the plan's vacuum box.
 
         The check runs the geometry half of ``prepare_handoff()`` and of the HFSS import, everything before
         AEDT is started (:mod:`scgsim.aedt.drc`): the plan's SGB model on the route ``modeling`` realizes
         (``"thin_film"`` Route A, ``"solid"`` Route C) with its STEP and import guard, the boundaries the
         import plans on the guarded faces, and the selection of every Surface-EPR row.  A step that refuses
-        raises the error that step raises in the simulation, unchanged.  Every port sheet of the plan, the
-        sheet of each rectangular junction included, gets a parallel inductance the geometry never reads, so
-        the import treats it; a rectangular junction's sheet is cut as its ``RectangularJunctionSpec``
-        derives it.  The bands of the plan's Surface-EPR specs are cut as ``prepare_handoff()`` cuts them; a
-        plan without specs gets no bands.
+        raises the error that step raises in the simulation, unchanged.  Each lumped element of the plan is
+        realized as ``prepare_handoff()`` realizes it, its sheet cut to its central rectangle; an authored sheet
+        that carries none is left out.  The bands of the plan's Surface-EPR specs are cut as
+        ``prepare_handoff()`` cuts them; a plan without specs gets no bands.  The report's ``lumped_elements``
+        says, one line each, what HFSS makes of each element.
 
         AEDT meshes the model itself, so the report has a geometry stage only.  The model is built in a
         temporary folder that is removed.  A pass means that model can be built and imported with these
-        port treatments; it does not promise the other ``modeling``, the junctions' widths and Nets (which
-        ``prepare_handoff()`` compares), nor that AEDT meshes or solves it.
+        lumped elements; it does not promise the other ``modeling``, nor that AEDT meshes or solves it.
 
         Args:
             plan: The ``GeometryPlan`` the simulation will be given, before ``prepare()``.
@@ -306,17 +278,12 @@ class EigenmodeSim:
         # The modeling is checked before the plan is prepared, so a refused one costs no preparation.
         modeling = modeling_from_value(modeling)
         snapshot = plan.prepare()
-        return run_geometry_stage(
-            lambda folder: prepare_sgb_model(
-                snapshot.geometry_input,
-                prepared_stack=snapshot.stack,
-                modeling=modeling,
-                output_dir=folder,
-                lumped_rlcs=fixed_port_rlcs(snapshot),
-                surface_epr_specs=snapshot.surface_epr_specs,
-            ),
+        lumped = hfss_eigenmode_inputs(snapshot)
+        report = run_geometry_stage(
+            lambda folder: _eigenmode_model(snapshot, lumped, modeling, folder),
             check_eigenmode_model,
         )
+        return replace(report, lumped_elements=lumped.report)
 
     def resolve_results(self, run_dir: str | Path | None = None) -> ResolvedRun:
         """Resolve completed result evidence from the plan or explicit run path."""
@@ -348,3 +315,30 @@ class EigenmodeSim:
     ) -> Any:
         """Display one detached EPR result without running the solver."""
         return show_epr(result, mode=mode, native_pass=native_pass, theme=theme)
+
+
+def _eigenmode_model(
+    snapshot: GeometryPlanSnapshot,
+    lumped: HfssLumpedInputs,
+    modeling: Modeling,
+    folder: Path,
+) -> PreparedSgbModel:
+    """The plan's SGB model for HFSS Eigenmode in ``folder``: its lumped elements ``lumped`` and its Surface-EPR bands."""
+    return prepare_sgb_model(
+        lumped.build_input,
+        prepared_stack=snapshot.stack,
+        modeling=modeling,
+        output_dir=folder,
+        junctions=lumped.junctions,
+        lumped_rlcs=lumped.lumped_rlcs,
+        surface_epr_specs=snapshot.surface_epr_specs,
+    )
+
+
+def _summarized_elements(snapshot: GeometryPlanSnapshot) -> list[dict[str, Any]]:
+    """The plan's lumped elements as ``input_summary()`` shows them, each with what HFSS Eigenmode makes of it."""
+    realizations = hfss_eigenmode_inputs(snapshot).realizations
+    return [
+        {**record.to_payload(), "realization": realizations[record.name]}
+        for record in snapshot.lumped_elements
+    ]

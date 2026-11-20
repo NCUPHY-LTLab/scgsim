@@ -40,7 +40,6 @@ import json
 import os
 import subprocess
 import tarfile
-from dataclasses import replace
 from pathlib import Path
 
 import gdsfactory as gf
@@ -49,11 +48,11 @@ from orcapen_sc_pdk import get_material_records
 from orcapen_sc_pdk.tech import get_single_die_layer_stack
 from scgsim.aedt import (
     AedtResources, EigenmodeRunControl, EigenmodeSim, EprAnalysisRequest,
-    planar_junction_from_port, prepare_native_batch,
+    prepare_native_batch,
 )
-from scgsim.geometry import GeometryPlan, JunctionTerminalBinding, RectangularJunctionSpec
+from scgsim.geometry import GeometryPlan, LumpedElement
 
-# The pad of First simulation, with its junction sheet declared as a junction.
+# The pad of First simulation; each case puts its junction on the junction sheet.
 orcapen_sc_pdk.activate()
 component = gf.get_component(
     "square_pad_capacitor", pad_side_um=200.0, gap_um=20.0, die_side_um=1000.0
@@ -67,26 +66,7 @@ plan = GeometryPlan(
 )
 plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
 plan.set_vacuum_region(padding=(0.0, 0.0, 1000.0))
-plan.set_rectangular_junctions([
-    RectangularJunctionSpec(
-        junction_id="jj",
-        port_sheet_id="PORT_SHEET__chip/o_junction_lumped__0000",
-        source_polygon_id="PORT_SHEET__chip/o_junction_lumped__SOURCE__P0000",
-        source_occurrence_path="chip",
-        terminal_a=JunctionTerminalBinding("chip/PAD", "chip", "pad"),
-        terminal_b=JunctionTerminalBinding("chip/GROUND", "chip", "ground"),
-    )
-])
-snapshot = plan.prepare()
-junction = planar_junction_from_port(
-    snapshot.geometry_input,
-    port_name="chip/o_junction_lumped",
-    junction_id="jj",
-    terminal_a_net="pad",
-    terminal_b_net="ground",
-    inductance_h=10e-9,
-    capacitance_f=0.0,
-)
+junction = "chip/o_junction_lumped"
 
 AEDT_VERSION = "2024.2"  # The same release on all three computers.
 resources = AedtResources(cores=4, ram_limit_percent=80)
@@ -95,8 +75,9 @@ packages = study / "packages"
 packages.mkdir(parents=True, exist_ok=False)
 rows = []
 for case_id, inductance_h in (("L10nH", 10e-9), ("L12nH", 12e-9), ("L14nH", 14e-9)):
+    plan.set_lumped_elements([LumpedElement(junction, inductance_h=inductance_h)])
     sim = EigenmodeSim(modeling="solid", aedt_version=AEDT_VERSION)
-    sim.set_plan(snapshot)
+    sim.set_plan(plan.prepare())
     sim.set_output_dir(study / "prepared" / case_id)
     sim.set_eigenmode(
         project_name=f"pad_{case_id}",
@@ -108,11 +89,10 @@ for case_id, inductance_h in (("L10nH", 10e-9), ("L12nH", 12e-9), ("L14nH", 14e-
         ),
         resources=resources,
     )
-    sim.add_junction(replace(junction, inductance_h=inductance_h))
     sim.set_epr_request(EprAnalysisRequest(
         mode_indices=(1,),
         surface_epr_groups=None,  # every Surface EPR group of the plan (none here)
-        junction_ids=("jj",),
+        junction_ids=(junction,),
         bulk_domain_ids=None,  # every dielectric solid and the Region
     ))
     handoff = sim.prepare_handoff()  # Writes the run folder; opens no AEDT.
@@ -149,11 +129,12 @@ For each inductance, the loop:
 3. packages the saved project for the HPC solver with
    `prepare_native_batch()`.
 
-The junction needs `plan.set_rectangular_junctions` before `prepare()`: it
-names the junction sheet and the pad and ground Entities it joins, pad first,
-because the sheet's direction points from the pad to the ground. Only the
-inductance changes between the models, so one plan serves all three; a sweep
-of the geometry needs a new plan, snapshot and junction for each case.
+The junction is a lumped element of the plan: each case declares its
+inductance on the junction sheet with `set_lumped_elements` and prepares the
+plan again. The plan finds the pad and the ground the sheet joins, and HFSS
+names the junction by its sheet in the EPR request. Only the inductance
+changes between the models, so the three cases share the layout and the
+geometry; a sweep of the geometry changes the layout or the plan the same way.
 `sweep.json` is your own table of cases; SCGSim has no sweep function.
 
 Each `packages/<case>` holds `native-batch-package.json`, `run_batch.py` and

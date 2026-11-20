@@ -87,21 +87,27 @@ AEDT 會建立模型與各項指定、讀回、儲存專案後關閉；不產生
 
 ### 埠片、接面與 RLC {#hfss-shared-lumped-support}
 
-`PlanarJunction`、`LumpedRlc` 或 `LumpedTerminalPort` 放在規劃的一張埠片上，以 `port_sheet_id` 指名。每張埠片只放其中一個；在 HFSS 中，每張埠片都必須放一個。
+埠片上放什麼由規劃決定：`plan.set_lumped_elements` 的每個集總元件（[集總元件](geometry-plan.qmd#lumped-elements)），放在它指名的埠片上。HFSS 把每個元件做成：
 
-`LumpedRlc` 要指定拓撲，`series` 或 `parallel`；它的 R、L、C 各是有限值，或以 `None` 省略。它是線性電路元件，不是接面：沒有接面參與比。
+| 規劃上 | HFSS Eigenmode | HFSS Driven Terminal |
+|---|---|---|
+| 有電感、沒有電阻的 `LumpedElement` | 接面：其 L 與 C 的 Lumped RLC（未給 C 時 C = 0），帶接面參與比；它的 EPR id 是埠片的名稱 | 拒絕，並指出該元件 |
+| 其他 `LumpedElement` | 其 R、L、C 的並聯 Lumped RLC，是線性電路元件，沒有接面參與比 | 拒絕，並指出該元件 |
+| `LumpedPort` | 其阻抗的並聯 Lumped RLC，作為負載 | 一個集總 Terminal 埠，依規劃的順序 |
+
+每張埠片都會像 Palace 一樣，切成它兩個導體之間的矩形（[接面如何切分](#aedt-automatic-junction-partition)）。規劃沒有宣告任何元件的埠片不在模型中。
 
 AEDT 名稱只保留字母、數字與 `_`，所以名為 `chip/A` 的 Net 在 AEDT 中成為 `chip_A`。兩個 Net 若變成同一個名稱，例如 `chip/A` 與 `chip_A`，會在 AEDT 啟動之前被拒絕，並列出兩個名稱；名稱衝突的兩個接面或兩個 RLC 也一樣。SCGSim 不會自動改名。
 
 ### HFSS Driven Terminal {#hfss-driven-terminal-sgb}
 
-給模型兩個集總 Terminal 埠，即埠 1 與埠 2，名稱不同，共用一個參考（`prepare_sgb_model(..., ports=...)`）。每張埠片連接兩個導體：一個必須是該埠的訊號導體，另一個是參考導體。Driven 模型不帶接面、RLC 或 Surface-EPR 規格。計算依埠的順序回傳所宣告掃描的 S 參數，存成 CSV 與 Touchstone。
+在規劃上宣告兩個 `LumpedPort`，共用一個參考 Net，並以 `prepare_hfss_driven_from_geometry(plan.prepare(), modeling=..., ...)` 準備計算。埠 1 是第一個 `LumpedPort`；每個埠的 AEDT 名稱是其埠片名稱，其中字母、數字與 `_` 以外的字元都改成 `_`。每張埠片連接兩個導體：位於 `reference_net` 的是參考，另一個是訊號，端子放在訊號上。Driven 模型不帶接面、RLC 或 Surface-EPR 規格：規劃上的 `LumpedElement` 會被拒絕，規劃的 Surface-EPR 規格不會被讀取。計算依埠的順序回傳所宣告掃描的 S 參數，存成 CSV 與 Touchstone。
 
 Driven Modal 與 wave port 不可用；見[不支援](#current-exclusions)。
 
 ### HFSS Eigenmode 與 EPR {#eigenmode-saved-fields-and-surface-epr-direction}
 
-`EigenmodeSim(modeling=..., aedt_version=...)` 以 `set_plan` 取得規劃，以 `set_eigenmode` 設定求解，並可用 `add_junction`、`add_lumped_rlc` 與 `set_epr_request`。Surface EPR 屬於規劃（在 `prepare()` 之前呼叫 `plan.set_surface_epr(specs)`）：它的邊距會切進模型成為條帶。所宣告類型的每一個 Surface-EPR 列都在它所有的面上積分，包含側壁，除非規格的 `face_kinds` 把側壁排除。[以 HFSS 計算模態](../../guides/modes-hfss.qmd)依序執行這些呼叫。
+`EigenmodeSim(modeling=..., aedt_version=...)` 以 `set_plan` 取得規劃，以 `set_eigenmode` 設定求解，並可用 `set_epr_request`；接面與集總 RLC 是規劃上的集總元件。Surface EPR 屬於規劃（在 `prepare()` 之前呼叫 `plan.set_surface_epr(specs)`）：它的邊距會切進模型成為條帶。所宣告類型的每一個 Surface-EPR 列都在它所有的面上積分，包含側壁，除非規格的 `face_kinds` 把側壁排除。[以 HFSS 計算模態](../../guides/modes-hfss.qmd)依序執行這些呼叫。
 
 `EprAnalysisRequest` 選擇要回報什麼：`surface_epr_groups`（`None` 表示全部）、`junction_ids` 與 `bulk_domain_ids`。不論回報哪些，所有區域與接面都留在正規化之中。
 
@@ -143,7 +149,7 @@ sim.set_expression_cache_convergence(
 
 #### 接面如何切分 {#aedt-automatic-junction-partition}
 
-AEDT 把接面的電感放在一個矩形上。SCGSim 把畫出的接面薄片切成兩個導體端部，各自接到自己的端點，以及一個全寬的中央矩形，承載全部的電感與電容。薄片在兩個端點之間必須有一條全寬、不碰其他金屬的淨空通道；否則準備會停止，並指出該接面。切分規則與檢查見[內部實作](../../contribute/internals/aedt-runtime.qmd#aedt-automatic-junction-partition)。
+AEDT 把接面的電感放在一個矩形上，其他集總元件也放在同樣的矩形上。SCGSim 把畫出的薄片切成兩個導體端部，各自接到自己的端點，以及一個全寬的中央矩形，承載全部的電感與電容。薄片在兩個端點之間必須有一條全寬、不碰其他金屬的淨空通道；否則準備會停止，並指出該接面。切分規則與檢查見[內部實作](../../contribute/internals/aedt-runtime.qmd#aedt-automatic-junction-partition)。
 
 ![畫出的薄片與準備後的各片：既有的 A、B 端點（淺色）、新增的導體端部（深色）與中央 RLC 矩形。](../../assets/junction-partition-generic.svg){fig-alt="一般化的宣告薄片：淺色為既有端點金屬，深色為新增的導體端部，以及中央 RLC 矩形。" width="95%"}
 

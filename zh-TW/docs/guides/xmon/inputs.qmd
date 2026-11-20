@@ -15,7 +15,7 @@ aliases:
 
 ![計畫準備好的覆晶 Xmon。左：上方晶片（D1）朝向下方晶片的那一面，依比例繪製：十字形 Xmon 焊墊，端到端 309.5 µm、臂寬 24.65 µm；四個耦合電極離它的末端 20 µm；周圍的接地平面；以及連接兩片晶片接地平面的八個銦凸塊。紅色標記是焊墊與接地平面之間的接面薄片。右：層疊，未依比例；兩片晶片隔著 8.2 µm 的真空間隙相對。](../../assets/xmon-flip-chip-zh.png){#fig-xmon-flip-chip}
 
-兩片各厚 500 µm 的矽晶片面對面。下方晶片（D0）的上表面有一層接地平面；上方晶片（D1）朝下的那一面有 Xmon。八個各 20 µm 見方的銦凸塊跨過 8.2 µm 的間隙，連接兩層接地平面。模型為 1060 µm 見方。接面以它的薄片表示，這片小薄片連接焊墊與 D1 接地平面：兩個後端頁面都在這裡放一個 11.78 nH 的電感，這是 PDK 公開 Notebook 為這顆量子位元使用的值。
+兩片各厚 500 µm 的矽晶片面對面。下方晶片（D0）的上表面有一層接地平面；上方晶片（D1）朝下的那一面有 Xmon。八個各 20 µm 見方的銦凸塊跨過 8.2 µm 的間隙，連接兩層接地平面。模型為 1060 µm 見方。接面以它的薄片表示，這片小薄片連接焊墊與 D1 接地平面：計畫在這裡放一個 11.78 nH 的電感，這是 PDK 公開 Notebook 為這顆量子位元使用的值，兩個後端頁面都從計畫讀取它。
 
 Palace 頁需要含 `palace` extra 的 SCGSim，AEDT 頁需要含 `aedt-epr` extra 的 SCGSim，兩者都需要 OrcaPen SC PDK（[安裝 SCGSim](../../start/install.qmd)）。
 
@@ -27,7 +27,7 @@ import orcapen_sc_pdk
 from orcapen_sc_pdk import LAYER_STACK, get_material_records
 from orcapen_sc_pdk.helpers.assembly import place_flip_chip_ground_short_bumps
 from orcapen_sc_pdk.tech import OUTER_VACUUM_THICKNESS_UM
-from scgsim.geometry import GeometryPlan
+from scgsim.geometry import GeometryPlan, LumpedElement
 
 orcapen_sc_pdk.activate()
 gf.clear_cache()
@@ -78,8 +78,9 @@ plan.set_nets({
 plan.set_vacuum_region(
     padding=(0.0, 0.0, float(OUTER_VACUUM_THICKNESS_UM))
 )
-snapshot = plan.prepare()
 port_name = "chip/device/o_junction_lumped"
+plan.set_lumped_elements([LumpedElement(port_name, inductance_h=11.78e-9)])
+snapshot = plan.prepare()
 ```
 
 每一步決定的事：
@@ -95,7 +96,7 @@ port_name = "chip/device/o_junction_lumped"
 
   這裡把耦合電極接地，是因為這個範例沒有讀取線或驅動線；在有這些線的元件中，它們會各自是一個 Net。
 - `set_vacuum_region` 在兩片晶片的上方與下方各加 1000 µm 的真空（`OUTER_VACUUM_THICKNESS_UM`），側面則不加。晶片之間 8.2 µm 的間隙屬於層疊，不屬於這個真空區域。
-- `port_name` 是接面薄片在計畫中的名稱，兩個後端頁面都會用到。
+- `set_lumped_elements` 在計畫上宣告接面一次：接面薄片 `port_name` 上、Xmon 焊墊與 D1 接地平面之間的 11.78 nH 電感，本身不帶電容，這是建模選擇。兩個後端頁面都從計畫讀取它，並在 EPR 要求中以 `port_name` 指名這個接面（[集總元件](../../reference/specs/geometry-plan.qmd#lumped-elements)）。
 
 ## 接下來 {#observe-the-prepared-source-and-continue}
 

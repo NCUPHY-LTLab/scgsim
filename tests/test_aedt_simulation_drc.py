@@ -21,13 +21,13 @@ pytest.importorskip("OCP")
 
 import scgsim.aedt.drc as drc_module  # noqa: E402
 import scgsim.palace as palace  # noqa: E402
-from scgsim.aedt import EigenmodeSim, LumpedRlc  # noqa: E402
+from scgsim.aedt import EigenmodeSim  # noqa: E402
 from scgsim.aedt.drc import SimulationDrcReport  # noqa: E402
 from scgsim.aedt.runtime.families.sgb_boundaries import BoundaryPlanError  # noqa: E402
 from scgsim.aedt.runtime.families.sgb_import import planned_import  # noqa: E402
+from scgsim.aedt.specs.common import LumpedRlc  # noqa: E402
 from scgsim.contracts.sgb_sidecar import read_sidecar  # noqa: E402
-from scgsim.geometry import RectangularJunctionSpec  # noqa: E402
-from scgsim.geometry.models.junctions import JunctionTerminalBinding  # noqa: E402
+from scgsim.geometry import LumpedElement, LumpedPort  # noqa: E402
 from scgsim.geometry.sgb.output.exchange.guard import read_step_guard  # noqa: E402
 
 MODELINGS = ["solid", "thin_film"]
@@ -62,30 +62,29 @@ def check(  # noqa: PLR0913 -- the layout, each plan setting an author writes, a
     *,
     layer_stack=LAYER_STACK,
     nets=None,
-    junctions=(),
+    lumped_elements=None,
     surface_epr_specs=None,
     **options,
 ):
-    """``EigenmodeSim.simulation_drc`` on the plan a layout author builds for ``component``."""
+    """``EigenmodeSim.simulation_drc`` on the plan a layout author builds for ``component``.
+
+    ``lumped_elements`` None declares every authored sheet as a 1 nH element, as ``layout_plan`` does.
+    """
     plan = layout_plan(
         component,
         layer_stack=layer_stack,
         nets=nets,
-        junctions=junctions,
+        lumped_elements=lumped_elements,
         surface_epr_specs=surface_epr_specs,
     )
     return EigenmodeSim.simulation_drc(plan, **options)
 
 
 def handoff_refusal(plan, modeling, tmp_path):
-    """The error ``prepare_handoff()`` raises for ``plan``, with the port treatments ``simulation_drc`` gives."""
+    """The error ``prepare_handoff()`` raises for ``plan``, with the plan's lumped elements, as ``simulation_drc`` has them."""
     snapshot = plan.prepare()
     sim = EigenmodeSim(modeling=modeling, aedt_version="2024.2")
     sim.set_plan(snapshot)
-    for region in snapshot.geometry_input.port_sheet_regions:
-        sim.add_lumped_rlc(
-            LumpedRlc(region.port_sheet_id, "parallel", inductance_h=1e-9)
-        )
     sim.set_output_dir(tmp_path / "run")
     sim.set_eigenmode(project_name="check", design_name="eigenmode")
     with pytest.raises(Exception) as error:  # noqa: PT011 -- the type is what the test compares
@@ -96,11 +95,20 @@ def handoff_refusal(plan, modeling, tmp_path):
 @pytest.mark.parametrize("modeling", MODELINGS)
 @pytest.mark.parametrize("port", [False, True])
 def test_a_layout_that_models_passes_on_both_routes(monkeypatch, modeling, port):
-    """Two separate pads, with or without an authored port, build as the Route A and the Route C model."""
+    """Two separate pads, with or without an authored port, build as the Route A and the Route C model.
+
+    The port, a 1 nH element on the plan, is an EPR junction, and the report says so.
+    """
     report = check(two_pads(monkeypatch, gap_um=10.0, port=port), modeling=modeling)
     assert isinstance(report, SimulationDrcReport)
     assert report.passed
-    assert report.render_text() == "geometry stage: passed\n"
+    junction = (
+        "lumped elements:\n"
+        "  chip/P1: EPR junction 'chip/P1', Lumped RLC L 1e-09 H, C 0.0 F\n"
+    )
+    assert report.render_text() == "geometry stage: passed\n" + (
+        junction if port else ""
+    )
 
 
 def built_models(monkeypatch, **options):
@@ -206,16 +214,8 @@ def test_a_first_argument_that_is_not_a_plan_is_refused_with_the_plan_to_build(
         )
 
 
-# The two pads' authored port sheet, bound as a rectangular junction between the pad (Net A) and the electrode (Net B).
+# The two pads' Nets: the pad (A) and the electrode (B) the authored port sheet joins.
 JUNCTION_NETS = {"A": ("chip/pad",), "B": ("chip/electrode",)}
-JUNCTION = RectangularJunctionSpec(
-    "jj",
-    "PORT_SHEET__chip/P1__0000",
-    "PORT_SHEET__chip/P1__SOURCE__P0000",
-    "chip",
-    JunctionTerminalBinding("chip/pad_0000", "chip", "A"),
-    JunctionTerminalBinding("chip/electrode_0000", "chip", "B"),
-)
 SHEET_EDGES = {
     f"PORT_SHEET__chip/P1__0000/polygon0/ring0/edge{index}" for index in range(4)
 }
@@ -236,13 +236,13 @@ def port_sheet_carriers(sidecar):
 
 
 @pytest.mark.parametrize("modeling", MODELINGS)
-def test_a_plans_rectangular_junction_is_checked_with_its_port_sheet_cut(
-    monkeypatch, modeling
-):
-    """The plan's rectangular junction is in the model: its sheet is cut to the rectangle between its terminals.
+def test_every_lumped_element_is_checked_with_its_port_sheet_cut(monkeypatch, modeling):
+    """Each kind of lumped element is in the model on its sheet cut to the rectangle between its conductors.
 
-    The port face is bounded by the sheet's four cut edges, where the same sheet without the junction keeps
-    its drawn outline; the sheet gets the fixed parallel inductance, so the import treats it.
+    An inductance alone is an EPR junction named by its sheet, from the pad (A) at the start of the authored
+    direction to the electrode (B); a resistance is a parallel Lumped RLC; an excitation port is a parallel
+    Lumped RLC of its impedance.  The port face is bounded by the sheet's four cut edges in every case.  A
+    sheet that carries no element is not in the model.
     """
     component = two_pads(monkeypatch, gap_um=10.0, port=True)
     models = []
@@ -255,16 +255,34 @@ def test_a_plans_rectangular_junction_is_checked_with_its_port_sheet_cut(
     import scgsim.aedt.eigenmode as eigenmode_module  # noqa: PLC0415 -- the module whose import is replaced
 
     monkeypatch.setattr(eigenmode_module, "check_eigenmode_model", recording)
-    assert check(component, nets=JUNCTION_NETS, modeling=modeling).passed
-    assert check(
-        component, nets=JUNCTION_NETS, junctions=[JUNCTION], modeling=modeling
-    ).passed
-    (_, drawn), (model, cut) = models
-    assert port_sheet_carriers(cut) == SHEET_EDGES
-    assert port_sheet_carriers(drawn) != SHEET_EDGES
-    assert model.lumped_rlcs == (
-        LumpedRlc("PORT_SHEET__chip/P1__0000", "parallel", inductance_h=1e-9),
+    sheet = "PORT_SHEET__chip/P1__0000"
+    elements = {
+        "junction": LumpedElement("chip/P1", inductance_h=1e-8, capacitance_f=2e-15),
+        "load": LumpedElement("chip/P1", resistance_ohm=50.0),
+        "port": LumpedPort("chip/P1", reference_net="B", impedance_ohm=50.0),
+    }
+    for element in elements.values():
+        assert check(
+            component, nets=JUNCTION_NETS, lumped_elements=[element], modeling=modeling
+        ).passed
+    report = check(component, nets=JUNCTION_NETS, lumped_elements=[], modeling=modeling)
+    assert report.lumped_elements == (
+        "chip/P1: no lumped element on the plan; not modeled",
     )
+    (junction, _), (load, _), (port, _), (empty, unmodeled) = models
+    for _, sidecar in models[:3]:
+        assert port_sheet_carriers(sidecar) == SHEET_EDGES
+    ((bound,),) = [junction.junctions]
+    assert (bound.port_group, bound.junction.junction_id) == (
+        f"PORT::{sheet}",
+        "chip/P1",
+    )
+    assert (bound.junction.terminal_a_net, bound.junction.terminal_b_net) == ("A", "B")
+    assert (bound.junction.inductance_h, bound.junction.capacitance_f) == (1e-8, 2e-15)
+    assert load.lumped_rlcs == (LumpedRlc(sheet, "parallel", resistance_ohm=50.0),)
+    assert port.lumped_rlcs == (LumpedRlc(sheet, "parallel", resistance_ohm=50.0),)
+    assert (empty.junctions, empty.lumped_rlcs) == ((), ())
+    assert not any(group.startswith("PORT::") for group in unmodeled["group"])
 
 
 def test_a_modeling_that_is_not_solid_or_thin_film_is_refused_before_the_plan_is_prepared(

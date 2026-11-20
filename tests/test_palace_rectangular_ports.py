@@ -17,6 +17,7 @@ from test_simulation_drc import MATERIALS, NO_VACUUM_STACK, layout_plan, two_pad
 import scgsim.palace.source.workflow as workflow
 from scgsim.geometry import (
     GeometryPlan,
+    LumpedElement,
     RectangularJunctionSpec,
 )
 from scgsim.palace import EigenmodeSim
@@ -183,8 +184,8 @@ def eigenmode_sim(component, nets=NETS):
     plan.set_nets(nets)
     plan.set_vacuum_region(VACUUM_PADDING_UM)
     sim = EigenmodeSim()
+    plan.set_lumped_elements([LumpedElement("chip/P1", inductance_h=1e-9)])
     sim.set_plan(plan.prepare())
-    sim.add_port("chip/P1", layer="metal", layout_sheet=True, inductance=1e-9)
     return sim
 
 
@@ -395,8 +396,8 @@ def test_a_port_on_conductors_without_a_net_joins_each_end_to_its_own_conductor(
     )
     plan.set_vacuum_region(VACUUM_PADDING_UM)
     sim = EigenmodeSim()
+    plan.set_lumped_elements([LumpedElement("chip/P1", inductance_h=1e-9)])
     sim.set_plan(plan.prepare())
-    sim.add_port("chip/P1", layer="metal", layout_sheet=True, inductance=1e-9)
     _, _, record = prepared_port(sim)
     assert [(end["source_entity_id"], end["net_id"]) for end in record["ends"]] == [
         ("chip/pad_0000", "chip/pad_0000"),

@@ -121,10 +121,22 @@
           "names": [
             "GeometryPlan",
             "GeometryPlanSnapshot",
-            "JunctionTerminalBinding",
-            "RectangularJunctionSpec",
             "SemanticEntitySpec",
-            "VacuumRegionSpec",
+            "VacuumRegionSpec"
+          ]
+        },
+        {
+          "title": "Lumped elements",
+          "title_zh": "集總元件",
+          "gloss": "Declare each lumped element once, on the plan: an R, L, C element or an excitation port on an authored sheet.",
+          "gloss_zh": "在規劃上宣告每個集總元件一次：放在繪製埠片上的 R、L、C 元件或激發埠。",
+          "page": "specs/geometry-plan.qmd#lumped-elements",
+          "names": [
+            "JunctionTerminalBinding",
+            "LumpedElement",
+            "LumpedElementRecord",
+            "LumpedPort",
+            "RectangularJunctionSpec",
             "with_rectangular_junctions"
           ]
         },
@@ -274,8 +286,8 @@
         {
           "title": "Preparation",
           "title_zh": "準備",
-          "gloss": "Build the SGB model of a plan and prepare an HFSS, Q3D or Q2D handoff.",
-          "gloss_zh": "由規劃建立 SGB 模型，並準備 HFSS、Q3D 或 Q2D 的交接。",
+          "gloss": "Build the SGB model of a plan, its lumped elements included, and prepare an HFSS, Q3D or Q2D handoff.",
+          "gloss_zh": "由規劃建立 SGB 模型（含其集總元件），並準備 HFSS、Q3D 或 Q2D 的交接。",
           "page": "specs/aedt-runtime.qmd#one-shared-lifecycle",
           "names": [
             "EigenmodeSim",
@@ -286,8 +298,7 @@
             "prepare_handoff",
             "prepare_hfss_driven_from_geometry",
             "prepare_hfss_eigenmode_from_geometry",
-            "prepare_q3d_from_geometry",
-            "prepare_sgb_model"
+            "prepare_q3d_from_geometry"
           ]
         },
         {
@@ -311,18 +322,14 @@
           ]
         },
         {
-          "title": "Ports, junctions and RLCs",
-          "title_zh": "埠、接面與 RLC",
-          "gloss": "What sits on a port sheet.",
-          "gloss_zh": "放在埠片上的元件。",
-          "page": "specs/aedt-runtime.qmd#hfss-shared-lumped-support",
+          "title": "Wave and modal ports",
+          "title_zh": "波埠與模態埠",
+          "gloss": "Ports on the Region's faces, refused until issue #135; lumped elements are the plan's.",
+          "gloss_zh": "放在 Region 面上的埠，在 issue #135 之前會遭拒；集總元件屬於規劃。",
+          "page": "specs/aedt-runtime.qmd#hfss-driven-terminal-sgb",
           "names": [
-            "LumpedRlc",
-            "LumpedTerminalPort",
             "ModalPort",
-            "PlanarJunction",
-            "TerminalPort",
-            "planar_junction_from_port"
+            "TerminalPort"
           ]
         },
         {
@@ -399,13 +406,11 @@
         {
           "title": "Driven Terminal specs",
           "title_zh": "Driven Terminal 規格",
-          "gloss": "The same Driven Terminal names, importable from the specs module.",
-          "gloss_zh": "同一組 Driven Terminal 名稱，也可由規格模組匯入。",
+          "gloss": "The Driven Terminal request and the wave port record, importable from the specs module.",
+          "gloss_zh": "Driven Terminal 要求與波埠紀錄，也可由規格模組匯入。",
           "page": "specs/aedt-runtime.qmd#hfss-driven-terminal-sgb",
           "names": [
             "HfssDrivenGeometrySpec",
-            "LumpedRlc",
-            "LumpedTerminalPort",
             "TerminalPort"
           ]
         }

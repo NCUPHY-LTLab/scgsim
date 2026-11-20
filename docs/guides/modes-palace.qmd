@@ -51,7 +51,7 @@ import gdsfactory as gf
 import orcapen_sc_pdk
 from orcapen_sc_pdk import get_material_records, validate_interface_preset_records
 from orcapen_sc_pdk.tech import get_single_die_layer_stack
-from scgsim.geometry import GeometryPlan
+from scgsim.geometry import GeometryPlan, LumpedElement
 from scgsim.palace import EigenmodeSim, ModeFrequency, resolve_palace_result
 
 # 1. The layout and plan of First simulation: a 200 µm pad in a 20 µm gap on a 1000 µm die.
@@ -83,11 +83,11 @@ plan.set_surface_epr({
 })
 
 # 3. The resonator: a 10 nH inductor on the junction sheet between pad and ground.
+port = "chip/o_junction_lumped"
+plan.set_lumped_elements([LumpedElement(port, inductance_h=10e-9)])
 sim = EigenmodeSim()
 sim.set_plan(plan.prepare())
 sim.set_output_dir(Path(".artifacts/pad-modes") / uuid4().hex[:12])
-port = "chip/o_junction_lumped"
-sim.add_port(port, layer="D0_TOP_M1", layout_sheet=True, inductance=10e-9)
 sim.set_eigenmode(num_modes=1, target=3e9)
 sim.set_epr_request(surface_interfaces=("MA", "MS", "SA"), port_names=(port,))
 
@@ -138,10 +138,11 @@ Sections 1, 5 and the first lines of 6 are those of
   literature, not measurements. The films are set on the plan because they
   are part of the geometry; without `set_surface_epr`, no surface EPR is
   computed. [Surface EPR](../concepts/surface-epr.qmd) explains the method.
-- **Section 3** makes the resonator. `add_port` puts a 10 nH inductor on the
-  PDK's junction sheet `chip/o_junction_lumped`, on the metal layer
-  `D0_TOP_M1`. `num_modes=1` and `target=3e9` ask for the first mode above
-  3 GHz. `set_epr_request` selects which participations are reported; it does
+- **Section 3** makes the resonator. `set_lumped_elements` puts a 10 nH
+  inductor on the PDK's junction sheet `chip/o_junction_lumped`, between the
+  pad and the ground. Like the films, it is set on the plan, so every
+  simulation of this plan has it ([Lumped elements](../reference/specs/geometry-plan.qmd#lumped-elements)).
+  `num_modes=1` and `target=3e9` ask for the first mode above 3 GHz. `set_epr_request` selects which participations are reported; it does
   not change the solve.
 - **Section 4** asks for second-order elements and lets Palace refine the mesh
   up to four times, stopping once mode 1's frequency has changed by at most

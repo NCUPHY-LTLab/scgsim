@@ -34,10 +34,9 @@ config_path = sim.write_config()
 
 | Call | What it sets |
 |---|---|
-| `set_plan(snapshot)` | The prepared `GeometryPlan`, with its vacuum and Surface-EPR films. |
+| `set_plan(snapshot)` | The prepared `GeometryPlan`, with its vacuum, Surface-EPR films and lumped elements. |
 | `set_output_dir(path)` | The run folder. |
 | `set_eigenmode(*, num_modes=10, target=None, tolerance=1e-6, save=0)` | How many modes, the frequency to search from (`target`, in hertz), the eigensolver tolerance and how many modes' fields to save. |
-| `add_port(name, *, layer, layout_sheet=True, inductance)` | A lumped port on a drawn sheet, with its inductance in henries; `layout_sheet` must be `True`. See [Lumped ports](#lumped-ports). |
 | `set_epr_request(*, surface_interfaces=None, bulk_domain_ids=None, port_names=None)` | Which participations are reported; see [Selections](#selection-and-physical-meaning). |
 | `set_route`, `set_mesh`, `set_numerical`, `set_convergence` | As for Electrostatic: [the calls](palace-electrostatic-sgb.qmd#electrostatic-calls), [mesh settings](palace-electrostatic-sgb.qmd#palace-mesh-controls), [convergence](palace-electrostatic-sgb.qmd#convergence-declaration). |
 | `input_summary()`, `mesh()`, `write_config()`, `prepare_handoff(...)` | As for Electrostatic. |
@@ -46,7 +45,7 @@ Read the settings back with `sim.numerical` (a `NumericalControls`),
 `sim.surface_epr_specs` (the plan's films, or `None`) and `sim.epr_request`
 (or `None` before `set_epr_request`). Units: target frequency in hertz,
 lengths in micrometres, inductance in henries. A model needs a vacuum region;
-ordinary Eigenmode needs no Surface EPR, ports or EPR request.
+ordinary Eigenmode needs no Surface EPR, lumped elements or EPR request.
 
 ## AMR defaults {#eigenmode-mesh-and-amr-defaults}
 
@@ -96,15 +95,21 @@ same as for Electrostatic.
 
 ## Lumped ports {#lumped-ports}
 
-Each `add_port(..., layout_sheet=True)` becomes one Palace lumped port that
-carries its `inductance`. Palace needs that port to be a rectangle, so `mesh()`
+Each lumped element of the plan
+([`set_lumped_elements`](geometry-plan.qmd#lumped-elements)) becomes one
+Palace lumped port, numbered as the plan numbers it: `P1` is the first. A
+`LumpedElement` carries its R, L and C as Palace's `R`, `L` and `C`, a
+parallel circuit; a `LumpedPort` carries its impedance as `R`, a load, so the
+mode's Q is the loaded Q. No port is excited. An authored sheet the plan
+declares nothing on is not in the model. Palace needs each port to be a
+rectangle, so `mesh()`
 gives Palace the central rectangle of the drawn sheet and joins the two end
 pieces to the conductors they land on.
 [Lumped ports are made rectangles](../supported-geometry.qmd#lumped-port-rectangle)
 shows how the cuts are chosen, with the Xmon's junction port as a worked
-example. The sheet must land on exactly two conductors; otherwise `mesh()` and
-`EigenmodeSim.simulation_drc` raise `ValueError` naming the port. A conductor
-without a Net counts as a Net of its own.
+example. The sheet must land on exactly two conductors of two Nets; otherwise
+`plan.prepare()` raises `ValueError` naming the element, its sheet's layer and
+its place. A conductor without a Net counts as a Net of its own.
 
 ## What an EPR request selects {#selection-and-physical-meaning}
 
@@ -114,7 +119,7 @@ without a Net counts as a Net of its own.
 |---|---|---|
 | `surface_interfaces` | Surface films | `"MA"` (metal-air), `"MS"` (metal-substrate), `"SA"` (substrate-air) |
 | `bulk_domain_ids` | Bulk regions | The SGB volume names of `Domains.Postprocessing.Energy` |
-| `port_names` | Ports | The names given to `add_port` |
+| `port_names` | Ports | The names of the plan's lumped elements, their sheets' names |
 
 `None` selects everything, `()` selects nothing, and an unknown name is
 refused when the configuration is written or the result is read. For example,

@@ -52,7 +52,7 @@ aluminium with its conductivity) and the port sheets. The square pad has one,
 `D0_TOP_M1`.
 
 This summary shows the source only. Its junction and Surface-EPR tables stay
-empty whatever the plan sets with `set_rectangular_junctions` or
+empty whatever the plan sets with `set_lumped_elements` or
 `set_surface_epr`, and it has no solver settings: an empty table here does not
 mean the setting is missing. To check those settings, use `sim.input_summary()`
 (below).

@@ -23,7 +23,7 @@ from test_simulation_drc import (
 
 import scgsim.palace.mesh.build as build_module
 import scgsim.palace.simulation.core as core_module
-from scgsim.geometry import GeometryPlan
+from scgsim.geometry import GeometryPlan, LumpedElement
 from scgsim.geometry.source.summary import summarize_geometry_input
 from scgsim.palace import EigenmodeSim, ElectrostaticSim
 
@@ -33,7 +33,7 @@ VACUUM_PADDING_UM = (0.0, 0.0, 1000.0)
 
 
 def eigenmode_sim(monkeypatch, layer_stack, *, route="B", surface_epr_specs=None):
-    """An ``EigenmodeSim`` on the two-pad plan of ``layer_stack`` with its authored port, as a user sets it up.
+    """An ``EigenmodeSim`` on the two-pad plan of ``layer_stack`` with its authored port as a 1 nH element, as a user sets it up.
 
     A stack with no vacuum of its own is given ``VACUUM_PADDING_UM`` on the plan; ``surface_epr_specs``, when
     given, go to the plan too.
@@ -50,9 +50,9 @@ def eigenmode_sim(monkeypatch, layer_stack, *, route="B", surface_epr_specs=None
         plan.set_vacuum_region(VACUUM_PADDING_UM)
     if surface_epr_specs is not None:
         plan.set_surface_epr(surface_epr_specs)
+    plan.set_lumped_elements([LumpedElement("chip/P1", inductance_h=1e-9)])
     sim = EigenmodeSim()
     sim.set_plan(plan.prepare())
-    sim.add_port("chip/P1", layer="metal", layout_sheet=True, inductance=1e-9)
     if route == "A":
         sim.set_route("A")
     return sim

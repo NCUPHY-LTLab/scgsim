@@ -3,8 +3,8 @@
 ``PalaceSimulation`` is the base of ``EigenmodeSim`` and ``ElectrostaticSim``.  It owns the calls that do
 not depend on the problem: binding a plan, the output folder, the route, the mesh controls, the
 convergence declaration, ``input_summary()``, ``mesh()``, ``simulation_drc``, ``mesh_summary()`` and
-``prepare_handoff()``.  The vacuum region and the Surface-EPR specs are the plan's: the simulation reads
-them from the snapshot it is bound to.
+``prepare_handoff()``.  The vacuum region, the Surface-EPR specs and the lumped elements are the plan's: the
+simulation reads them from the snapshot it is bound to.
 A problem class adds its own setters, its numerical defaults and ``write_config()``, and answers what the
 core asks of it: the class attributes and methods under "What a problem adds" below.
 
@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, ClassVar, Literal, TypeVar
 
@@ -116,16 +116,16 @@ class PalaceSimulation(ABC):
     """The AMR defaults of this problem, for every control a ``NumericalControls`` leaves to the problem."""
 
     @abstractmethod
-    def _lumped_ports(self) -> list[RequestedPort] | None:
-        """The authored port sheets the geometry cuts as lumped ports, or None for a problem with none."""
+    def _lumped_ports(self, plan: GeometryPlanSnapshot) -> list[RequestedPort] | None:
+        """The plan's lumped elements as the ports the geometry cuts, or None for a problem that cuts none."""
 
     @abstractmethod
-    def _problem_summary(self) -> dict[str, Any]:
-        """The problem's own settings, as ``input_summary()`` shows them beside the shared ones."""
+    def _lumped_element_report(self, plan: GeometryPlanSnapshot) -> tuple[str, ...]:
+        """What the problem does with each lumped element of ``plan``, one line each, for ``simulation_drc``."""
 
     @abstractmethod
-    def _add_drc_inputs(self, snapshot: GeometryPlanSnapshot) -> None:
-        """Set the problem inputs ``simulation_drc`` needs before the geometry build of ``snapshot``."""
+    def _problem_summary(self, plan: GeometryPlanSnapshot) -> dict[str, Any]:
+        """The problem's own settings and lumped elements, as ``input_summary()`` shows them beside the shared ones."""
 
     @abstractmethod
     def write_config(self) -> Path:
@@ -325,7 +325,7 @@ class PalaceSimulation(ABC):
         """Show the input ``mesh()`` builds from, and the Palace settings, before mesh work.
 
         The source half is the geometry input and stack ``mesh()`` prepares from the bound plan, so it holds the
-        plan's vacuum region, the requested ports and the route's conductors as the simulation was given them.
+        plan's vacuum region, its lumped elements as ports and the route's conductors as the simulation was given them.
         The Palace half shows the route and the approximation profile the preparation uses (the route's default
         included) and the plan's Surface-EPR specs, ``None`` (shown as "not requested") when the plan has none.
         A setup ``mesh()`` refuses while preparing is refused here with the same error, a plan with no vacuum
@@ -348,7 +348,7 @@ class PalaceSimulation(ABC):
             "surface_epr_specs": None
             if self.surface_epr_specs is None
             else self.surface_epr_specs.to_payload(),
-            **self._problem_summary(),
+            **self._problem_summary(plan),
             "numerical": self.numerical.to_payload(),
             "mesh": self.mesh_controls.to_payload(),
         }
@@ -404,18 +404,19 @@ class PalaceSimulation(ABC):
 
         ``plan`` is the ``GeometryPlan`` the simulation will be given, unprepared: the check prepares it, as
         ``set_plan(plan.prepare())`` is given it, and leaves the caller's plan as it was.  Its Nets,
-        instances, coupon padding, vacuum region, Surface-EPR specs, port sheets and rectangular junctions
-        are used as the simulation uses them; the check adds none of its own.  A plan without its own vacuum
-        is refused with the error ``mesh()`` raises for it.
+        instances, coupon padding, vacuum region, Surface-EPR specs, port sheets and lumped elements are used
+        as the simulation uses them; the check adds none of its own.  A plan without its own vacuum is refused
+        with the error ``mesh()`` raises for it.
 
         The geometry stage runs the preparation and SGB geometry build of ``mesh()`` on the route the
         simulation will use: ``route`` and ``approximation_profile`` are the arguments of ``set_route``, with
-        its defaults and refusals, and a refusal names this call.  Without them the check is Route B.  The
-        problem's own inputs are fixed: ``EigenmodeSim`` adds every authored port sheet as a lumped port
-        with a fixed inductance, which the geometry never reads; ``ElectrostaticSim`` adds no terminals,
-        which are not needed before meshing, and cuts no port sheet.  A plan it refuses raises the error
-        ``mesh()`` raises, unchanged.  The bands of the plan's Surface-EPR specs are cut as ``mesh()`` cuts
-        them; a plan without specs gets no bands.
+        its defaults and refusals, and a refusal names this call.  Without them the check is Route B.
+        ``EigenmodeSim`` cuts the sheet of every lumped element of the plan as its port and leaves out an
+        authored sheet that carries none; ``ElectrostaticSim`` adds no terminals, which are not needed before
+        meshing, and cuts no port sheet.  A plan it refuses raises the error ``mesh()`` raises, unchanged.
+        The bands of the plan's Surface-EPR specs are cut as ``mesh()`` cuts them; a plan without specs gets
+        no bands.  The report's ``lumped_elements`` says, one line each, what the simulation does with each
+        lumped element of the plan.
 
         Only a model that built goes to the meshing stage, ``scgsim.meshing.check_fine_structure``: the fine
         edges and faces the mesher cannot use, each with its location, size, owner and fix.  A refusal there
@@ -424,9 +425,9 @@ class PalaceSimulation(ABC):
         the geometry is written to a temporary folder that is removed.  ``mesh()`` runs the same meshing
         stage on the model it builds, before the mesher starts.
 
-        A pass means the plan can be modeled on the route and profile checked, with these problem inputs.
-        It does not promise that other settings (another route or profile, terminals, lumped supports) will
-        model; run that simulation's own ``mesh()`` for that.  Route C is
+        A pass means the plan can be modeled on the route and profile checked.  It does not promise that other
+        settings (another route or profile, terminals) will model; run that simulation's own ``mesh()`` for
+        that.  Route C is
         not a Palace route, so it is refused here as ``set_route`` refuses it.
 
         Args:
@@ -444,13 +445,10 @@ class PalaceSimulation(ABC):
         sim = cls()
         # The route is checked before the plan is prepared, so a refused route costs no preparation.
         sim._set_route(route, approximation_profile, SIMULATION_DRC)  # noqa: SLF001 -- the check is a classmethod of the same class
-        sim._bind_for_drc(plan.prepare())  # noqa: SLF001 -- the check is a classmethod of the same class
-        return run_stages(sim._build_geometry)  # noqa: SLF001 -- the check is a classmethod of the same class
-
-    def _bind_for_drc(self, snapshot: GeometryPlanSnapshot) -> None:
-        """Bind ``snapshot`` with the problem inputs ``simulation_drc`` documents, on the route already set."""
-        self.set_plan(snapshot)
-        self._add_drc_inputs(snapshot)
+        snapshot = plan.prepare()
+        sim.set_plan(snapshot)
+        report = run_stages(sim._build_geometry)  # noqa: SLF001 -- the check is a classmethod of the same class
+        return replace(report, lumped_elements=sim._lumped_element_report(snapshot))  # noqa: SLF001 -- the check is a classmethod of the same class
 
     def _build_geometry(self, output_dir: str | Path) -> RouteGeometry:
         """Run the preparation and SGB geometry build of ``mesh()`` into ``output_dir``, then stop.
@@ -470,7 +468,7 @@ class PalaceSimulation(ABC):
         """
         return layout_geometry_request(
             plan=plan,
-            ports=self._lumped_ports(),
+            ports=self._lumped_ports(plan),
             settings=GeometrySettings(
                 route=self.route,
                 approximation_profile=self.approximation_profile,

@@ -1,8 +1,8 @@
 """Compose components into a detached source: place each occurrence with its transform and take the Net membership the caller sets last.
 
 A component's local facts stay as the component declares them.  The plan also holds the facts of the model that
-do not depend on the solver: its vacuum region and its Surface-EPR specs, which every backend reads from the
-snapshot ``prepare()`` returns.
+do not depend on the solver: its vacuum region, its Surface-EPR specs and its lumped elements, which every
+backend reads from the snapshot ``prepare()`` returns.
 """
 
 from __future__ import annotations
@@ -26,7 +26,6 @@ from scgsim.geometry.models.input import (
     SemanticEntitySpec,
     VacuumRegionSpec,
 )
-from scgsim.geometry.models.junctions import RectangularJunctionSpec
 from scgsim.geometry.source.adapter import (
     LayoutOrigin,
     layout_grid,
@@ -42,7 +41,12 @@ from scgsim.geometry.source.curves import (
     transform_boundary,
     with_drawn_rings,
 )
-from scgsim.geometry.source.junctions import with_rectangular_junctions
+from scgsim.geometry.source.lumped_elements import (
+    Declaration,
+    LumpedElementRecord,
+    checked_lumped_elements,
+    resolved_lumped_elements,
+)
 from scgsim.geometry.source.normalization import (
     finite_number,
     normalize_material_records,
@@ -90,13 +94,14 @@ from scgsim.refusal import Declared, internal
 
 @dataclass(frozen=True)
 class GeometryPlanSnapshot:
-    """One detached GDS, stack, normalized input, and source-identity pair, with the plan's Surface-EPR specs.
+    """One detached GDS, stack, normalized input, and source-identity pair, with the plan's Surface EPR and lumped elements.
 
     ``GeometryPlan.prepare()`` builds it: the stack and the normalized input name
     ``gds_sha256``, the digest of ``gds_bytes``, because prepare() wrote all three
     from the one GDS it hashed.  ``surface_epr_specs`` are the specs
     ``GeometryPlan.set_surface_epr`` was given, normalized against the stack's materials, or
-    None when the plan has none.
+    None when the plan has none; ``lumped_elements`` are the elements of
+    ``GeometryPlan.set_lumped_elements``, resolved on the layout's port sheets.
     """
 
     _geometry_input: GeometryBuildInput
@@ -105,6 +110,7 @@ class GeometryPlanSnapshot:
     gds_sha256: str
     _source_occurrences: tuple[Mapping[str, Any], ...]
     _surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None
+    lumped_elements: tuple[LumpedElementRecord, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self._geometry_input, GeometryBuildInput):
@@ -166,10 +172,11 @@ class _WrittenLayout:
 class GeometryPlan:
     """Bind named source occurrences and final Nets before backend preparation."""
 
-    # Immutable defaults, so a plan assembled without ``__init__`` (tests build them that way) has no priorities
-    # and no Surface EPR.
+    # Immutable defaults, so a plan assembled without ``__init__`` (tests build them that way) has no priorities,
+    # no Surface EPR and no lumped elements.
     _entity_priorities: Mapping[str, int] = MappingProxyType({})
     _surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None
+    _lumped_elements: tuple[Declaration, ...] = ()
 
     def __init__(  # noqa: PLR0913 - each argument is a public setting of the plan
         self,
@@ -217,26 +224,21 @@ class GeometryPlan:
         self._surface_epr_specs = None
         self._boundary_curves = ()
         self._boundary_reconstruction = ()
-        self._rectangular_junctions = ()
+        self._lumped_elements = ()
 
-    def set_rectangular_junctions(self, specs) -> None:
-        """Replace explicit source-sheet/terminal bindings for subsequent snapshots."""
-        requests = tuple(specs)
-        if any(not isinstance(item, RectangularJunctionSpec) for item in requests):
-            raise TypeError(
-                plan_call(
-                    "set_rectangular_junctions", "rectangular junctions"
-                ).expected("every request", "a RectangularJunctionSpec", requests)
-            )
-        for field in ("junction_id", "port_sheet_id"):
-            identities = [getattr(item, field) for item in requests]
-            if len(set(identities)) != len(identities):
-                raise ValueError(
-                    plan_call(
-                        "set_rectangular_junctions", "rectangular junctions"
-                    ).refusal(f"duplicate rectangular junction {field}")
-                )
-        self._rectangular_junctions = requests
+    def set_lumped_elements(self, elements: Sequence[Declaration]) -> None:
+        """Declare the device's lumped elements for the next snapshot, replacing the earlier list; ``()`` clears it.
+
+        Each entry is a ``LumpedElement`` (R, L, C in parallel) or a ``LumpedPort`` (an excitation port) on the
+        authored port sheet it names; every simulation reads them from the snapshot and realizes what it can.
+        ``prepare()`` resolves each on the layout and numbers the ports first, in the order given
+        (``scgsim.geometry.source.lumped_elements``).  A refused call leaves the earlier list.
+
+        Raises:
+            TypeError: ``elements`` is not a sequence of ``LumpedElement`` and ``LumpedPort``.
+            ValueError: two entries name one sheet.
+        """
+        self._lumped_elements = checked_lumped_elements(elements)
 
     def set_boundary_curves(self, boundaries) -> None:
         """Bind explicitly authored curves in assembled source coordinates."""
@@ -727,10 +729,7 @@ class GeometryPlan:
         )
         build_input = with_drawn_rings(build_input, drawn_walks)
         refuse_reconstructions_without_circle(build_input, drawn_walks)
-        if self._rectangular_junctions:
-            build_input = with_rectangular_junctions(
-                build_input, self._rectangular_junctions
-            )
+        lumped_elements = resolved_lumped_elements(build_input, self._lumped_elements)
         stack = {
             **stack,
             "metadata": {
@@ -749,6 +748,7 @@ class GeometryPlan:
             source.gds_sha256,
             occurrences,
             surface_epr_specs,
+            lumped_elements,
         )
 
     def _placed_boundaries(

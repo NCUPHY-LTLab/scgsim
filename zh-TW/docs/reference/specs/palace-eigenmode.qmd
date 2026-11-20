@@ -28,15 +28,14 @@ config_path = sim.write_config()
 
 | 呼叫 | 設定什麼 |
 |---|---|
-| `set_plan(snapshot)` | 已準備的 `GeometryPlan`，含其真空區域與 Surface-EPR 薄膜。 |
+| `set_plan(snapshot)` | 已準備的 `GeometryPlan`，含其真空區域、Surface-EPR 薄膜與集總元件。 |
 | `set_output_dir(path)` | 執行資料夾。 |
 | `set_eigenmode(*, num_modes=10, target=None, tolerance=1e-6, save=0)` | 模態數、開始搜尋的頻率（`target`，單位 Hz）、本徵值求解容差，以及要儲存幾個模態的場。 |
-| `add_port(name, *, layer, layout_sheet=True, inductance)` | 畫出的薄片上的一個集總埠，電感單位為亨利；`layout_sheet` 必須為 `True`。見[集總埠](#lumped-ports)。 |
 | `set_epr_request(*, surface_interfaces=None, bulk_domain_ids=None, port_names=None)` | 要回報哪些參與比；見[EPR 要求選取什麼](#selection-and-physical-meaning)。 |
 | `set_route`、`set_mesh`、`set_numerical`、`set_convergence` | 與 Electrostatic 相同：[呼叫](palace-electrostatic-sgb.qmd#electrostatic-calls)、[網格設定](palace-electrostatic-sgb.qmd#palace-mesh-controls)、[收斂](palace-electrostatic-sgb.qmd#convergence-declaration)。 |
 | `input_summary()`、`mesh()`、`write_config()`、`prepare_handoff(...)` | 與 Electrostatic 相同。 |
 
-設定可以讀回：`sim.numerical`（一個 `NumericalControls`）、`sim.surface_epr_specs` （規劃的薄膜，或 `None`）與 `sim.epr_request`（`set_epr_request` 之前為 `None`）。單位：目標頻率為 Hz，長度為微米，電感為亨利。模型需要真空區域；一般的 Eigenmode 不需要 Surface EPR、埠或 EPR 要求。
+設定可以讀回：`sim.numerical`（一個 `NumericalControls`）、`sim.surface_epr_specs` （規劃的薄膜，或 `None`）與 `sim.epr_request`（`set_epr_request` 之前為 `None`）。單位：目標頻率為 Hz，長度為微米，電感為亨利。模型需要真空區域；一般的 Eigenmode 不需要 Surface EPR、集總元件或 EPR 要求。
 
 ## AMR 預設值 {#eigenmode-mesh-and-amr-defaults}
 
@@ -76,7 +75,7 @@ sim.set_convergence(
 
 ## 集總埠 {#lumped-ports}
 
-每個 `add_port(..., layout_sheet=True)` 成為 Palace 的一個集總埠，帶著它的 `inductance`。Palace 要求這個埠是矩形，所以 `mesh()` 交給 Palace 畫出薄片的中央矩形，並把兩端剩下的部分併入它們所落在的導體。[集總埠會切成矩形](../supported-geometry.qmd#lumped-port-rectangle)說明切口如何選擇，並以 Xmon 的接面埠為例。薄片必須恰好落在兩個導體上；否則 `mesh()` 與 `EigenmodeSim.simulation_drc` 會引發指出該埠的 `ValueError`。沒有 Net 的導體自成一個 Net。
+規劃上的每個集總元件（[`set_lumped_elements`](geometry-plan.qmd#lumped-elements)）成為 Palace 的一個集總埠，依規劃的編號排列：`P1` 是第一個。`LumpedElement` 以 Palace 的 `R`、`L`、`C` 帶著它的 R、L、C，是並聯電路；`LumpedPort` 以 `R` 帶著它的阻抗，作為負載，所以模態的 Q 是有載 Q。沒有任何埠被激發。規劃沒有宣告任何元件的繪製薄片不在模型中。Palace 要求每個埠是矩形，所以 `mesh()` 交給 Palace 畫出薄片的中央矩形，並把兩端剩下的部分併入它們所落在的導體。[集總埠會切成矩形](../supported-geometry.qmd#lumped-port-rectangle)說明切口如何選擇，並以 Xmon 的接面埠為例。薄片必須恰好落在兩個不同 Net 的導體上；否則 `plan.prepare()` 會引發 `ValueError`，指出該元件、其薄片的圖層與位置。沒有 Net 的導體自成一個 Net。
 
 ## EPR 要求選取什麼 {#selection-and-physical-meaning}
 
@@ -86,7 +85,7 @@ sim.set_convergence(
 |---|---|---|
 | `surface_interfaces` | 表面薄膜 | `"MA"`（金屬-空氣）、`"MS"`（金屬-基板）、`"SA"`（基板-空氣） |
 | `bulk_domain_ids` | 體積區域 | `Domains.Postprocessing.Energy` 中的 SGB 體積名稱 |
-| `port_names` | 埠 | 傳給 `add_port` 的名稱 |
+| `port_names` | 埠 | 規劃上集總元件的名稱，即其薄片的名稱 |
 
 `None` 選取全部，`()` 不選任何項目，未知的名稱會在寫出設定或讀取結果時被拒絕。例如 `set_epr_request(surface_interfaces=["MA"], port_names=())` 回報金屬-空氣參與比，不回報任何埠。少選不會把區域或埠從模型中移除，也不改變正規化。
 

@@ -57,11 +57,13 @@ Surface-EPR 請求的每條條帶，寬度都至少要等於 B 類的界限，�
 
 ## 檢查使用的設定 {#what-the-check-uses}
 
-計畫以模擬使用它的方式使用：它的 Net、真空區域、Surface-EPR 規格、試片外加的基板、埠片與矩形接面。其餘設定來自呼叫，或是固定的：
+計畫以模擬使用它的方式使用：它的 Net、真空區域、Surface-EPR 規格、試片外加的基板、埠片與集總元件。其餘設定來自呼叫，或是固定的：
 
 - 以 `route` 與 `approximation_profile` 傳入的 route 與近似設定，與 [`set_route`](physical-representation.qmd#palace-caller-profile) 接受的相同，預設值與拒絕方式也相同；未傳入時為 Route B；
-- `EigenmodeSim`：計畫中每片埠片都作為集總埠，電感為固定值，不影響幾何；
-- `ElectrostaticSim`：不設端子，產生網格之前用不到端子。
+- `EigenmodeSim`：計畫上的集總元件作為它的集總埠；計畫沒有宣告任何元件的埠片不在模型中，也不檢查；
+- `ElectrostaticSim`：不設端子，產生網格之前用不到端子；也不實現任何集總元件，讓它們保持開路。
+
+報告最後在 `lumped elements:` 之下，為計畫的每個集總元件列一行，說明模擬把它做成什麼，並為模擬不放進模型的每張埠片各列一行。
 
 未傳入 `route` 時，檢查使用 Route B；只給 `route="A"` 時使用 `thin_film` 近似設定；`route="A"` 搭配 `substrate_face` 或 `metal_gap_equivalent` 時，使用該設定及其 `film_bindings`。與計畫中薄膜不相符的近似設定，會由幾何建構拒絕，錯誤與 `mesh()` 拋出的相同。Route C 不是 Palace 的 route，會像 `set_route` 一樣被拒絕；route 或近似設定被拒絕時，訊息會指向 `simulation_drc` 的呼叫。兩種 route 都要用的版圖，請對每種 route 各檢查一次。
 
@@ -87,6 +89,6 @@ print(report.render_text())
 3. 匯入的第一步：每個邊界放在匯入會保留的面上，以及每片埠片；
 4. 在這些面上選取每一列 Surface EPR。
 
-某一步拒絕時，會原封不動地拋出 `prepare_handoff()` 在同一步會拋出的錯誤，請像讀 `prepare_handoff()` 的拒絕一樣讀它。AEDT 的 Region 就是計畫的真空區域，所以沒有真空區域的計畫會被拒絕。AEDT 自己產生網格，所以沒有網格階段：`scgsim.aedt` 的 `SimulationDrcReport` 只有幾何階段。每片埠片都當成帶有電感的埠來檢查；計畫中的矩形接面，會像模擬那樣被裁成兩個導體之間的矩形。接面的電感、電容與寬度不影響幾何；`prepare_handoff()` 會在 AEDT 啟動前比對它的寬度與 Net 是否符合薄片。通過代表模型建得出來、也匯入得了。它不保證另一種 `modeling`，也不保證 AEDT 能為模型產生網格或求解。
+某一步拒絕時，會原封不動地拋出 `prepare_handoff()` 在同一步會拋出的錯誤，請像讀 `prepare_handoff()` 的拒絕一樣讀它。AEDT 的 Region 就是計畫的真空區域，所以沒有真空區域的計畫會被拒絕。AEDT 自己產生網格，所以沒有網格階段：`scgsim.aedt` 的 `SimulationDrcReport` 只有幾何階段，以及集總元件的各行。計畫上的每個集總元件，都依模擬實現它的方式檢查，其埠片切成兩個導體之間的矩形；計畫沒有宣告任何元件的埠片不在模型中。元件的數值不影響幾何。通過代表模型建得出來、也匯入得了。它不保證另一種 `modeling`，也不保證 AEDT 能為模型產生網格或求解。
 
-HFSS Driven Terminal 與 Q3D 沒有模擬類別：`prepare_hfss_driven_from_geometry` 與 `prepare_q3d_from_geometry` 以 `prepare_sgb_model(...)` 建立模型，在寫出交接套件之前先對它執行匯入的第一步，所以匯入無法實現的模型會在那裡被拒絕，不需要 AEDT。
+HFSS Driven Terminal 與 Q3D 沒有模擬類別：`prepare_hfss_driven_from_geometry` 與 `prepare_q3d_from_geometry` 由計畫的快照建立模型，在寫出交接套件之前先對它執行匯入的第一步，所以匯入無法實現的模型會在那裡被拒絕，不需要 AEDT。

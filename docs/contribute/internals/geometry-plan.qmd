@@ -136,8 +136,11 @@ physical attachment, before planning contacts, interfaces, and construction
 catalogues. Palace Route A continues to apply its existing
 host-interface, common-plane, and common-volume rules. Palace and AEDT consume
 the same derived source partition; AEDT validates that request rather than
-deriving another rectangle. Palace `add_port(...)` still binds inductance to an
-authored port name and does not choose the physical terminal owners.
+deriving another rectangle. The request of each lumped element comes from the
+plan's `LumpedElementRecord`: its sheet and its two conductors, in the order of
+the authored direction, which `prepare()` resolved from the sheet's overlaps.
+The element's R, L and C are carried to the solvers unread by the geometry and
+do not choose the physical terminal owners.
 
 ## The source-to-backend contract in full {#source-contract-table}
 

@@ -123,15 +123,20 @@ model has findings elsewhere, act on those as well.
 ## What the check uses {#what-the-check-uses}
 
 The plan is used as the simulation uses it: its Nets, vacuum region,
-Surface-EPR specs, coupon padding, port sheets and rectangular junctions. The
-rest is the call's or fixed:
+Surface-EPR specs, coupon padding, port sheets and lumped elements. The rest
+is the call's or fixed:
 
 - the route and profile given as `route` and `approximation_profile`, as
   [`set_route`](physical-representation.qmd#palace-caller-profile) takes them,
   with its defaults and refusals, and Route B when they are not given;
-- for `EigenmodeSim`, every port sheet of the plan as a lumped port with a fixed
-  inductance, which does not change the geometry;
-- for `ElectrostaticSim`, no terminals, which are not needed before meshing.
+- for `EigenmodeSim`, the plan's lumped elements as its lumped ports; a port
+  sheet the plan declares nothing on is not in the model and is not checked;
+- for `ElectrostaticSim`, no terminals, which are not needed before meshing,
+  and no lumped element, which it leaves open.
+
+The report ends with one line per lumped element of the plan, under
+`lumped elements:`, saying what the simulation makes of it, and one per port
+sheet it leaves out.
 
 Without `route`, the check is Route B; `route="A"` alone uses the `thin_film`
 profile, and `route="A"` with a `substrate_face` or `metal_gap_equivalent`
@@ -192,16 +197,15 @@ A step that refuses raises the error that same step raises in
 `prepare_handoff()`, unchanged, so read it as you read a refusal of
 `prepare_handoff()`. AEDT's Region is the plan's vacuum box, so a plan without
 a vacuum region is refused. AEDT meshes the model itself, so there is no meshing stage: the
-`SimulationDrcReport` of `scgsim.aedt` has the geometry stage only. Each port
-sheet is checked as a port with an inductance, and a rectangular junction of
-the plan is cut to the rectangle between its two conductors, as the simulation
-cuts it. A junction's inductance, capacitance and width do not shape the
-geometry; `prepare_handoff()` compares its width and Nets with the sheet before
-AEDT starts. A pass means the model can be built and imported. It does not
+`SimulationDrcReport` of `scgsim.aedt` has the geometry stage only, and its
+lumped-element lines. Each lumped element of the plan is checked as the
+simulation realizes it, its sheet cut to the rectangle between its two
+conductors; a port sheet the plan declares nothing on is not in the model.
+An element's values do not shape the geometry. A pass means the model can be built and imported. It does not
 promise the other `modeling`, nor that AEDT meshes or solves the model.
 
 HFSS Driven Terminal and Q3D have no simulation class:
 `prepare_hfss_driven_from_geometry` and `prepare_q3d_from_geometry` build the
-model with `prepare_sgb_model(...)` and run the import's first step on it
-before they write the handoff, so a model the import cannot realize is refused
+model from the plan's snapshot and run the import's first step on it before
+they write the handoff, so a model the import cannot realize is refused
 there, without AEDT.

@@ -18,7 +18,11 @@ Every name below is importable from the package it is listed under. Each group l
 
 **The plan.** Build the layout's plan and freeze it into a snapshot. [Reference](specs/geometry-plan.qmd)
 
-`GeometryPlan`, `GeometryPlanSnapshot`, `JunctionTerminalBinding`, `RectangularJunctionSpec`, `SemanticEntitySpec`, `VacuumRegionSpec`, `with_rectangular_junctions`.
+`GeometryPlan`, `GeometryPlanSnapshot`, `SemanticEntitySpec`, `VacuumRegionSpec`.
+
+**Lumped elements.** Declare each lumped element once, on the plan: an R, L, C element or an excitation port on an authored sheet. [Reference](specs/geometry-plan.qmd#lumped-elements)
+
+`JunctionTerminalBinding`, `LumpedElement`, `LumpedElementRecord`, `LumpedPort`, `RectangularJunctionSpec`, `with_rectangular_junctions`.
 
 **Curves.** Declare exact lines and circular arcs on the layout's outlines. [Reference](specs/geometry-plan.qmd#source-curves)
 
@@ -56,17 +60,17 @@ Every name below is importable from the package it is listed under. Each group l
 
 ## Simulate with AEDT: `scgsim.aedt` {#scgsim.aedt}
 
-**Preparation.** Build the SGB model of a plan and prepare an HFSS, Q3D or Q2D handoff. [Reference](specs/aedt-runtime.qmd#one-shared-lifecycle)
+**Preparation.** Build the SGB model of a plan, its lumped elements included, and prepare an HFSS, Q3D or Q2D handoff. [Reference](specs/aedt-runtime.qmd#one-shared-lifecycle)
 
-`EigenmodeSim`, `HandoffPlan`, `PreparedSgbModel`, `SimulationDrcReport`, `parse_aedt_spec`, `prepare_handoff`, `prepare_hfss_driven_from_geometry`, `prepare_hfss_eigenmode_from_geometry`, `prepare_q3d_from_geometry`, `prepare_sgb_model`.
+`EigenmodeSim`, `HandoffPlan`, `PreparedSgbModel`, `SimulationDrcReport`, `parse_aedt_spec`, `prepare_handoff`, `prepare_hfss_driven_from_geometry`, `prepare_hfss_eigenmode_from_geometry`, `prepare_q3d_from_geometry`.
 
 **Request specs.** The request each AEDT calculation is prepared from. [Reference](specs/aedt-runtime.qmd#solver-specific-contracts)
 
 `AedtSpec`, `HfssDrivenGeometrySpec`, `HfssEprAnalysisSpec`, `HfssEprSpec`, `HfssSpec`, `PdkMaterial`, `Q2dConductorSpec`, `Q2dRectangleSpec`, `Q2dSpec`, `Q3dNetSpec`, `Q3dSpec`.
 
-**Ports, junctions and RLCs.** What sits on a port sheet. [Reference](specs/aedt-runtime.qmd#hfss-shared-lumped-support)
+**Wave and modal ports.** Ports on the Region's faces, refused until issue #135; lumped elements are the plan's. [Reference](specs/aedt-runtime.qmd#hfss-driven-terminal-sgb)
 
-`LumpedRlc`, `LumpedTerminalPort`, `ModalPort`, `PlanarJunction`, `TerminalPort`, `planar_junction_from_port`.
+`ModalPort`, `TerminalPort`.
 
 **Run controls.** Setup, sweep and resources of a solve. [Reference](specs/aedt-runtime.qmd#aedt-family-setup-controls)
 
@@ -86,9 +90,9 @@ Every name below is importable from the package it is listed under. Each group l
 
 ## AEDT specs module: `scgsim.aedt.specs` {#scgsim.aedt.specs}
 
-**Driven Terminal specs.** The same Driven Terminal names, importable from the specs module. [Reference](specs/aedt-runtime.qmd#hfss-driven-terminal-sgb)
+**Driven Terminal specs.** The Driven Terminal request and the wave port record, importable from the specs module. [Reference](specs/aedt-runtime.qmd#hfss-driven-terminal-sgb)
 
-`HfssDrivenGeometrySpec`, `LumpedRlc`, `LumpedTerminalPort`, `TerminalPort`.
+`HfssDrivenGeometrySpec`, `TerminalPort`.
 
 ## Preview the geometry: `scgsim.visualization` {#scgsim.visualization}
 
@@ -111,13 +115,13 @@ Every name below is importable from the package it is listed under. Each group l
 | Source | SHA-256 |
 |---|---|
 | `scripts/generate_knowledge_reference.py` | `a66b84bc16c213b694b20d3ef1c6f8867d3dfb30a7d6f9d5034ac2e292c0eb49` |
-| `docs/knowledge-sources.json` | `a3e8789f8d1f96140932f0bd54e4230fe6b605710cc4b605af5c376348359d84` |
+| `docs/knowledge-sources.json` | `d71988ffc138ddb56601234e1dbce4617194f7385d6de0b641a40211903bae39` |
 | `src/scgsim/aedt/epr/workflow.py` | `67e0c56b737aa0b7d7804b8c2836ebe107af0850573c496fe432b8658eebd760` |
 | `docs/reference/api/analyze-epr-usage.md` | `99d31a61922a5b4938bb2b6d5f0bc094037045b51377ee711c1683c78cd7e728` |
 | `zh-TW/docs/reference/api/analyze-epr-usage.md` | `a91990007fa95a2979b3a2d039c4e70f3d4efcdb950835e552bee4c1a6fcf779` |
-| `src/scgsim/aedt/__init__.py` | `69998e1430b07c46d867f408917a6f1882935e3768b0c9a14cf2173a7bf96327` |
-| `src/scgsim/aedt/specs/__init__.py` | `2dce2baa961727dac9e6253167d4448ef8b4e11958e5fb7bdf0d2f571d05300e` |
-| `src/scgsim/geometry/__init__.py` | `49c6c6c8a724a49d3d8eb72b659661904b1231174e51fca0933aa0ebe1f640b6` |
+| `src/scgsim/aedt/__init__.py` | `e826ea4631ce25d51151e4d730793dea1b4672f19ebf672ff8b963e48e6039c8` |
+| `src/scgsim/aedt/specs/__init__.py` | `4a3e47c42a136f11ee1db472436411c715106c367cfe80e7d34342627814e15c` |
+| `src/scgsim/geometry/__init__.py` | `542d6fe45d106be73696e75f83c8ad555e5aca2fb690edfa5ff62acffc0f26cb` |
 | `src/scgsim/palace/__init__.py` | `99a94bc6f25857c205a4fce053a779abedfa16f979a49323ea2729b8e168a4f4` |
 | `src/scgsim/semantics/__init__.py` | `54cfd5f6a8ee0d9864601ec9ac6290a34c04b18949db1760f4c460bf722e8f61` |
 | `src/scgsim/visualization/__init__.py` | `89a6eb15003c49dc9243c7f2c9bf5cd4adfd8c4c2494b031d25e3cfef4feb8b7` |

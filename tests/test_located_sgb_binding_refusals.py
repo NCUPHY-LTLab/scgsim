@@ -38,7 +38,7 @@ from test_simulation_drc import (
 )
 
 import scgsim.palace.mesh.build as build_module
-from scgsim.geometry import GeometryPlan
+from scgsim.geometry import GeometryPlan, LumpedElement
 from scgsim.geometry.exact.errors import InputError
 from scgsim.geometry.models.input import (
     BoundaryCurveChainSpec,
@@ -703,8 +703,8 @@ def test_an_arc_declared_on_the_plan_is_refused_by_the_binding_on_a_slanted_term
     outline = outline_with_arc(slanted_pad(direction))
     plan.set_boundary_curves([{**outline, "entity_id": "chip/pad"}])
     sim = EigenmodeSim()
+    plan.set_lumped_elements([LumpedElement("chip/P1", inductance_h=1e-9)])
     sim.set_plan(plan.prepare())
-    sim.add_port("chip/P1", layer="metal", layout_sheet=True, inductance=1e-9)
     with pytest.raises(InputError) as error:
         prepared_port(sim)
     message = str(error.value)

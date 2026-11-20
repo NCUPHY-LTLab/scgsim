@@ -35,10 +35,15 @@ class StageResult:
 
 @dataclass(frozen=True)
 class SimulationDrcReport:
-    """Both stages of one ``simulation_drc`` call: the geometry stage first, then the meshing stage."""
+    """Both stages of one ``simulation_drc`` call, the geometry stage first, and what it does with the lumped elements.
+
+    ``lumped_elements`` holds one line per lumped element of the plan (and per authored sheet that carries
+    none, where the simulation leaves it out), saying what the simulation makes of it.
+    """
 
     geometry: StageResult
     meshing: StageResult
+    lumped_elements: tuple[str, ...] = ()
 
     @property
     def passed(self) -> bool:
@@ -46,7 +51,7 @@ class SimulationDrcReport:
         return self.geometry.passed and self.meshing.passed
 
     def render_text(self) -> str:
-        """Each stage's verdict, and every meshing-stage finding as one paragraph."""
+        """Each stage's verdict, every meshing-stage finding as one paragraph, then the lumped elements."""
         lines = [f"geometry stage: {'passed' if self.geometry.passed else 'refused'}"]
         refusing = sum(1 for f in self.meshing.findings if f.action == "refuse")
         warning = len(self.meshing.findings) - refusing
@@ -55,6 +60,9 @@ class SimulationDrcReport:
             f"meshing stage: {verdict} ({refusing} refusing, {warning} warning)"
         )
         lines.extend(f"  {finding.describe()}" for finding in self.meshing.findings)
+        if self.lumped_elements:
+            lines.append("lumped elements:")
+            lines.extend(f"  {line}" for line in self.lumped_elements)
         return "\n".join(lines) + "\n"
 
 

@@ -50,6 +50,11 @@ from scgsim.geometry.models.physical import (
 from scgsim.geometry.models.regions import PortSheetOverlapRecord, PortSheetRegionRecord
 from scgsim.geometry.source.adapter import build_gds_stack_geometry_input
 from scgsim.geometry.source.junctions import with_rectangular_junctions
+from scgsim.geometry.source.lumped_elements import (
+    LumpedElement,
+    LumpedElementRecord,
+    LumpedPort,
+)
 from scgsim.geometry.source.plan import GeometryPlan, GeometryPlanSnapshot
 from scgsim.geometry.source.summary import InputSummary, summarize_geometry_input
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
@@ -72,6 +77,9 @@ __all__ = [
     "GeometryPlan",
     "GeometryPlanSnapshot",
     "InputSummary",
+    "LumpedElement",
+    "LumpedElementRecord",
+    "LumpedPort",
     "LayoutPolygonSpec",
     "PathInput",
     "PolygonRing",

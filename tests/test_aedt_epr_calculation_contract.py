@@ -23,7 +23,7 @@ from copy import deepcopy
 
 import pytest
 
-from scgsim.aedt import EprResult, PlanarJunction, reanalyze_epr
+from scgsim.aedt import EprResult, reanalyze_epr
 from scgsim.aedt.epr.integrals import SURFACE_GRANULARITY
 from scgsim.aedt.epr.sgb_energy import combine_sgb_epr_mode
 from scgsim.aedt.epr.sgb_source import (
@@ -35,6 +35,7 @@ from scgsim.aedt.epr.sgb_source import (
     SurfaceFilm,
 )
 from scgsim.aedt.epr.surface import surface_energy_coefficients
+from scgsim.aedt.specs.epr import PlanarJunction
 
 EPSILON_0 = 8.8541878128e-12  # SI constant, independently written, not imported from the formula.
 ENERGIES = {"MA": EPSILON_0, "MS": 16 * EPSILON_0, "SA": 2 * EPSILON_0}

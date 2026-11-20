@@ -128,40 +128,27 @@ layout's extent, draw what sets that extent, such as the die outline or a
 ground plane; a conductor that reaches it at a single point is refused
 ([why](../reference/known-geometry-problems.qmd#boundary-point-pinch)).
 
-### Junctions {#junctions}
+### Junctions and other lumped elements {#junctions}
 
-A rectangular junction is a port sheet between two conductors that SCGSim cuts
-to the rectangle across the gap, for a lumped element such as a Josephson
-junction. A capacitance run does not need one; a resonator study with a
-junction does. Read the sheet's IDs from a prepared snapshot, then name its two
-conductors and their Nets:
+A lumped element is a part of the device the model does not draw as metal: a
+Josephson junction as its inductance, a resistor, a capacitor, or the port a
+measurement drives. It sits on a port sheet the component draws, here the
+square pad's `chip/o_junction_lumped`, between the pad and the ground. A
+capacitance run does not need one; a resonator study with a junction does.
+Declare it on the plan by its sheet's name:
 
 ```python
-from scgsim.geometry import JunctionTerminalBinding, RectangularJunctionSpec
+from scgsim.geometry import LumpedElement
 
-sheet = snapshot.geometry_input.port_sheet_regions[0]
-print(sheet.port_sheet_id)
-plan.set_rectangular_junctions(
-    [
-        RectangularJunctionSpec(
-            junction_id="pad_junction",
-            port_sheet_id=sheet.port_sheet_id,
-            source_polygon_id=sheet.source_polygon_id,
-            source_occurrence_path="chip",
-            terminal_a=JunctionTerminalBinding("chip/PAD", "chip", "pad"),
-            terminal_b=JunctionTerminalBinding("chip/GROUND", "chip", "ground"),
-        )
-    ]
-)
+plan.set_lumped_elements([LumpedElement("chip/o_junction_lumped", inductance_h=10e-9)])
 ```
 
-```text
-PORT_SHEET__chip/o_junction_lumped__0000
-```
-
-The two conductors and their Nets must differ. The
-[geometry contract](../reference/specs/geometry-plan.qmd) describes the fields;
-[Palace: resonant modes](modes-palace.qmd) gives the junction its inductance.
+`prepare()` finds the two conductors the sheet lands on and their Nets, and
+refuses a sheet that does not land on two conductors of two Nets, naming its
+layer and place. Every simulation of the plan reads the element:
+[Lumped elements](../reference/specs/geometry-plan.qmd#lumped-elements)
+describes the records, and [Palace: resonant modes](modes-palace.qmd) runs a
+study with this junction.
 
 ### Surface EPR {#surface-epr}
 

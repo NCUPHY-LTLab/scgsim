@@ -48,11 +48,9 @@ from scgsim.aedt import (
     EprResult,
     HandoffPlan,
     HfssEprSpec,
-    PlanarJunction,
     analyze_epr,
     collect_native_batch,
     parse_aedt_spec,
-    planar_junction_from_port,
     prepare_native_batch,
     resolve_saved_solution,
     run_native_batch,
@@ -61,16 +59,16 @@ from scgsim.contracts.sgb_sidecar import read_sidecar
 from scgsim.geometry import (
     GeometryPlan,
     GeometryPlanSnapshot,
-    JunctionTerminalBinding,
-    RectangularJunctionSpec,
+    LumpedElement,
 )
 from scgsim.geometry.models.physical import PhysicalLayerDeclaration
 
 AEDT_VERSION = "2024.2"
 PROJECT_NAME = "acceptance_67"
 DESIGN_NAME = "PadPairEpr"
-JUNCTION_ID = "jj"
+# The junction's sheet; the junction is named by it in the EPR request and the results.
 PORT_NAME = "chip/J1"
+JUNCTION_INDUCTANCE_H = 10e-9
 
 # The acceptance geometry, in um: two 100 um square pads 20 um apart, and a 10 um wide junction sheet
 # reaching 5 um into each pad.
@@ -100,7 +98,7 @@ RUN_CONTROL = EigenmodeRunControl(
 EPR_REQUEST = EprAnalysisRequest(
     mode_indices=(1,),
     surface_epr_groups=None,
-    junction_ids=(JUNCTION_ID,),
+    junction_ids=(PORT_NAME,),
     bulk_domain_ids=None,
 )
 INSPECTION = (
@@ -137,8 +135,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def build(out: Path, resources: AedtResources, *, close: bool) -> None:
     """Prepare, import and set up the project, save it, say what to inspect, and leave it open unless ``close``."""
-    snapshot, junction = _plan()
-    handoff = _handoff(out, snapshot, junction, resources)
+    handoff = _handoff(out, _geometry_plan().prepare(), resources)
     # The handoff's script runs ``python``: this interpreter, the one with SCGSim and PyAEDT.
     path = os.pathsep.join(
         (str(Path(sys.executable).parent), os.environ.get("PATH", ""))
@@ -242,7 +239,11 @@ def _arguments(argv: list[str] | None) -> argparse.Namespace:
 
 
 def _geometry_plan() -> GeometryPlan:
-    """The plan of the pad pair with its Surface EPR and junction declared, as ``simulation_drc`` and the simulation take it."""
+    """The plan of the pad pair with its Surface EPR and junction declared, as ``simulation_drc`` and the simulation take it.
+
+    The junction is a 10 nH lumped element on the sheet ``chip/J1``, from pad A to pad B along the sheet's
+    authored direction; HFSS makes it an EPR junction named by its sheet.
+    """
     plan = GeometryPlan(
         _component(),
         root_id="chip",
@@ -253,47 +254,15 @@ def _geometry_plan() -> GeometryPlan:
     plan.set_nets({"A": ("chip/pad_a",), "B": ("chip/pad_b",)})
     plan.set_vacuum_region(VACUUM_PADDING_UM)
     plan.set_surface_epr(SURFACE_EPR_SPECS)
-    (region,) = plan.prepare().geometry_input.port_sheet_regions
-    hosts = {
-        relation["host_entity_id"].split("/")[1].rsplit("_", 1)[0]: relation[
-            "host_entity_id"
-        ]
-        for relation in region.metadata["geometry_grid_contact_relations"]
-    }
-    plan.set_rectangular_junctions(
-        (
-            RectangularJunctionSpec(
-                junction_id=JUNCTION_ID,
-                port_sheet_id=region.port_sheet_id,
-                source_polygon_id=region.source_polygon_id,
-                source_occurrence_path="chip",
-                terminal_a=JunctionTerminalBinding(hosts["pad_a"], "chip", "A"),
-                terminal_b=JunctionTerminalBinding(hosts["pad_b"], "chip", "B"),
-            ),
-        )
+    plan.set_lumped_elements(
+        [LumpedElement(PORT_NAME, inductance_h=JUNCTION_INDUCTANCE_H)]
     )
     return plan
-
-
-def _plan() -> tuple[GeometryPlanSnapshot, PlanarJunction]:
-    """The prepared plan of the pad pair, and the junction bound to its port sheet."""
-    snapshot = _geometry_plan().prepare()
-    junction = planar_junction_from_port(
-        snapshot.geometry_input,
-        port_name=PORT_NAME,
-        junction_id=JUNCTION_ID,
-        terminal_a_net="A",
-        terminal_b_net="B",
-        inductance_h=10e-9,
-        capacitance_f=0.0,
-    )
-    return snapshot, junction
 
 
 def _handoff(
     out: Path,
     snapshot: GeometryPlanSnapshot,
-    junction: PlanarJunction,
     resources: AedtResources,
 ) -> HandoffPlan:
     """The HFSS Eigenmode EPR handoff of ``snapshot`` on the Route C model, into ``out/run``."""
@@ -306,7 +275,6 @@ def _handoff(
         run_control=RUN_CONTROL,
         resources=resources,
     )
-    sim.add_junction(junction)
     sim.set_epr_request(EPR_REQUEST)
     return sim.prepare_handoff()
 

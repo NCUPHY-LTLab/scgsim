@@ -51,7 +51,6 @@ snapshot = plan.prepare()
 sim = EigenmodeSim()
 sim.set_plan(snapshot)
 sim.set_output_dir(Path(".artifacts/xmon-palace"))
-sim.add_port(port_name, layer="D1_BOTTOM_M1", layout_sheet=True, inductance=11.78e-9)
 sim.set_eigenmode(num_modes=2, target=2e9)
 sim.set_epr_request(
     surface_interfaces=("MA", "MS", "SA"),
@@ -81,8 +80,9 @@ What it sets:
   least 1.0 µm away from the gap edges, where the field is strongest
   ([Inset margins](../../concepts/surface-epr.qmd#surface-distance-band-correction)).
   Each margin row is an alternative to the whole-surface row, not an addition.
-- **Junction.** `add_port` puts an 11.78 nH inductor on the junction sheet,
-  on the D1 metal layer `D1_BOTTOM_M1`.
+- **Junction.** The plan's junction, the 11.78 nH inductor on the sheet
+  `port_name` ([shared plan](inputs.qmd)), becomes a Palace lumped port; the
+  simulation adds nothing of its own.
 - **Modes.** The first two modes above 2 GHz.
 - **Reported participations.** All three surface kinds, every bulk region
   (`bulk_domain_ids=None`) and the junction. The selection filters what is

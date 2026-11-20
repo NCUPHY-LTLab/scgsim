@@ -19,7 +19,7 @@ import pytest
 from test_palace_rectangular_ports import VACUUM_PADDING_UM, port_group, prepared_port
 from test_simulation_drc import MATERIALS, NO_VACUUM_STACK, layout_plan
 
-from scgsim.geometry import GeometryPlan
+from scgsim.geometry import GeometryPlan, LumpedElement
 from scgsim.geometry.junctions.lattice import lattice_rectangle
 from scgsim.palace import EigenmodeSim
 
@@ -238,11 +238,13 @@ def plan_snapshot(
     *,
     outer_vacuum_um: float | None = None,
     vacuum_padding_um: tuple[float, float, float] | None = None,
+    inductance_h: float | None = 1e-9,
 ):
-    """The prepared plan of the chip, its device registered as ``chip/device``.
+    """The prepared plan of the chip, its device registered as ``chip/device``, its port a lumped element.
 
     ``outer_vacuum_um`` adds the plan's own vacuum region that far above the layout, as the
-    AEDT preparation needs; ``vacuum_padding_um`` adds it with that padding.
+    AEDT preparation needs; ``vacuum_padding_um`` adds it with that padding.  The port sheet carries an
+    element of ``inductance_h``; None declares none.
     """
     plan = GeometryPlan(
         chip,
@@ -253,6 +255,8 @@ def plan_snapshot(
     )
     plan.register_instance("chip/device", reference)
     plan.set_nets(NETS)
+    if inductance_h is not None:
+        plan.set_lumped_elements([LumpedElement(PORT, inductance_h=inductance_h)])
     if outer_vacuum_um is not None:
         plan.set_vacuum_region(padding=(0.0, 0.0, outer_vacuum_um))
     if vacuum_padding_um is not None:
@@ -264,7 +268,6 @@ def eigenmode_sim(chip, reference):
     """An ``EigenmodeSim`` on the chip's plan, in its vacuum, with its one lumped port, as a user sets it up."""
     sim = EigenmodeSim()
     sim.set_plan(plan_snapshot(chip, reference, vacuum_padding_um=VACUUM_PADDING_UM))
-    sim.add_port(PORT, layer="metal", layout_sheet=True, inductance=1e-9)
     return sim
 
 
@@ -605,22 +608,23 @@ def test_a_45_degree_port_on_a_round_pad_keeps_every_band_boundary(monkeypatch):
 
 
 def test_aedt_binds_a_45_degree_sheet_as_palace_does(monkeypatch):
-    """The AEDT junction of the bent 45 degree sheet runs as Palace's port does, v = (1, 1), the sheet wide."""
-    from scgsim.aedt import (  # noqa: PLC0415 -- the optional AEDT adapter, loaded only for its own check
-        planar_junction_from_port,
+    """The AEDT junction of the bent 45 degree sheet runs as Palace's port does, v = (1, 1), the sheet wide.
+
+    The junction is the one HFSS Eigenmode makes of the plan's element, named by its sheet, from the pad to the
+    electrode along the authored direction.
+    """
+    from scgsim.aedt.preparation.lumped_elements import (  # noqa: PLC0415 -- the optional AEDT adapter, loaded only for its own check
+        hfss_eigenmode_inputs,
     )
 
     layout = BENT_45
     chip, reference = placed(lattice_device(monkeypatch, layout), 90)
-    snapshot = plan_snapshot(chip, reference, outer_vacuum_um=10.0)
-    junction = planar_junction_from_port(
-        snapshot.geometry_input,
-        port_name=PORT,
-        junction_id="jj",
-        terminal_a_net="pad",
-        terminal_b_net="electrode",
-        inductance_h=1e-8,
-        capacitance_f=0.0,
+    snapshot = plan_snapshot(chip, reference, outer_vacuum_um=10.0, inductance_h=1e-8)
+    (junction,) = hfss_eigenmode_inputs(snapshot).junctions
+    assert (junction.junction_id, junction.terminal_a_net, junction.terminal_b_net) == (
+        PORT,
+        "pad",
+        "electrode",
     )
     _, _, t0, t1 = layout.sheet
     assert junction.direction_xy == pytest.approx((math.sqrt(0.5), math.sqrt(0.5)))

@@ -52,6 +52,7 @@ plan.set_surface_epr({
     }
     for kind in ("MA", "MS", "SA")
 })
+snapshot = plan.prepare()
 ```
 
 The margins are cut into the model that AEDT imports, and every surface of a
@@ -59,48 +60,13 @@ declared kind is integrated, the metal's sides included.
 
 ## The junction {#bind-the-junction}
 
-AEDT needs the junction declared on the plan: which sheet it is and which two
-Entities, with their Nets, it joins. Then `planar_junction_from_port` binds the
-circuit values to that sheet.
-
-```python
-from scgsim.aedt import planar_junction_from_port
-from scgsim.geometry import JunctionTerminalBinding, RectangularJunctionSpec
-
-plan.set_rectangular_junctions([
-    RectangularJunctionSpec(
-        junction_id="jj",
-        port_sheet_id="PORT_SHEET__chip/device/o_junction_lumped__0000",
-        source_polygon_id="PORT_SHEET__chip/device/o_junction_lumped__SOURCE__P0000",
-        source_occurrence_path="chip/device",
-        terminal_a=JunctionTerminalBinding("chip/D1_BOTTOM_GROUND_PLANE", "chip", "Ground"),
-        terminal_b=JunctionTerminalBinding("chip/device/D1_XMON_PAD", "chip/device", "xmon_pad"),
-    )
-])
-snapshot = plan.prepare()
-junction = planar_junction_from_port(
-    snapshot.geometry_input,
-    port_name=port_name,
-    junction_id="jj",
-    terminal_a_net="Ground",
-    terminal_b_net="xmon_pad",
-    inductance_h=11.78e-9,
-    capacitance_f=0.0,
-)
-```
-
-- `port_sheet_id` and `source_polygon_id` are the names the prepared plan
-  gives the junction sheet; `[r.port_sheet_id for r in snapshot.geometry_input.port_sheet_regions]`
-  lists them.
-- Terminal A is the Entity where the sheet starts, here the D1 ground plane,
-  and terminal B the one it points to, the Xmon pad; the other order is
-  refused. Each terminal names its Entity, the placed part it belongs to
-  (`chip` for the plane, `chip/device` for the pad) and its Net.
-- `capacitance_f=0.0` models the junction as a pure inductor. That is a
-  modelling choice, not a claim that the junction has no capacitance.
-
-AEDT puts the junction on the sheet between the two conductors
+The junction is the plan's: [the shared plan](inputs.qmd) declares it once,
+as an 11.78 nH inductor on the sheet `port_name`. An element with an
+inductance and no resistance is an HFSS junction, a Lumped RLC on the sheet
+between the D1 ground plane and the Xmon pad, cut to the rectangle between
+them as Palace cuts it
 ([junction reference](../../reference/specs/aedt-runtime.qmd#aedt-automatic-junction-partition)).
+Its EPR id is its sheet's name, `port_name`.
 
 ## Prepare the run {#select-reported-rows-and-prepare-a-handoff}
 
@@ -132,12 +98,11 @@ sim.set_eigenmode(
     ),
     resources=AedtResources(cores=4, ram_limit_percent=80),
 )
-sim.add_junction(junction)
 sim.set_epr_request(
     EprAnalysisRequest(
         mode_indices=(1,),
         surface_epr_groups=None,  # every Surface EPR group
-        junction_ids=(junction.junction_id,),
+        junction_ids=(port_name,),
         bulk_domain_ids=None,  # every dielectric solid and the Region
     )
 )

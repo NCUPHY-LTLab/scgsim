@@ -25,11 +25,13 @@ from sgb_inputs import rectangular_junction_source  # noqa: E402
 from scgsim.aedt import (  # noqa: E402
     AedtResources,
     EigenmodeRunControl,
-    PlanarJunction,
     prepare_hfss_eigenmode_from_geometry,
+)
+from scgsim.aedt.preparation.sgb_model import (  # noqa: E402
+    PreparedSgbModel,
     prepare_sgb_model,
 )
-from scgsim.aedt.preparation.sgb_model import PreparedSgbModel  # noqa: E402
+from scgsim.aedt.specs.epr import PlanarJunction  # noqa: E402
 from scgsim.aedt.specs.parse import parse_aedt_spec  # noqa: E402
 
 pytestmark = pytest.mark.occt

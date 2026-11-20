@@ -85,6 +85,6 @@ This run reports frequency and Q only. To see how a mode's energy is shared
 among the surfaces, the substrate and a junction, and what loss that implies,
 add an EPR request to the same simulation: the
 [flip-chip Xmon example](xmon/aedt.qmd) shows it. A port sheet can also carry
-a linear R, L or C, with `EigenmodeSim.add_lumped_rlc()`
-([reference](../reference/specs/aedt-runtime.qmd#hfss-shared-lumped-support));
+a linear R, L or C, declared on the plan as a `LumpedElement`
+([Lumped elements](../reference/specs/geometry-plan.qmd#lumped-elements));
 this coupon has no port sheet.

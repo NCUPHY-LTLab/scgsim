@@ -1,7 +1,7 @@
 """The geometry request of a Palace simulation: its lumped ports resolved and its geometry input prepared.
 
 ``layout_geometry_request`` is everything before the SGB build.  For a problem whose layout sheets are
-lumped ports (Eigenmode) it binds each requested port to an authored sheet of the plan, then prepares the
+lumped ports (Eigenmode) it binds each of the plan's lumped elements to its authored sheet, then prepares the
 geometry input with exactly the sheets requested; for a problem with no lumped ports (Electrostatic) it
 prepares the plan's geometry input with its sheets as authored.  The vacuum and the Surface-EPR specs are
 the plan's, read from its snapshot.  The simulation core builds its model from it in ``mesh()`` and in
@@ -26,7 +26,7 @@ from .ports import LayoutPortBinding, RequestedPort
 from .surface_epr import SurfaceEprSpecs
 from .workflow import GeometrySettings, prepare_mesh_input
 
-_WHERE_ADD_PORT = "the call to add_port"
+_WHERE_LUMPED_ELEMENTS = "the call to GeometryPlan.set_lumped_elements"
 
 _WHERE_PLAN_PORTS = "the GeometryPlan's port sheets"
 
@@ -126,7 +126,7 @@ def _resolve_plan_ports(
         record = available.get(requested.name)
         if record is None or record["target_layer"] != requested.layer:
             raise ValueError(
-                Declared("GeometryPlan", _WHERE_ADD_PORT).refusal(
+                Declared("GeometryPlan", _WHERE_LUMPED_ELEMENTS).refusal(
                     f"has no matching authored port {requested.name!r}"
                 )
             )

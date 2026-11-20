@@ -9,8 +9,9 @@ stack, the registered instances and the Net assignment its simulation's plan is 
 The settings: the plan (:func:`geometry_plan`) has root ``chip``, zero coupon padding, when the layout's stack
 has no vacuum of its own, the vacuum the Human set for testing layouts (issue 182), padding 0 um in x and y and
 1000 um below and above, and Surface EPR with the PDK's literature-central MA (metal-air), MS (metal-substrate)
-and SA (substrate-air) presets, cut as bands at margins 0.5 and 1.0 um by type; the simulation adds every
-authored port at 10 nH on Route B.  ``simulation_drc`` and ``mesh()`` are given the same plan (issues 266, 268).
+and SA (substrate-air) presets, cut as bands at margins 0.5 and 1.0 um by type; an Eigenmode layout's plan
+declares every authored port as a 10 nH lumped element (issue 283); the simulation runs on Route B.
+``simulation_drc`` and ``mesh()`` are given the same plan (issues 266, 268).
 
 ``scripts/check_roster.py`` runs the roster every night.  The Palace baseline experiment
 (``experiments/palace-stable-baseline``) builds its other layouts from the same helpers and measures them with
@@ -23,7 +24,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from scgsim.geometry import GeometryPlan
+from scgsim.geometry import GeometryPlan, LumpedElement
 from scgsim.palace import EigenmodeSim, ElectrostaticSim
 
 SAMPLING = "simulation"
@@ -40,7 +41,9 @@ class Layout:
 
     component: Any
     layer_stack: Any
-    simulation: str  # "eigenmode" (a junction port is declared) or "electrostatic"
+    simulation: (
+        str  # "eigenmode" (its plan declares a junction element) or "electrostatic"
+    )
     instances: Mapping[str, Any] = field(default_factory=dict)
     nets: Mapping[str, Sequence[str]] | None = None
 
@@ -197,7 +200,8 @@ def geometry_plan(layout: Layout, material_records, specs) -> GeometryPlan:
     """The plan ``simulation_drc`` and the simulation are given: root ``chip``, no coupon padding, the roster's vacuum, ``specs``.
 
     The vacuum is set on the plan only when the layout's stack has no ``VACUUM_REGION`` of its own.  ``specs`` are
-    the Surface-EPR specs of :func:`surface_epr_specs`.
+    the Surface-EPR specs of :func:`surface_epr_specs`.  An Eigenmode layout's plan declares every authored port
+    as a lumped element (:func:`every_authored_port`).
     """
     plan = GeometryPlan(
         layout.component,
@@ -213,7 +217,20 @@ def geometry_plan(layout: Layout, material_records, specs) -> GeometryPlan:
     if "VACUUM_REGION" not in layout.layer_stack.layers:
         plan.set_vacuum_region(VACUUM_PADDING_UM)
     plan.set_surface_epr(specs)
+    if layout.simulation == "eigenmode":
+        plan.set_lumped_elements(every_authored_port(plan))
     return plan
+
+
+def every_authored_port(plan: GeometryPlan) -> list[LumpedElement]:
+    """Every port sheet the layout authors, as a ``PORT_INDUCTANCE_H`` lumped element, in the order it authors them.
+
+    The names are read from a snapshot of the plan, as a study reads the sheets its layout draws.
+    """
+    authored = plan.prepare().stack["metadata"].get("port_sheet_source_layers", ())
+    return [
+        LumpedElement(port["name"], inductance_h=PORT_INDUCTANCE_H) for port in authored
+    ]
 
 
 def prepare_plan(layout: Layout, material_records, specs):
@@ -227,15 +244,7 @@ def simulation_class(layout: Layout) -> type[EigenmodeSim] | type[ElectrostaticS
 
 
 def configured_simulation(layout: Layout, snapshot):
-    """The simulation the roster is meshed with: the plan's snapshot, with its Surface EPR, and every authored port, on Route B."""
+    """The simulation the roster is meshed with: the plan's snapshot, with its Surface EPR and lumped elements, on Route B."""
     sim = simulation_class(layout)()
     sim.set_plan(snapshot)
-    if layout.simulation == "eigenmode":
-        for port in snapshot.stack["metadata"].get("port_sheet_source_layers", ()):
-            sim.add_port(
-                port["name"],
-                layer=port["target_layer"],
-                layout_sheet=True,
-                inductance=PORT_INDUCTANCE_H,
-            )
     return sim
