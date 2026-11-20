@@ -407,13 +407,16 @@ def _missing_page_route(missing_page, path):
 def test_a_moved_folder_routes_its_old_files_to_the_new_folder(publisher):
     """A chart beside a moved page keeps its name in the page's new folder; its old URL is routed there.
 
-    Only versions that moved the folder get the route, and a folder with a renamed page gets none.
+    Only versions that moved the folder get the route. A page of the folder merged into another page of the
+    same new folder does not stop the move; a folder that only a renamed page left gets none.
     """
     moved = "---\ntitle: Moved\naliases:\n  - ../../old/moved.html\n---\n"
+    merged = "---\ntitle: Merged\naliases:\n  - ../../old/merged-away.html\n---\n"
     renamed = "---\ntitle: Renamed\naliases:\n  - ../../kept/before.html\n---\n"
     for commit in (DEVELOP, PRESENTATION):
         publisher.sources[commit] |= {
             "docs/area/new/moved.qmd": moved,
+            "docs/area/new/receiver.qmd": merged,
             "docs/area/new/chart.html": "<p>chart</p>\n",
             "docs/area/other/after.qmd": renamed,
         }

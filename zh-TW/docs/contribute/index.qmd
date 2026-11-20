@@ -40,7 +40,7 @@ uv run --locked --no-sync python scripts/check_quality.py
 uv run --locked --no-sync python -m pytest tests -m 'not slow and not private_golden and not pdk' -rs --fail-on-skip
 ```
 
-`check_quality.py` 會對每個納入版本控制的 Python 檔案執行 Ruff 格式與程式檢查、可讀性檢查、Pyright 與匯入層契約。測試遇到略過就會失敗，因為 `dev` 群組已經安裝測試需要的一切。
+`check_quality.py` 會對每個納入版本控制的 Python 檔案執行 Ruff 格式與程式檢查和可讀性檢查；Pyright 只檢查 `src/`；匯入層契約檢查套件內的匯入關係。測試遇到略過就會失敗，因為 `dev` 群組已經安裝測試需要的一切。
 
 修改文件時，還要檢查產生的頁面並渲染網站（Quarto 的版本需在 `scripts/build_docs_site.py` 指定的範圍內）：
 

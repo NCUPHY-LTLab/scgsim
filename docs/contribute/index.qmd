@@ -71,8 +71,9 @@ uv run --locked --no-sync python scripts/check_quality.py
 uv run --locked --no-sync python -m pytest tests -m 'not slow and not private_golden and not pdk' -rs --fail-on-skip
 ```
 
-`check_quality.py` runs Ruff formatting and lint, the readable-style check,
-Pyright and the import-layer contracts over every tracked Python file. The
+`check_quality.py` runs Ruff formatting and lint and the readable-style check
+over every tracked Python file, Pyright over `src/` only, and the import-layer
+contracts over the package's imports. The
 test run fails on a skip, because the `dev` group installs everything the
 tests need.
 

@@ -1,14 +1,15 @@
 ---
 title: "API owners"
-description: "Where each public name of SCGSim 3.0 is defined, which old module it replaces, and the rules for moving a public name."
+description: "Where the names of the 1.x baseline API live in SCGSim 3.0, and the rules for moving a public name."
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/contribute/internals/api-owners"
 ---
 
-This page is for contributors. It maps the public names of SCGSim to the
-modules that define them, and the modules of the frozen 1.x API (the
-*baseline*, whose geometry package was `scgsim.sgb`) to their current owners.
+This page is for contributors. It is the migration map of the frozen 1.x API
+(the *baseline*, whose geometry package was `scgsim.sgb`): where its modules
+and names live now, and who owns them. It does not list every current public
+name; the [API index](../../reference/api-index.qmd) does.
 Users import every public name from its package and need none of this; their
 upgrade steps are in [Upgrade](../../guides/upgrade.qmd), and the public names
 in the [API index](../../reference/api-index.qmd).
