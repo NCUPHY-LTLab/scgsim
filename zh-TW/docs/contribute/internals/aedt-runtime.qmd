@@ -125,7 +125,7 @@ SGB 模型的 EPR 不經 AEDT，從 sidecar 與準備好的紀錄讀出要積分
 
 1. **薄片。** 位於匯入實體上的埠面，會依 guard 中每個面的精確頂點迴圈重新畫成一個薄片物件 `port_sheet_<port_sheet_id>`，並與 guard 的面積比對；不是其頂點所成平面多邊形的面會遭拒。AEDT 2024.2 匯入的基板面與旁邊導體實體相距約 2e-8 µm，Terminal 埠找不到這些導體。自由面本身已是這樣的薄片。
 2. **埠。** 一個 Terminal `Lumped Port`，以要求中的名稱命名，覆蓋薄片各面，使用要求的阻抗與 `renormalize`。
-3. **Terminal。** `<name>_T1`，位於薄片在訊號宿主一端、沿 sidecar `direction`（由薄片第一個宿主指向第二個）的直線邊上；這些邊必須構成一條連續線段。AEDT 會把帶積分線的集總埠做成沒有 Terminal 的 Modal 埠，即使在 Driven Terminal 設計中亦然，因此 Terminal 指派在邊上。
+3. **Terminal。** `<name>_T1`，位於薄片在訊號宿主一端、沿 sidecar `direction` 的直線邊上；sidecar 依這個方向經過宿主的順序列出薄片的宿主，起點宿主在前、終點宿主在後，所以訊號宿主在清單中的位置就是它那一端。這些邊必須構成一條連續線段。AEDT 會把帶積分線的集總埠做成沒有 Terminal 的 Modal 埠，即使在 Driven Terminal 設計中亦然，因此 Terminal 指派在邊上。
 
 儲存後，每個埠都從已儲存的設計讀回：一個正好位於其各面上的 Terminal `Lumped Port`，以及它唯一的 Terminal，即正好位於其各邊上的已儲存子項。AEDT 若記錄了參考導體，它們必須是各埠參考宿主的導體實體；AEDT 2024.2 在兩種路徑上都沒有記錄任何參考導體，而 Route A 的宿主是 Perfect E 薄片，不是實體。收據保留這些紀錄、原生屬性與 AEDT 記錄的參考導體。結果讀取要求收據的幾何就是請求的模型匯入後的樣子（其識別與 guard 的實體）、每筆埠紀錄就是匯入所建立的那一筆，以及所宣告掃頻的有序 S 參數與 Touchstone。
 

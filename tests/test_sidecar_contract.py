@@ -1,5 +1,5 @@
 """The sidecar contract ``scgsim.contracts.sgb_sidecar`` (#170): one definition gives the schema file, the pinned
-digest beside the version, and the shared reader, and they describe ``scgsim.sgb.sidecar.v5`` as SGB writes it."""
+digest beside the version, and the shared reader, and they describe ``scgsim.sgb.sidecar.v6`` as SGB writes it."""
 
 from __future__ import annotations
 
@@ -121,12 +121,12 @@ def test_read_sidecar_returns_the_written_file_as_decoded(tmp_path, sidecars):
 
 def test_another_version_is_refused_by_name(sidecars):
     """A sidecar of another version is named as such, before its structure is looked at, with what to do."""
-    v4 = {**sidecars["pad_b"], "schema": "scgsim.sgb.sidecar.v4"}
+    v5 = {**sidecars["pad_b"], "schema": "scgsim.sgb.sidecar.v5"}
     with pytest.raises(SidecarError) as refused:
-        check_sidecar(v4)
+        check_sidecar(v5)
     message = str(refused.value)
-    assert "'scgsim.sgb.sidecar.v4' is not supported" in message
-    assert "reads only 'scgsim.sgb.sidecar.v5'" in message
+    assert "'scgsim.sgb.sidecar.v5' is not supported" in message
+    assert "reads only 'scgsim.sgb.sidecar.v6'" in message
     assert "Rebuild the geometry with this SCGSim" in message
     with pytest.raises(
         SidecarError, match=r"'scgsim\.sgb\.sidecar\.v2' is not supported"

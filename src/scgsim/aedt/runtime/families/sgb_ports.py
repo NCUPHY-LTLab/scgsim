@@ -110,8 +110,9 @@ def assign_lumped_port(
     """One Driven lumped Terminal port over every face of its port sheet, and its one Terminal.
 
     The port takes all the faces of its sheet, as a Lumped RLC does.  Its Terminal is the edges of those
-    faces at the signal conductor's end of the sheet along the sidecar ``direction`` (which points from the
-    sheet's first host to its second), found as the RLC's current-line ends are (:func:`port_end_edges`).  The
+    faces at the signal conductor's end of the sheet along the sidecar ``direction``, found as the RLC's
+    current-line ends are (:func:`port_end_edges`).  The sidecar lists the sheet's hosts in the order that
+    direction meets them, start host then end host, so the signal host's place in that list is its end.  The
     reference is the conductor at the other end; AEDT records it in ``TerminalReferenceConductors``.
     ``port_faces`` maps each planned face of the sheet to its imported place: the name of the sheet object a
     free face was rebuilt as, or the guard record of a face on an imported solid, which is drawn again

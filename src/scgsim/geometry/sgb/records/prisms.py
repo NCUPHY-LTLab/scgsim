@@ -164,6 +164,7 @@ class PortIdentity:
     source_name: str
     port_index: int
     direction: tuple[float, float, float]
+    # The host conductors in the order ``direction`` meets them: start host, then end host.
     host_entity_ids: tuple[str, ...]
     target_layer: str
     source_layer: str

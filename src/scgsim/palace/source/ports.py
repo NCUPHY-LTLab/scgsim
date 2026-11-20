@@ -23,6 +23,7 @@ from scgsim.geometry.models.junctions import (
     junction_net_id,
     junction_occurrence_path,
 )
+from scgsim.geometry.models.regions import hosts_along_direction
 from scgsim.refusal import Declared
 
 _WHERE_LAYOUT = "the layout"
@@ -93,10 +94,10 @@ def _port_request(
     """The partition request of one port sheet: its own identity and its two host conductors.
 
     Terminal A is the host at the start of the port direction and Terminal B the host it
-    points to, the order the partition cuts its two ends in.
+    points to (``hosts_along_direction``), the order the partition cuts its two ends in.
     """
     name = region.metadata.get("source_name", region.port_sheet_id)
-    hosts = tuple(dict.fromkeys(item.host_semantic_id for item in region.overlaps))
+    hosts = hosts_along_direction(region)
     if len(hosts) != 2:
         xs = [x for x, _ in region.exterior]
         ys = [y for _, y in region.exterior]
@@ -106,15 +107,14 @@ def _port_request(
                 f"must land on two conductors to be made a rectangle; it lands on {len(hosts)}: {list(hosts)}; the sheet is drawn on layer {region.source_layer} at {box}. Fix the layout or the port declaration: draw the sheet so that it lands on exactly two conductors of its target layer {region.metadata.get('target_layer')!r}, one at each end"
             )
         )
-    terminals = [_terminal(entities[host]) for host in hosts]
-    terminals.sort(key=lambda item: _along_direction(region, item.source_entity_id))
+    terminal_a, terminal_b = (_terminal(entities[host]) for host in hosts)
     return RectangularJunctionSpec(
         junction_id=region.port_sheet_id,
         port_sheet_id=region.port_sheet_id,
         source_polygon_id=region.source_polygon_id,
         source_occurrence_path=junction_occurrence_path(region.metadata),
-        terminal_a=terminals[0],
-        terminal_b=terminals[1],
+        terminal_a=terminal_a,
+        terminal_b=terminal_b,
     )
 
 
@@ -125,15 +125,3 @@ def _terminal(entity: SemanticEntitySpec) -> JunctionTerminalBinding:
         source_occurrence_path=junction_occurrence_path(entity.metadata),
         net_id=junction_net_id(entity),
     )
-
-
-def _along_direction(region: PortSheetRegionRecord, host: str) -> float:
-    """The mean position of the sheet's landing on ``host``, measured along the port direction."""
-    dx, dy = region.metadata["direction"][:2]
-    points = [
-        point
-        for overlap in region.overlaps
-        if overlap.host_semantic_id == host
-        for point in overlap.overlap_loop
-    ]
-    return sum(x * dx + y * dy for x, y in points) / len(points)

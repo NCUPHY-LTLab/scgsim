@@ -321,8 +321,10 @@ model that has them. Each port is then:
 2. **The port.** A Terminal `Lumped Port` named as the request names it, over
    the sheet's faces, with the request's impedance and `renormalize`.
 3. **The Terminal.** `<name>_T1`, on the sheet's straight edges at the signal
-   host's end along the sidecar `direction` (which points from the sheet's
-   first host to its second); those edges must form one unbroken segment.
+   host's end along the sidecar `direction`; the sidecar lists the sheet's
+   hosts in the order that direction meets them, start host then end host, so
+   the signal host's place in the list is its end. Those edges must form one
+   unbroken segment.
    AEDT makes a lumped port with an integration line a Modal port with no
    Terminal, even in a Driven Terminal design, so the Terminal is assigned on
    the edges.
