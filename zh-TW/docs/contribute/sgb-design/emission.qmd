@@ -128,7 +128,7 @@ running example 的 primary group（`MA`：metal–vacuum 側，`MS`：metal–s
 
 {{< askr-chart-view src="figures/emission-groups-3d.html" label="依 physical group 檢視模型" >}}
 
-XAO 無法攜帶 mesher 與 solver 設定所需的全部資訊，所以 writer 也會在它旁邊寫一個 JSON **sidecar**，即 `<stem>.sidecar.json`（格式 `scgsim.sgb.sidecar.v5`，附 JSON Schema）。它以 planned id 與 group 名稱指稱每個元素，不含 native handle：native tag 一律由 `binding` 的順序得到。sidecar 的每個欄位是一張以 id 為鍵的表，記錄之間以 id 互相指向，每個事實只存一次；每張表的定義見[使用契約](consumer-contract.qmd#sidecar)，下表只列出與 emission 有關的主要欄位：
+XAO 無法攜帶 mesher 與 solver 設定所需的全部資訊，所以 writer 也會在它旁邊寫一個 JSON **sidecar**，即 `<stem>.sidecar.json`（格式 `scgsim.sgb.sidecar.v6`，附 JSON Schema）。它以 planned id 與 group 名稱指稱每個元素，不含 native handle：native tag 一律由 `binding` 的順序得到。sidecar 的每個欄位是一張以 id 為鍵的表，記錄之間以 id 互相指向，每個事實只存一次；每張表的定義見[使用契約](consumer-contract.qmd#sidecar)，下表只列出與 emission 有關的主要欄位：
 
 | Sidecar 欄位 | 內容 |
 |---|---|

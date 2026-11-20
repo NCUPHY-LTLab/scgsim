@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://scgsim.invalid/schemas/scgsim.sgb.sidecar.v5.json",
-  "title": "scgsim.sgb.sidecar.v5",
+  "$id": "https://scgsim.invalid/schemas/scgsim.sgb.sidecar.v6.json",
+  "title": "scgsim.sgb.sidecar.v6",
   "description": "Sidecar of the SGB XAO/BREP: the model, the binding of planned ids to native tags, a summary, and the tables of sources, derived curves and emitted shapes, linked by typed ids.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "model", "binding", "summary", "entity", "source_curve", "inset_request", "port", "cut_family", "band_family", "support_ring", "support_primitive", "carrier", "vertex", "edge", "face", "volume", "group", "surface_epr_row", "mesh_feature"],
   "properties": {
-    "schema": {"const": "scgsim.sgb.sidecar.v5"},
+    "schema": {"const": "scgsim.sgb.sidecar.v6"},
     "model": {"$ref": "#/$defs/Model"},
     "binding": {"$ref": "#/$defs/Binding"},
     "summary": {"$ref": "#/$defs/Summary"},
@@ -675,6 +675,7 @@
           "items": {"type": "number"}
         },
         "host_entity_ids": {
+          "description": "The host conductors in the order ``direction`` meets them: the host at the sheet's start, then the host it points to.",
           "type": "array",
           "items": {"type": "string", "x-references": "entity"}
         },

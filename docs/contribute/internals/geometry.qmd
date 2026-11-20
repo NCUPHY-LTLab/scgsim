@@ -132,7 +132,7 @@ emitted and which physical group each face joins.
 format (BREP) and its XAO wrapper, with no Gmsh or OCC call, no Boolean and no
 healing; the bytes are deterministic. It numbers the shapes in
 `TopExp::MapShapes` pre-order, the order in which Gmsh tags them when it opens
-the file. The **sidecar** (`scgsim.sgb.sidecar.v5`, JSON) binds each of those
+the file. The **sidecar** (`scgsim.sgb.sidecar.v6`, JSON) binds each of those
 native tags to its planned ID, and through it to its Entity, Net, interface,
 band and physical group. A native tag is valid only within one loaded model;
 the planned ID is the identity.

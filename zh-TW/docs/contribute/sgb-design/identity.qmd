@@ -11,7 +11,7 @@ aliases:
 
 Solver 回報某個 attribute 的結果時，SGB 讓你能以查表（而不是看幾何）知道它是什麼：從 Palace attribute 一路追到 physical group、face、edge、carrier，最後到 source 曲線。這一頁說明這條 mapping chain、兩層 identity、每種 entity 的 hash 規則、lineage 記錄了什麼，並在 running example 上完整追一次。
 
-本頁以 Route B 含 band 的 pad-in-ground 範例（production 測試端的 stage-level scene `pad_in_ground("B")`，三個 margin 0.1、0.5、2 µm 的 band，lumped port 在 host 的 support plane z = 0）為例。查詢鏈的數字、圖與決定性的量測都由 `zh-TW/docs/contribute/sgb-design/_figures/identity.py` 對 production（`scgsim.geometry.sgb`）計算：建出模型、以 `emit_model` 寫出，再以 `read_sidecar` 讀 sidecar `scgsim.sgb.sidecar.v5`，與 consumer 讀到的相同。
+本頁以 Route B 含 band 的 pad-in-ground 範例（production 測試端的 stage-level scene `pad_in_ground("B")`，三個 margin 0.1、0.5、2 µm 的 band，lumped port 在 host 的 support plane z = 0）為例。查詢鏈的數字、圖與決定性的量測都由 `zh-TW/docs/contribute/sgb-design/_figures/identity.py` 對 production（`scgsim.geometry.sgb`）計算：建出模型、以 `emit_model` 寫出，再以 `read_sidecar` 讀 sidecar `scgsim.sgb.sidecar.v6`，與 consumer 讀到的相同。
 
 ## 以 running example 看：attribute 10
 
@@ -32,7 +32,7 @@ flowchart LR
   C -.->|"views.native_tags"| N["native tags<br/>32, 39（只記錄）"]
 ```
 
-每個箭頭都是一次查表。下列數字來自 production 的 sidecar（`scgsim.sgb.sidecar.v5`）；每張表的完整定義見[使用契約](consumer-contract.qmd#sidecar)。
+每個箭頭都是一次查表。下列數字來自 production 的 sidecar（`scgsim.sgb.sidecar.v6`）；每張表的完整定義見[使用契約](consumer-contract.qmd#sidecar)。
 
 ::: {.askr-table-compact}
 | 步驟 | 你手上有 | 查詢 | 你得到 |
@@ -151,7 +151,7 @@ Face 記錄它邊界上的曲線來自什麼，依 carrier 的種類分開：`en
 
 ## Sidecar：native tag 只記錄，不信任
 
-直接 writer 把每個 planned ID 對到 native tag，規則是**依建構順序**：tag = 1 + 該 ID 在 `binding.ids_by_tag[dim]` 中的位置（OCCT 的 `TopExp::MapShapes` 前序），絕不靠幾何比對。「每個輸出的 native entity 恰好有一個 planned ID」若不成立，載入檢查與 OCCT 檢查就會失敗。production 的 `<stem>.sidecar.json`（`scgsim.sgb.sidecar.v5`，附 JSON Schema；每張表的定義在[使用契約](consumer-contract.qmd#sidecar)）把上面這條查詢用到的每個事實存一次，分成三層，記錄之間以 id 互相指向：
+直接 writer 把每個 planned ID 對到 native tag，規則是**依建構順序**：tag = 1 + 該 ID 在 `binding.ids_by_tag[dim]` 中的位置（OCCT 的 `TopExp::MapShapes` 前序），絕不靠幾何比對。「每個輸出的 native entity 恰好有一個 planned ID」若不成立，載入檢查與 OCCT 檢查就會失敗。production 的 `<stem>.sidecar.json`（`scgsim.sgb.sidecar.v6`，附 JSON Schema；每張表的定義在[使用契約](consumer-contract.qmd#sidecar)）把上面這條查詢用到的每個事實存一次，分成三層，記錄之間以 id 互相指向：
 
 - **來源**：`entity`（每個 Entity 的 prism、material、Net 與 layer）、`source_curve`（每條來源直線與圓弧）、`inset_request` 與 `port`；
 - **推導**：`cut_family`、`band_family`、`support_ring`、`support_primitive`，以及上表的 `carrier`；

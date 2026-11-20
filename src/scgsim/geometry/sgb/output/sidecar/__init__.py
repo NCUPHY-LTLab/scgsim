@@ -1,4 +1,4 @@
-"""The production sidecar ``scgsim.sgb.sidecar.v5`` (design brief sections 7 and 12, decision D8).
+"""The production sidecar ``scgsim.sgb.sidecar.v6`` (design brief sections 7 and 12, decision D8).
 
 The sidecar is the JSON companion of the XAO/BREP and SGB's complete record of the model: everything the build
 used, and everything the mesher, the meshing-stage check and the solver adapters need, so a reader reads and
@@ -40,7 +40,8 @@ Sources -- what the layout drew and asked for
     a family has bands to integrate is read from its own ``bands`` and from ``surface_epr_row``.
 ``port``
     each lumped-port sheet: index, name, direction, its Entity and hosts, layers, group, faces, host and
-    adjacent volumes.
+    adjacent volumes.  ``host_entity_ids`` lists the hosts in the order ``direction`` meets them: the host
+    at the sheet's start, then the host it points to.
 
 Derived -- what SGB computed from the sources
 ---------------------------------------------

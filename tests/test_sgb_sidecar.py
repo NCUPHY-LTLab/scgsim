@@ -1,4 +1,4 @@
-"""The production sidecar ``scgsim.sgb.sidecar.v5``: schema, binding, group facts, unions, lineage, mesh features, determinism."""
+"""The production sidecar ``scgsim.sgb.sidecar.v6``: schema, binding, group facts, unions, lineage, mesh features, determinism."""
 
 from __future__ import annotations
 

@@ -25,7 +25,9 @@ carries the port identity:
   and shares the host's own edges.  A region bound to a rectangular junction partition is
   already the junction's central rectangle and keeps its full footprint, so it has no landing.
 * **Identity.**  Port sheet id, source name, 1-based port index, normalised XY
-  direction, host entity ids and source/target layers.
+  direction, host entity ids and source/target layers.  The hosts are in the order the
+  direction meets them, start host then end host (``hosts_along_direction``), so a reader
+  knows which end of the sheet each host is at from the record alone.
 """
 
 from __future__ import annotations
@@ -43,7 +45,10 @@ from scgsim.geometry.models.physical import (
     PhysicalLayerDeclaration,
     PhysicalRepresentationPlan,
 )
-from scgsim.geometry.models.regions import PortSheetRegionRecord
+from scgsim.geometry.models.regions import (
+    PortSheetRegionRecord,
+    hosts_along_direction,
+)
 from scgsim.geometry.models.representation import (
     EntityRepresentation,
     RepresentationContext,
@@ -95,7 +100,8 @@ def _port_prism(
     plan: PhysicalRepresentationPlan,
 ) -> PrismRecord:
     what = f"port sheet {region.port_sheet_id!r}"
-    hosts = tuple(dict.fromkeys(o.host_semantic_id for o in region.overlaps))
+    direction = port_direction(region.metadata.get("direction"), what)
+    hosts = hosts_along_direction(region)
     z = _support_plane(what, _place(region, grid), hosts, representation, plan)
     exterior = lattice_ring(region.exterior, grid, f"{what} exterior")
     holes = [
@@ -116,7 +122,7 @@ def _port_prism(
             port_sheet_id=region.port_sheet_id,
             source_name=str(region.metadata.get("source_name", region.port_sheet_id)),
             port_index=int(region.metadata.get("port_index", 0)),
-            direction=port_direction(region.metadata.get("direction"), what),
+            direction=direction,
             host_entity_ids=hosts,
             target_layer=str(region.metadata.get("target_layer", "")),
             source_layer=region.source_layer,

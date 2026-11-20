@@ -264,7 +264,7 @@ def test_a_short_band_edge_leads_to_its_source_edge_through_recorded_fields():
 
 
 def test_the_sidecar_leads_a_short_band_edge_to_the_source_edge_it_offsets(tmp_path):
-    """The #138 (c) chain read from ``scgsim.sgb.sidecar.v5`` alone, by following typed ids and reading fields.
+    """The #138 (c) chain read from ``scgsim.sgb.sidecar.v6`` alone, by following typed ids and reading fields.
 
     Edge ``e:9509e27bdf7e2d28`` of ``junction_fan`` -> its carrier, a band member of role ``edge`` at margin 1000
     grid steps -> the support primitive it offsets, place 13 on its ring, a 0.1954 um line -> the source curve it
@@ -329,14 +329,15 @@ def test_every_band_member_of_the_sidecar_names_its_place_as_the_model_does(
 
 # --------------------------------------------------------------------------- the file is pinned
 
-# SHA-256 of each model's ``scgsim.sgb.sidecar.v5`` file.  Re-pinned when v4 became v5 (#199: each fact under one
-# name, band groups checkable); a change meant to change the file re-pins the digests it changes and says why.
+# SHA-256 of each model's ``scgsim.sgb.sidecar.v6`` file.  Re-pinned when v5 became v6 (#282: a port's hosts in
+# direction order); each file differs from its v5 pin only in its ``schema``.  A change meant to change the
+# file re-pins the digests it changes and says why.
 SIDECAR_SHA256 = {
-    "pad_a_bands": "d39c3de70cddf83bf5fcbc59c8e2e6d96f18e838bcbf7f84914773e165bd8772",
-    "pad_b_bands": "b219d77fb0c9d767a0b7388373e51dd45aec5f532da77cc606d80e6c757097ed",
-    "junction_fan": "ef82828c1b687b47dce22279f4bf7a15bd504a24c546678c8cadbc0d55e68a73",
-    "cell13_circular_bend": "eea0c2e5ff6f8881b388288012864cac4e293dc18af5007e0620d23e5c7c24eb",
-    "strip_into_pad": "318eb4da06a47dd4f9f9f109fd039161325704fc95a831cfb81f4e0bda550d20",
+    "pad_a_bands": "bd835a8109694223699c0777db299a9809e97e0180e7dfabdd949e8bb746c339",
+    "pad_b_bands": "bd3fac6a4f226d5ae9d45ef47176ada422b82a1a0d91bec648ccdd9c8d676932",
+    "junction_fan": "4dd737675c646df94d1e4e67929ddff2062a4c5c03bc74d2823f577d363e1b89",
+    "cell13_circular_bend": "6e024e191cefe24c687a84fb769ec7515305796a078b2242895582f58735a9df",
+    "strip_into_pad": "7cf9f01aedf222c6abdf36a82606f6f3f3591c431405c84f1ca2fa22f1fb54d4",
 }
 
 

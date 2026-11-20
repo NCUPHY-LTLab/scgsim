@@ -25,6 +25,7 @@ from sgb_driven_inputs import (  # noqa: E402
 from sgb_extreme_cases import FIXTURES, build_model  # noqa: E402
 from test_aedt_public_preparation import junction_model  # noqa: E402
 from test_sgb_step_guard import export  # noqa: E402
+from test_simulation_drc import layout_plan  # noqa: E402
 
 from scgsim.aedt import (  # noqa: E402
     FrequencySweepSpec,
@@ -423,6 +424,104 @@ def test_a_port_face_on_the_substrate_is_drawn_again_from_its_guarded_vertices(
     (edge,) = (e for e in sheet.faces[0].edges if e.id in record["terminal_edges"])
     assert sorted(v.position[0] for v in edge.vertices) == [1.0, 4.0]
     assert {v.position[1] for v in edge.vertices} == {0.0}
+
+
+def _signal_first_two_port_plan(monkeypatch):
+    """The prepared plan of two pads above a ground strip, each joined to it by a port sheet from the ground to the pad.
+
+    The component declares its pads before its ground and the plan its signal Nets first, as an OrcaPen SC PDK
+    layout does, so the source finds each sheet's pad before its ground (issue #282).  Pad ``k`` spans
+    y = 0..20 um and the ground y = -30..-10 um; sheet ``Pk`` reaches 5 um into both, so what remains of it
+    runs from the ground edge (y = -10) to the pad edge (y = 0), along +y.
+    """
+    import gdsfactory as gf  # noqa: PLC0415 -- optional layout stack, imported only by the tests that need it
+
+    # Restore process-local PDK state after this public generic fixture.
+    monkeypatch.setattr(
+        gf.pdk,
+        "_ACTIVE_PDK",
+        gf.pdk._ACTIVE_PDK,  # noqa: SLF001 -- preserve the active PDK during test setup
+    )
+    gf.gpdk.PDK.activate()
+    component = gf.Component()
+    regions, ports = [], []
+    for k, x in ((1, 10.0), (2, 50.0)):
+        component.add_polygon(
+            ((x - 10, 0), (x + 10, 0), (x + 10, 20), (x - 10, 20)), layer=(k, 0)
+        )
+        regions.append(_conductor(f"pad_{k}", (k, 0), (x, 10.0)))
+        component.add_polygon(
+            ((x - 2, -15), (x + 2, -15), (x + 2, 5), (x - 2, 5)), layer=(9, 0)
+        )
+        component.add_port(
+            name=f"P{k}", center=(x, -5), width=4, orientation=90, layer=(9, 0)
+        )
+        ports.append({"name": f"P{k}", "layer": [9, 0], "target_layer": "metal"})
+    component.add_polygon(((-10, -30), (70, -30), (70, -10), (-10, -10)), layer=(3, 0))
+    regions.append(_conductor("ground", (3, 0), (30.0, -20.0)))
+    component.info["component_semantics"] = {
+        "schema_version": 2,
+        "conductor_regions": regions,
+        "ports": ports,
+    }
+    nets = {"P1": ("chip/pad_1",), "P2": ("chip/pad_2",), "G": ("chip/ground",)}
+    return layout_plan(component, nets=nets).prepare()
+
+
+def _conductor(name, layer, inside):
+    """A conductor region of one polygon, the one on ``layer`` under the point ``inside``, as Entity ``chip/<name>``."""
+    return {
+        "semantic_id": name,
+        "level": "metal",
+        "gds_layer": list(layer),
+        "geometry": {"geometry_source": "gds_polygon", "selector_point_um": inside},
+    }
+
+
+@pytest.mark.parametrize("modeling", ["solid", "thin_film"])
+def test_the_terminal_is_on_the_signal_edge_when_the_layout_declares_its_signal_first(
+    monkeypatch, tmp_path, modeling
+):
+    """Issue #282: SGB records each sheet's hosts ground then pad, the order +y meets them, not the order found.
+
+    So on Route C and Route A each Terminal is on its pad edge (y = 0), not on the ground edge (y = -10).
+    """
+    snapshot = _signal_first_two_port_plan(monkeypatch)
+    sheet = {
+        region.metadata["source_name"]: region.port_sheet_id
+        for region in snapshot.geometry_input.port_sheet_regions
+    }
+    ports = tuple(
+        LumpedTerminalPort(
+            k, f"p{k}", sheet[f"chip/P{k}"], (f"chip/pad_{k}",), ("chip/ground",), 50.0
+        )
+        for k in (1, 2)
+    )
+    model = prepare_sgb_model(
+        snapshot.geometry_input,
+        prepared_stack=snapshot.stack,
+        modeling=modeling,
+        output_dir=tmp_path / "model",
+        ports=ports,
+    )
+    sidecar = read_sidecar(model.path("sidecar"))
+    guard = read_step_guard(model.path("guard"))
+    tolerance = import_tolerance_um(float(sidecar["model"]["grid_um"]))
+    plan = plan_hfss_boundaries(sidecar, guard, (), (), model.lumped_ports)
+    for k, planned in enumerate(plan.lumped_ports, start=1):
+        design = _Design(_DrawingModeler())
+        record = assign_lumped_port(
+            design, planned, lumped_port_faces(guard, {}), tolerance
+        )
+        terminal_y = [
+            point[1]
+            for edge in _edge_ends(design, record["terminal_edges"])
+            for point in edge
+        ]
+        assert terminal_y
+        assert terminal_y == pytest.approx([0.0] * len(terminal_y), abs=tolerance)
+        assert record["signal_host"] == f"chip/pad_{k}"
+        assert planned.sheet["host_entity_ids"] == ["chip/ground", f"chip/pad_{k}"]
 
 
 def test_a_port_face_that_is_not_its_guarded_polygon_is_refused():
