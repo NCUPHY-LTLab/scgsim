@@ -39,7 +39,7 @@ result = analyze_epr(
 )
 ```
 
-`result` is an `EprResult`. `show_epr` draws one mode at the last pass as a Plotly figure:
+`result` is the `EprResult` of the saved field. It holds one evaluation per mode, so `mode=` is the only selection `show_epr` takes for it; `show_epr` draws that mode as a Plotly figure:
 
 ```python
 from scgsim.aedt import show_epr
@@ -47,7 +47,7 @@ from scgsim.aedt import show_epr
 show_epr(result, mode=1)
 ```
 
-`native_pass=` selects another recorded pass, and `theme="dark"` suits a dark notebook.
+`theme="dark"` suits a dark notebook.
 
 ## Parameters
 
@@ -90,8 +90,8 @@ The other public names are in the [API index](../api-index.qmd).
 | Source | SHA-256 |
 |---|---|
 | `src/scgsim/aedt/epr/workflow.py` | `67e0c56b737aa0b7d7804b8c2836ebe107af0850573c496fe432b8658eebd760` |
-| `docs/reference/api/analyze-epr-usage.md` | `862db494ac917e919edf9b890964537ac13697dd960065df3c534061d9cb126d` |
+| `docs/reference/api/analyze-epr-usage.md` | `99d31a61922a5b4938bb2b6d5f0bc094037045b51377ee711c1683c78cd7e728` |
 
-Complete generation index, SHA-256 `1f2c076bff414ab01480bd82c4b8cc4ad4585e92e0866866ee923a86a457cc45`.
+Complete generation index, SHA-256 `f959364847868ee4c717697877387c99df04357066154a305d39aa1183b57f3f`.
 
 :::

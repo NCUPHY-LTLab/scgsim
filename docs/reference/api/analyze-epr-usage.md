@@ -29,7 +29,7 @@ result = analyze_epr(
 )
 ```
 
-`result` is an `EprResult`. `show_epr` draws one mode at the last pass as a Plotly figure:
+`result` is the `EprResult` of the saved field. It holds one evaluation per mode, so `mode=` is the only selection `show_epr` takes for it; `show_epr` draws that mode as a Plotly figure:
 
 ```python
 from scgsim.aedt import show_epr
@@ -37,7 +37,7 @@ from scgsim.aedt import show_epr
 show_epr(result, mode=1)
 ```
 
-`native_pass=` selects another recorded pass, and `theme="dark"` suits a dark notebook.
+`theme="dark"` suits a dark notebook.
 
 ## Parameters
 

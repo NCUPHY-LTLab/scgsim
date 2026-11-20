@@ -113,8 +113,11 @@ per-unit-length values are not interchangeable.
 
 ### Surface EPR {#eigenmode-epr-presentation}
 
-`show_epr(result)` returns a Plotly figure of an existing result; it reads no
-files and starts no solver. It shows surface and bulk participation apart.
+`show_epr(result, mode=...)` returns a Plotly figure of one mode of an existing
+result; it reads no files and starts no solver. For an AEDT adaptive-history
+result (`ResolvedRun.epr_result()`), `native_pass=` also picks the pass; a
+saved-field result from `analyze_epr` has one evaluation per mode, so `mode=`
+is its only selection. It shows surface and bulk participation apart.
 AEDT shows a junction's inductive and capacitive participation together on a
 junction axis; Palace shows its signed native port participation, which
 depends on the phase convention and is not AEDT's pair. Each surface bar names

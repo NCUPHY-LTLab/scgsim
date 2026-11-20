@@ -29,7 +29,7 @@ result = analyze_epr(
 )
 ```
 
-`result` 是 `EprResult`。`show_epr` 以 Plotly 圖畫出最後一個回合（pass）的某個模態：
+`result` 是儲存場的 `EprResult`。它每個模態只有一次評估，所以 `show_epr` 對它唯一的選擇是 `mode=`；`show_epr` 以 Plotly 圖畫出該模態：
 
 ```python
 from scgsim.aedt import show_epr
@@ -37,7 +37,7 @@ from scgsim.aedt import show_epr
 show_epr(result, mode=1)
 ```
 
-`native_pass=` 可選其他已記錄的回合；深色筆記本可用 `theme="dark"`。
+深色筆記本可用 `theme="dark"`。
 
 ## 參數
 
