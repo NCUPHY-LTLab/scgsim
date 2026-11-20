@@ -40,7 +40,7 @@ sim.set_plan(plan.prepare())
 | Call | What it does |
 |---|---|
 | `GeometryPlan(component=..., root_id=..., layer_stack=..., material_records=..., coupon_padding_um=...)` | Takes the assembled GDSFactory component, the PDK layer stack and materials. `root_id` names the root occurrence; every Entity ID starts with it (`chip/PAD`). |
-| `register_instance("chip/q0", reference)` | Names a child component placed in the layout, so its Entities become `chip/q0/...`. Register parents before children, one call per GDS reference; expand an array reference into single references first. A child with its own component semantics that is not registered vanishes when the layout is flattened. |
+| `register_instance("chip/q0", reference)` | Names a child component placed in the layout, so its Entities become `chip/q0/...`. Register parents before children, one call per GDS reference; expand an array reference into single references first. `prepare()` refuses a child with its own component semantics that is not registered (`ValueError`, "it is not registered"): flattening the layout would otherwise lose its semantics. |
 | `plan.entities` | The Entities of the plan, each with its qualified `.semantic_id`. |
 | `set_nets({net_id: (entity_id, ...)})` | Declares which Entities form each Net: one piece of metal that is one conductor. SCGSim never infers a Net from shapes that touch. An Entity belongs to at most one Net; an Entity in no Net stays unassigned. An update with an unknown Entity, or one in two Nets, is refused whole. |
 | `set_vacuum_region(padding=...)` | The box of empty space around the model, in µm: one number, an (x, y, z) tuple, or one value per face. |

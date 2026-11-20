@@ -72,7 +72,7 @@ aliases:
 
 - **在格點上的宣告幾何。**每個 Entity 都依宣告建立，頂點在格點上。不新增、不合併、不移除任何東西，唯一的例外是：每張集總埠片中央矩形以外的部分，併入薄片所落在的導體（[集總埠會切成矩形](supported-geometry.qmd#lumped-port-rectangle)）。
 - **與精確幾何相符的條帶**，誤差在格點的對齊界限內（[支援的幾何](supported-geometry.qmd#what-supported-means)）。
-- **達到品質門檻的網格，或一份報告。**`mesh()` 在產生網格前拒絕細微結構，然後在預算內回傳每個四面體都達到 `quality_threshold`（預設 minSICN 0.01）的網格，否則引發附報告的 `MeshRepairError` 且不回傳網格（[四面體網格品質](specs/mesh-quality.qmd)、[網格設定](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)）。
+- **達到品質門檻的網格，或一份報告。**`mesh()` 在產生網格前拒絕細微結構。接著，使用預設的 `FeatureRecipe()` 或其他會強制門檻的配方時，它在預算內回傳每個四面體都達到 `quality_threshold`（預設 minSICN 0.01）的網格，否則引發附報告的 `MeshRepairError` 且不回傳網格；`GmshDefaultRecipe` 只記錄品質，不強制門檻（[四面體網格品質](specs/mesh-quality.qmd)、[網格設定](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)）。
 
 [支援的幾何](supported-geometry.qmd)列出 SCGSim 測試過的圖形；圖形能以精確條帶建立，並不代表版圖一定能產生網格或求解。
 
@@ -165,6 +165,6 @@ SCGSim 不修補版圖：它不閉合奈米級間隙、不移除短邊、不磨�
 |---|---|---|
 | 版圖及其宣告 | PDK，以及畫版圖、宣告其 Net 與 Surface-EPR 邊距的人 | [版圖必須保證什麼](#layout-rules)的每條規則都成立。 |
 | 幾何建構（SGB，SCGSim 的幾何建構器） | SCGSim | 在格點上恰好建出宣告的幾何、從不修補，條帶與精確幾何在對齊界限內相符；違反的規則以指出它的錯誤拒絕。 |
-| 網格產生 | SCGSim | 網格階段檢查，然後是每個四面體都達到門檻的網格，或附報告的 `MeshRepairError`。 |
+| 網格產生 | SCGSim | 網格階段檢查，然後在使用會強制門檻的配方（預設）時，是每個四面體都達到門檻的網格，或附報告的 `MeshRepairError`。 |
 
 *Route A* 把面金屬建成零厚度薄片，*Route B* 把每個導體建成表面為理想導體的有限金屬體積；說明見 [Route A 與 Route B](../concepts/routes.qmd)。*細微結構*是比周圍特徵小得多的幾何：只有幾個格點長的邊，或只有幾奈米寬的尖刺與狹縫。

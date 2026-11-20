@@ -24,7 +24,7 @@ aliases:
 
 已解析的 AEDT 計算（`ResolvedRun`）有 `show_all_results()`，順序是身分（專案、設定、要求的模態、最後一個回合及是否完成）、數值依據、效能、物理量與細節；另有單獨的 `show_simulation_benchmark()` （[AEDT 的時間與記憶體](aedt-runtime.qmd#native-simulation-benchmark)）。
 
-每個視圖都接受 `theme="light"`（預設）或 `theme="dark"` 設定圖形配色，`show_all_results(theme=...)` 會把它傳下去。`show_details=True` 時，視圖會另外展開完整的執行紀錄：收據、成品雜湊與長表格；它不改變任何選取。沒有 Plotly 時仍顯示表格，並標出每張缺少的圖。
+每個視圖都接受 `theme="light"`（預設）或 `theme="dark"` 設定圖形配色，`show_all_results(theme=...)` 會把它傳下去。`show_details=True` 會另外展開完整的執行紀錄（收據、成品雜湊與長表格），不改變任何選取。接受它的是 Palace 計算的 `show_all_results`、`show_run_trustworthiness` 與 `show_simulation_benchmark`，以及 AEDT 計算的 `show_all_results` 與 `show_simulation_benchmark`；`show_physics_quantities` 與 `inspect_run_trustworthiness` 不接受。要看一次計算的完整細節，請呼叫 `show_all_results(show_details=True)`。沒有 Plotly 時仍顯示表格，並標出每張缺少的圖。
 
 `resolve_palace_result(run_dir, expected_handoff_id=...)` 只讀取已完成、且檔案與交接及收據相符的計算。失敗或只回傳一部分的計算，請用 `inspect_run_trustworthiness(run_dir)`：它顯示資料夾中有什麼，並保留計算所記錄的狀態，所以不完整的計算絕不會顯示成完成。
 
@@ -39,7 +39,7 @@ aliases:
 
 一個回合是 Palace 的一次求解：第 1 回合求解輸入網格。只有前後相鄰、都讀得到的兩個回合之間才計算變化量。結果讀取如何判定 `results/palace` 中哪個資料夾是哪一個回合，見[內部實作](../../contribute/internals/report-records.qmd#pass-folders)。
 
-`show_details=True` 時，報告會在表格上方以一句話說明判定結果。對一次[收斂時停止](palace-electrostatic-sgb.qmd#convergence-stop)的計算，句子例如：
+以 `show_run_trustworthiness(show_details=True)` 或 `show_all_results(show_details=True)` 顯示時，報告會在表格上方以一句話說明判定結果。對一次[收斂時停止](palace-electrostatic-sgb.qmd#convergence-stop)的計算，句子例如：
 
 > Converged at pass 4, of the 4 passes read (passes 1 to 4): every criterion
 > held at passes 3 to 4, 2 in a row. Last to hold: C diagonal, from pass 3. No

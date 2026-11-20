@@ -124,9 +124,11 @@ On a layout that follows every rule, SCGSim guarantees:
 - **Bands that match the exact geometry**, within the grid's snap bound
   ([Supported geometry](supported-geometry.qmd#what-supported-means)).
 - **A mesh that meets the quality threshold, or a report.** `mesh()` refuses
-  fine structure before meshing, then returns a mesh whose every tetrahedron
-  reaches `quality_threshold` (minSICN 0.01 by default) within its budgets, or
-  raises `MeshRepairError` with the report and returns no mesh
+  fine structure before meshing. Then, with the default `FeatureRecipe()` or
+  any other recipe that enforces the threshold, it returns a mesh whose every
+  tetrahedron reaches `quality_threshold` (minSICN 0.01 by default) within its
+  budgets, or raises `MeshRepairError` with the report and returns no mesh.
+  `GmshDefaultRecipe` records the quality without enforcing the threshold
   ([Tetrahedral mesh quality](specs/mesh-quality.qmd), the
   [mesh settings](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)).
 
@@ -232,7 +234,7 @@ guarantees something to the next:
 |---|---|---|
 | Layout and its declarations | The PDK and whoever draws the layout and declares its Nets and Surface-EPR margins | Every rule of [What a layout must guarantee](#layout-rules) holds. |
 | Geometry building (SGB, SCGSim's geometry builder) | SCGSim | Exactly the declared geometry on the grid, never repaired, and bands that match the exact geometry within the snap bound; a broken rule is refused with an error that names it. |
-| Meshing | SCGSim | The meshing-stage check, then a mesh whose every tetrahedron meets the threshold, or `MeshRepairError` with a report. |
+| Meshing | SCGSim | The meshing-stage check, then, with an enforcing recipe (the default), a mesh whose every tetrahedron meets the threshold, or `MeshRepairError` with a report. |
 
 *Route A* models face metal as zero-thickness sheets and *Route B* each
 conductor as a finite metal volume with a perfect-conductor surface;

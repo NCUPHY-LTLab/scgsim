@@ -32,9 +32,14 @@ completed), numerical evidence, benchmark, physics and details, and
 ([AEDT time and memory](aedt-runtime.qmd#native-simulation-benchmark)).
 
 Every view takes `theme="light"` (the default) or `theme="dark"` for its
-figures, and `show_all_results(theme=...)` passes it on. With
-`show_details=True` a view also opens the full run record: the receipt, the
-artifact hashes and the long tables. It changes nothing in what is selected.
+figures, and `show_all_results(theme=...)` passes it on. `show_details=True`
+opens the full run record (the receipt, the artifact hashes and the long
+tables) and changes nothing in what is selected. It is taken by
+`show_all_results`, `show_run_trustworthiness` and `show_simulation_benchmark`
+of a Palace run, and by `show_all_results` and `show_simulation_benchmark` of
+an AEDT run; `show_physics_quantities` and `inspect_run_trustworthiness` do
+not take it. For the full details of a run, call
+`show_all_results(show_details=True)`.
 Without Plotly the tables are still shown, and each missing plot is named.
 
 `resolve_palace_result(run_dir, expected_handoff_id=...)` reads only a run
@@ -77,8 +82,9 @@ only between two passes read one after the other. How result reading decides
 which folder of `results/palace` holds which pass is in
 [the internals](../../contribute/internals/report-records.qmd#pass-folders).
 
-With `show_details=True` the report also states the verdict as a sentence
-above the table. For a run [stopped at convergence](palace-electrostatic-sgb.qmd#convergence-stop)
+With `show_run_trustworthiness(show_details=True)`, or
+`show_all_results(show_details=True)`, the report also states the verdict as a
+sentence above the table. For a run [stopped at convergence](palace-electrostatic-sgb.qmd#convergence-stop)
 it reads, for example:
 
 > Converged at pass 4, of the 4 passes read (passes 1 to 4): every criterion

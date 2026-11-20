@@ -9,13 +9,13 @@ aliases:
   - ../../mesh-quality.html
 ---
 
-`mesh()` 以品質門檻（預設 0.01）檢查每個四面體，不交付任何未通過的網格；它在執行資料夾的 `mesh/` 中寫出報告，說明發現了什麼。本頁說明這個量測、展示一份真實報告，並列出報告與網格摘要記錄的內容。求解前要看哪裡，見[檢查已準備的模型](../../guides/inspect-the-prepared-model.qmd)。
+`mesh()` 以品質門檻（預設 0.01）檢查每個四面體；使用預設的 `FeatureRecipe()` 或其他會強制門檻的配方時，它不交付任何未通過的網格，並在執行資料夾的 `mesh/` 中寫出報告，說明發現了什麼。`GmshDefaultRecipe` 是例外：它記錄品質，但不強制門檻。本頁說明這個量測、展示一份真實報告，並列出報告與網格摘要記錄的內容。求解前要看哪裡，見[檢查已準備的模型](../../guides/inspect-the-prepared-model.qmd)。
 
 ## `mesh()` 檢查什麼 {#audit}
 
 量測是每個四面體的最小帶號反條件數 **minSICN**。正四面體為 1，元素越扁越趨近 0，反轉的元素為負。每個四面體都必須達到 `quality_threshold`，除非你以 `set_mesh` 另設，否則為 0.01。作為參考：下方的真實報告最低 minSICN 為 0.04212；在[條帶邊界量測](palace-electrostatic-sgb.qmd#palace-mesh-band-edges)中，交付的網格以倍數 2 達到 0.08 至 0.23，焊墊以倍數 8 為 0.014 至 0.019，而停滯的網格留有 0.003 至 0.004 的元素。
 
-低於門檻的元素會在下一輪修補中細化，不超過[預算](palace-electrostatic-sgb.qmd#palace-mesh-controls)。無法提升到門檻的網格會使 `mesh()` 停止，不交付 `palace.msh`。檢查在線性網格上進行，早於任何提升到幾何階數的步驟。
+使用 `FeatureRecipe`、`GlobalSizeRecipe` 或 `UniformBoundaryRecipe` 時，低於門檻的元素會在下一輪修補中細化，不超過[預算](palace-electrostatic-sgb.qmd#palace-mesh-controls)；無法提升到門檻的網格會使 `mesh()` 停止，不交付 `palace.msh`。`set_mesh(recipe=GmshDefaultRecipe())` 只產生一次網格、不修補，不論品質都交付；報告仍記錄 minSICN 與低於門檻的四面體數，有這類四面體時，其 `stop` 為 `report_only`。檢查在線性網格上進行，早於任何提升到幾何階數的步驟。
 
 通過的網格是元素有效的網格，不是收斂的結果：收斂要從求解器的各回合（pass）讀出（[收斂宣告](palace-electrostatic-sgb.qmd#convergence-declaration)）。
 

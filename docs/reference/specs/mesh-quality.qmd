@@ -9,8 +9,10 @@ aliases:
 ---
 
 `mesh()` checks every tetrahedron against a quality threshold (0.01 by
-default) and delivers no mesh that fails it; the report it writes in the run's
-`mesh/` folder says what it found. This page explains the measure, shows a real
+default) and, with the default `FeatureRecipe()` or any other recipe that
+enforces the threshold, delivers no mesh that fails it; the report it writes in
+the run's `mesh/` folder says what it found. `GmshDefaultRecipe` is the
+exception: it records the quality without enforcing the threshold. This page explains the measure, shows a real
 report, and lists what the report and the mesh summary record.
 [Inspect the prepared model](../../guides/inspect-the-prepared-model.qmd) shows
 where to look before you run a solver.
@@ -27,11 +29,15 @@ delivered meshes reached 0.08 to 0.23 with the multiple 2 and 0.014 to 0.019
 on the pad with the multiple 8, while a mesh that stalled held elements of
 0.003 to 0.004.
 
-Elements below the threshold are refined in the next repair round, within the
-[budgets](palace-electrostatic-sgb.qmd#palace-mesh-controls). A mesh that
-cannot be brought up to the threshold stops `mesh()`, and no `palace.msh` is
-delivered. The check is made on the linear mesh, before any raising to the
-geometry order.
+With `FeatureRecipe`, `GlobalSizeRecipe` or `UniformBoundaryRecipe`, elements
+below the threshold are refined in the next repair round, within the
+[budgets](palace-electrostatic-sgb.qmd#palace-mesh-controls), and a mesh that
+cannot be brought up to the threshold stops `mesh()`: no `palace.msh` is
+delivered. `set_mesh(recipe=GmshDefaultRecipe())` meshes once without repair
+and delivers the mesh whatever its quality; the report still records the
+minSICN and the tetrahedra below the threshold, and its `stop` is
+`report_only` when there are any. The check is made on the linear mesh,
+before any raising to the geometry order.
 
 A mesh that passes is a mesh of valid elements, not a converged result:
 convergence is read from the solver's passes

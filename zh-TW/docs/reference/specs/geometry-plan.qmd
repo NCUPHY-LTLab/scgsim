@@ -31,7 +31,7 @@ sim.set_plan(plan.prepare())
 | 呼叫 | 作用 |
 |---|---|
 | `GeometryPlan(component=..., root_id=..., layer_stack=..., material_records=..., coupon_padding_um=...)` | 接收組好的 GDSFactory 元件、PDK 層堆疊與材料。`root_id` 是根出現實例的名稱，每個 Entity ID 都以它開頭（`chip/PAD`）。 |
-| `register_instance("chip/q0", reference)` | 為版圖中放置的子元件命名，讓它的 Entity 成為 `chip/q0/...`。先註冊父層再註冊子層，每個 GDS reference 呼叫一次；陣列 reference 要先展開成單一 reference。帶有自身元件語意卻未註冊的子元件，在版圖攤平時會消失。 |
+| `register_instance("chip/q0", reference)` | 為版圖中放置的子元件命名，讓它的 Entity 成為 `chip/q0/...`。先註冊父層再註冊子層，每個 GDS reference 呼叫一次；陣列 reference 要先展開成單一 reference。帶有自身元件語意卻未註冊的子元件，`prepare()` 會拒絕（`ValueError`，「it is not registered」）：否則版圖攤平時，它的語意會消失。 |
 | `plan.entities` | 規劃中的 Entity，各帶完整的 `.semantic_id`。 |
 | `set_nets({net_id: (entity_id, ...)})` | 宣告每個 Net 由哪些 Entity 組成。Net 是一塊具名、作為同一個導體的金屬；SCGSim 從不由彼此接觸的形狀推論 Net。一個 Entity 最多屬於一個 Net；不在任何 Net 中的 Entity 保持未指派。含有未知 Entity，或把一個 Entity 放進兩個 Net 的更新，整筆被拒絕。 |
 | `set_vacuum_region(padding=...)` | 模型周圍的真空區域，單位 µm：一個數、一組 (x, y, z)，或每個面一個值。 |
