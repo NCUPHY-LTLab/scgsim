@@ -195,9 +195,11 @@ This number comes from one solve on the first mesh, without adaptive
 refinement (Palace refining the mesh where its error estimate is largest and
 solving again). `Convergence: not_declared` means the script did not state
 which numbers must stop changing between refinements, so nothing here shows
-that 112.54 fF has settled. [Declare when refinement has converged](../guides/capacitance-palace.qmd#declare-when-refinement-has-converged)
-shows how to declare it; how small a change you accept depends on what you
-use the capacitance for.
+that 112.54 fF has settled, and it has not: with second-order elements and
+refinement, the same pad settles at 95.21 fF after four passes.
+[Convergence and reports](../guides/convergence-and-reports.qmd#declare-convergence)
+shows that run and how to declare convergence; how small a change you accept
+depends on what you use the capacitance for.
 
 ## Next {#next}
 

@@ -1,13 +1,13 @@
 ---
 lang: zh-TW
 title: "API 擁有者"
-description: "SCGSim 3.0 每個公開名稱定義在哪個模組、它取代了哪個舊模組，以及搬動公開名稱的規則。"
+description: "1.x 基準 API 的名稱在 SCGSim 3.0 中位於何處，以及搬動公開名稱的規則。"
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/contribute/internals/api-owners"
 ---
 
-這一頁寫給貢獻者。它把 SCGSim 的公開名稱對應到定義它們的模組，也把凍結的 1.x API（下文稱為*基準*，其幾何套件是 `scgsim.sgb`）的模組對應到目前的擁有者。使用者只要從套件匯入每個公開名稱，用不到這些內容；他們的升級步驟在[升級](../../guides/upgrade.qmd)，公開名稱列在 [API 索引](../../reference/api-index.qmd)。
+這一頁寫給貢獻者，是凍結的 1.x API（下文稱為*基準*，其幾何套件是 `scgsim.sgb`）的遷移對照表：它的模組與名稱現在在哪裡、由誰負責。這裡沒有列出每一個現行的公開名稱，完整清單見 [API 索引](../../reference/api-index.qmd)。使用者只要從套件匯入每個公開名稱，用不到這些內容；他們的升級步驟在[升級](../../guides/upgrade.qmd)，公開名稱列在 [API 索引](../../reference/api-index.qmd)。
 
 ## 搬動公開名稱的規則 {#migration-rules}
 
