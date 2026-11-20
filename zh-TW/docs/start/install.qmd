@@ -1,7 +1,7 @@
 ---
 lang: zh-TW
 title: "安裝 SCGSim"
-description: "用 uv 建立研究專案，安裝固定到明確修訂版本的 SCGSim 3.0.0rc4 與 OrcaPen SC PDK，選擇 extra，並準備 Palace 與 AEDT。"
+description: "用 uv 建立研究專案，安裝固定到明確修訂版本的 SCGSim 3.0.0rc5 與 OrcaPen SC PDK，選擇 extra，並準備 Palace 與 AEDT。"
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/installation"
@@ -9,7 +9,7 @@ aliases:
   - ../course/installation.html
 ---
 
-SCGSim 是一個 Python 套件：它建立模型、寫出求解器的輸入、再讀回結果，但不包含求解器本身。本頁在研究專案中安裝 SCGSim `3.0.0rc4` 與 OrcaPen SC PDK（每個範例用來繪製版圖的元件庫），接著說明每個 extra 會加入什麼，以及 Palace 與 AEDT 需要什麼。SCGSim 支援 Python `>=3.12,<3.14`。
+SCGSim 是一個 Python 套件：它建立模型、寫出求解器的輸入、再讀回結果，但不包含求解器本身。本頁在研究專案中安裝 SCGSim `3.0.0rc5` 與 OrcaPen SC PDK（每個範例用來繪製版圖的元件庫），接著說明每個 extra 會加入什麼，以及 Palace 與 AEDT 需要什麼。SCGSim 支援 Python `>=3.12,<3.14`。
 
 ## 1. 安裝 uv 與 Git
 
@@ -19,12 +19,12 @@ SCGSim 是一個 Python 套件：它建立模型、寫出求解器的輸入、�
 
 ## 2. 建立研究專案 {#create-the-project}
 
-<span id="建立專案並加入-scgsim"></span>以下指令與[首頁](../../index.qmd)相同：SCGSim 固定在標籤 `v3.0.0rc4` 並附帶 `palace` extra，PDK 固定在範例使用的修訂版本。
+<span id="建立專案並加入-scgsim"></span>以下指令與[首頁](../../index.qmd)相同：SCGSim 固定在標籤 `v3.0.0rc5` 並附帶 `palace` extra，PDK 固定在範例使用的修訂版本。
 
 ```bash
 uv init --python 3.12 scgsim-study
 cd scgsim-study
-uv add 'scgsim[palace] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@v3.0.0rc4' \
+uv add 'scgsim[palace] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@v3.0.0rc5' \
   'orcapen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@49e539fd59f3224ecda965d777c7ec3aadcc3b85'
 ```
 
@@ -34,7 +34,7 @@ uv add 'scgsim[palace] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@v3.0.0rc
 uv run python -c 'import scgsim; from importlib.metadata import version; print(version("scgsim"))'
 ```
 
-檢查：命令會印出 `3.0.0rc4`，且沒有匯入錯誤。
+檢查：命令會印出 `3.0.0rc5`，且沒有匯入錯誤。
 
 ## 3. 選擇 extra {#extras}
 
@@ -50,7 +50,7 @@ uv run python -c 'import scgsim; from importlib.metadata import version; print(v
 <span id="加入後端-extra"></span>之後要加入 extra 時，請再執行一次 `uv add`，列出你要的所有 extra；`uv` 會保留固定的標籤：
 
 ```bash
-uv add 'scgsim[palace,aedt] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@v3.0.0rc4'
+uv add 'scgsim[palace,aedt] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@v3.0.0rc5'
 ```
 
 ## 4. 安裝 Palace {#palace}
@@ -69,7 +69,7 @@ AEDT 的執行需要 Ansys Electronics Desktop 2023.2 或 2024.2，以及執行�
 
 ## SCGSim 與 PDK 的版本配對 {#pair-with-the-pdk}
 
-SCGSim `3.0.0rc4` 搭配 OrcaPen SC PDK 修訂版本 [`49e539f`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85)，也就是上面安裝的版本：版本號 `1.0.0`，安裝名稱為 `orcapen-sc-pdk`，匯入名稱為 `orcapen_sc_pdk`，使用 GDSFactory 9.48。若範例指定了其他修訂版本，請使用它指定的版本，並把每個研究的版本記錄在它的 `uv.lock`。
+SCGSim `3.0.0rc5` 搭配 OrcaPen SC PDK 修訂版本 [`49e539f`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85)，也就是上面安裝的版本：版本號 `1.0.0`，安裝名稱為 `orcapen-sc-pdk`，匯入名稱為 `orcapen_sc_pdk`，使用 GDSFactory 9.48。若範例指定了其他修訂版本，請使用它指定的版本，並把每個研究的版本記錄在它的 `uv.lock`。
 
 [歷史 Circular Pad 設定](../contribute/history/curved-source-installation.qmd)固定了自己的 SCGSim、PDK 與 Palace 修訂版本；只在重現那次執行時使用。它與 SCGSim `2.0.0rc11` 時期的指南所指定的 PDK 修訂版本，使用套件先前的名稱 `orpen-sc-pdk` 與 `orpen_sc_pdk`。
 

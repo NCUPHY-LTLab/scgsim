@@ -16,12 +16,12 @@ SCGSim 會把超導晶片的版圖、層堆疊與材料，連同你指定的導�
 
 ## 安裝
 
-先安裝 [uv](https://docs.astral.sh/uv/getting-started/installation/) 與 Git，再建立研究專案，加入 SCGSim `3.0.0rc4` 與 OrcaPen SC PDK（範例用來繪製版圖的元件庫）；兩者都固定到明確的修訂版本：
+先安裝 [uv](https://docs.astral.sh/uv/getting-started/installation/) 與 Git，再建立研究專案，加入 SCGSim `3.0.0rc5` 與 OrcaPen SC PDK（範例用來繪製版圖的元件庫）；兩者都固定到明確的修訂版本：
 
 ```bash
 uv init --python 3.12 scgsim-study
 cd scgsim-study
-uv add 'scgsim[palace] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@v3.0.0rc4' \
+uv add 'scgsim[palace] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@v3.0.0rc5' \
   'orcapen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@49e539fd59f3224ecda965d777c7ec3aadcc3b85'
 ```
 
