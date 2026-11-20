@@ -256,11 +256,11 @@ def test_conductors_of_one_net_meeting_at_a_corner_are_a_located_pinch(monkeypat
     assert "pinched between conductors" in message
     assert message.endswith(
         "Fix the layout: give them a shared edge or separate them. See "
-        + page_url("docs/known-geometry-problems", "pinch-inside-the-layout")
+        + page_url("docs/reference/known-geometry-problems", "pinch-inside-the-layout")
     )
     assert re.search(
         r" See https://ncuphy-ltlab\.github\.io/scgsim/v\d+\.\d+\.\d+(-dev)?/"
-        r"docs/known-geometry-problems\.html#pinch-inside-the-layout$",
+        r"docs/reference/known-geometry-problems\.html#pinch-inside-the-layout$",
         message,
     )
     (place,) = places(message)

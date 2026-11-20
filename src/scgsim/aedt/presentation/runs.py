@@ -370,7 +370,7 @@ def _physics_tables(
                 ("Unknown baseline loss", coverage["unknown_baseline_losses"]),
             )
         )
-        + "<p>Sidewalls uncomputed; requested margins are alternative evaluations. "
+        + "<p>Sidewalls uncomputed when unselected; requested margins are alternative evaluations. "
         "No total device Q or T1 is inferred.</p>"
         + native_reference_html(row, opened=show_details)
         + details(

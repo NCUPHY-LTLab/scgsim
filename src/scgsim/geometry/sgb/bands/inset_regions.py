@@ -30,6 +30,7 @@ import math
 from collections import deque
 from dataclasses import dataclass
 
+from scgsim.documentation import see_also
 from scgsim.geometry.exact.carriers import (
     CarrierRole,
     EdgeCarrier,
@@ -258,8 +259,8 @@ def _check_curve_closed(  # noqa: PLR0913 - one margin's cells, its support and 
                 f"inset family {family_id!r}: the inset curve at m = {margin * grid_um:g} um is not "
                 f"closed near ({x * grid_um:.4f}, {y * grid_um:.4f}) um: two offsets of the support "
                 "boundary neither meet nor cross there, so the band regions cannot be told apart. "
-                "This is an SCGSim defect, not a layout rule: report it to SCGSim with the layout "
-                "(see 'When something fails', docs/supported-scope, in the SCGSim documentation)"
+                "This is an SCGSim defect, not a layout rule: report it to SCGSim with the layout."
+                + see_also("docs/reference/supported-scope", "when-something-fails")
             )
 
 

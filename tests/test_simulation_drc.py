@@ -422,7 +422,7 @@ FIX_AT_THE_EDGE = "Fix the layout: draw the die outline or a ground plane around
 # The section that explains the refusal, on the published documentation root of the running version.
 SEE_THE_EDGE_SECTION = re.compile(
     r" See https://ncuphy-ltlab\.github\.io/scgsim/v\d+\.\d+\.\d+(-dev)?/"
-    r"docs/known-geometry-problems\.html#boundary-point-pinch$"
+    r"docs/reference/known-geometry-problems\.html#boundary-point-pinch$"
 )
 
 
@@ -439,7 +439,7 @@ def pinch_of(error):
     assert link is not None, message
     assert message[: link.start()].endswith(FIX_AT_THE_EDGE)
     assert link.group(0) == " See " + page_url(
-        "docs/known-geometry-problems", "boundary-point-pinch"
+        "docs/reference/known-geometry-problems", "boundary-point-pinch"
     )
     return (
         match["conductor"],
@@ -528,7 +528,7 @@ def test_a_dielectric_island_reaching_the_planar_extent_at_a_point_is_named_as_i
     assert "conductor" not in message
     assert message.endswith(
         f"{FIX_REGION_AT_THE_EDGE} See "
-        + page_url("docs/known-geometry-problems", "boundary-point-pinch")
+        + page_url("docs/reference/known-geometry-problems", "boundary-point-pinch")
     )
 
 
@@ -579,7 +579,7 @@ def test_two_dielectric_islands_meeting_at_a_corner_are_named_as_regions(
     assert "conductor" not in message
     assert message.endswith(
         "Fix the layout: give them a shared edge or separate them. See "
-        + page_url("docs/known-geometry-problems", "pinch-inside-the-layout")
+        + page_url("docs/reference/known-geometry-problems", "pinch-inside-the-layout")
     )
 
 

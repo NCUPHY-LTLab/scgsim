@@ -274,7 +274,7 @@ def _add_complete_show_traces(figure: Any, go: Any, view: dict[str, Any]) -> int
         f"{coverage['bulk_domains']} bulk domains; {coverage['junctions']} junctions. "
         f"Known baseline 1/Q subtotal: {coverage['known_baseline_subtotal']}; "
         f"{coverage['unknown_baseline_losses']} baseline losses unknown. "
-        "Sidewalls uncomputed; requested margins are alternatives."
+        "Sidewalls uncomputed when unselected; requested margins are alternatives."
     )
     coverage_lines = textwrap.wrap(coverage_text, width=32, break_long_words=True)
     top_margin = max(240, 135 + 14 * len(coverage_lines))

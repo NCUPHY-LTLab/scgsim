@@ -79,8 +79,8 @@ def linked_sections():
 def test_messages_link_to_sections_somewhere():
     """The package carries at least the two pinch links, so the next test checks something."""
     assert {
-        ("docs/known-geometry-problems", "boundary-point-pinch"),
-        ("docs/known-geometry-problems", "pinch-inside-the-layout"),
+        ("docs/reference/known-geometry-problems", "boundary-point-pinch"),
+        ("docs/reference/known-geometry-problems", "pinch-inside-the-layout"),
     } <= set(linked_sections())
 
 

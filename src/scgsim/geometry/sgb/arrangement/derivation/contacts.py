@@ -196,7 +196,7 @@ def _raise_pinch(
         f"non-manifold pinch: {what} touches itself along the vertical edge at "
         f"{where}: two cells of one domain meet only at a vertex. "
         "Fix the layout: give them a shared edge or separate them."
-        + see_also("docs/known-geometry-problems", "pinch-inside-the-layout")
+        + see_also("docs/reference/known-geometry-problems", "pinch-inside-the-layout")
     )
 
 
@@ -214,7 +214,7 @@ def _raise_edge_pinch(
         f"{'reaches' if one else 'reach'} the edge of {vacuum.name} only at {where}, a point on "
         f"the model's planar boundary, so {vacuum.name} touches itself along that vertical edge. "
         + _FIX_AT_THE_EDGE
-        + see_also("docs/known-geometry-problems", "boundary-point-pinch")
+        + see_also("docs/reference/known-geometry-problems", "boundary-point-pinch")
     )
 
 
@@ -228,7 +228,7 @@ def _raise_region_edge_pinch(
         f"only at {where}, a point on the model's planar boundary, so {vacuum.name} touches itself "
         "along that vertical edge. "
         + _FIX_REGION_AT_THE_EDGE
-        + see_also("docs/known-geometry-problems", "boundary-point-pinch")
+        + see_also("docs/reference/known-geometry-problems", "boundary-point-pinch")
     )
 
 
