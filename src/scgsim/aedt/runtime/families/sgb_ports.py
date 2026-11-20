@@ -113,7 +113,9 @@ def assign_lumped_port(
     faces at the signal conductor's end of the sheet along the sidecar ``direction``, found as the RLC's
     current-line ends are (:func:`port_end_edges`).  The sidecar lists the sheet's hosts in the order that
     direction meets them, start host then end host, so the signal host's place in that list is its end.  The
-    reference is the conductor at the other end; AEDT records it in ``TerminalReferenceConductors``.
+    reference is the conductor at the other end.  AEDT 2024.2 leaves ``TerminalReferenceConductors`` empty in
+    the saved design; :func:`~scgsim.aedt.runtime.families.hfss_ports.read_saved_lumped_ports` checks it only
+    where AEDT records one.
     ``port_faces`` maps each planned face of the sheet to its imported place: the name of the sheet object a
     free face was rebuilt as, or the guard record of a face on an imported solid, which is drawn again
     (:func:`port_sheet`).
