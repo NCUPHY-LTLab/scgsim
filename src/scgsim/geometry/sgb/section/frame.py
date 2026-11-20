@@ -113,7 +113,7 @@ def cut_frame(cut: CutLine, grid: Grid) -> CutFrame:
                 f"the cut line's {name} {format_point(x_um, y_um, None)} is off the {grid.size_um} um "
                 "model grid, so its crossings with the layout would not be lattice points. Fix the "
                 "cut line: put both ends on the grid."
-                + see_also("docs/geometry-sgb", "cut-rules")
+                + see_also("docs/reference/specs/geometry-plan", "cut-rules")
             )
         ends.append((x, y))
     return CutFrame(cut, grid, ends[0], ends[1])

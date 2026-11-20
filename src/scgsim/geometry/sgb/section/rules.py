@@ -42,7 +42,7 @@ ARC_CLEARANCE = 0.5
 """How near an arc a cut may pass without crossing it, in grid units: the snapping of the arrangement's
 vertices moves a curve by less than this, and an arc's polyline witness lies within a quarter of it."""
 
-_EXPLAINED = ("docs/geometry-sgb", "cut-rules")
+_EXPLAINED = ("docs/reference/specs/geometry-plan", "cut-rules")
 _KIND_ORDER = ("along", "corner", "oblique", "arc")
 
 

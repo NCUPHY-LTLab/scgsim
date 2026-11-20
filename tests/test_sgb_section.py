@@ -499,4 +499,7 @@ def test_every_refusal_links_to_the_cut_rules():
         PrismCatalogue(GRID, tuple(chip_prisms(GRID, 40.0))), "B"
     )
     message = refusal(model, CutLine((0.0, -30.0), (0.0, 40.0)))
-    assert message.endswith("geometry-sgb.html#cut-rules") or "See " not in message
+    assert (
+        message.endswith("reference/specs/geometry-plan.html#cut-rules")
+        or "See " not in message
+    )
