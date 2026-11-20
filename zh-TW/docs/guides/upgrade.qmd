@@ -1,7 +1,7 @@
 ---
-title: "升級到 3.0.0rc5"
+title: "升級到 3.0.0rc6"
 lang: zh-TW
-description: "找出你的程式碼是為哪個版本寫的，再依該版本的清單升級到 3.0.0rc5，附最終程式碼。"
+description: "找出你的程式碼是為哪個版本寫的，再依該版本的清單升級到 3.0.0rc6，附最終程式碼。"
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/api-migration"
@@ -17,6 +17,7 @@ SCGSim 3.0 的每個預發行版都改了一些呼叫，而且沒有相容層：
 
 | 你的程式碼是為哪個版本寫的 | 最大的改變 | 你的清單 |
 |---|---|---|
+| 3.0.0rc5 | 程式碼不需要改。沒有 `aedt` extra 的安裝現在也能匯入 `scgsim.aedt` 與 `scgsim.visualization` | 不需要 |
 | 3.0.0rc4 | 接面、集總 RLC 與 Driven 埠改為宣告在計畫上，不再宣告在模擬上 | [從 3.0.0rc4 升級](#from-3-0-0rc4) |
 | 3.0.0rc3 | Surface EPR 與真空區域改為設定在計畫上，不再設定在模擬上 | [從 3.0.0rc3 升級](#from-3-0-0rc3) |
 | 3.0.0rc1 或 3.0.0rc2 | 版圖檢查改為接收計畫，AEDT 的每個 3D 模型都從計畫建立 | [從 3.0.0rc1 或 rc2 升級](#from-rc1-or-rc2) |

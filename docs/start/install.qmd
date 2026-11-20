@@ -1,6 +1,6 @@
 ---
 title: "Install SCGSim"
-description: "Create a uv study project with SCGSim 3.0.0rc5 and the OrcaPen SC PDK pinned to exact revisions, choose the extras, and set up Palace and AEDT."
+description: "Create a uv study project with SCGSim 3.0.0rc6 and the OrcaPen SC PDK pinned to exact revisions, choose the extras, and set up Palace and AEDT."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/installation"
@@ -10,7 +10,7 @@ aliases:
 
 SCGSim is a Python package: it builds the model, writes the solver's input and
 reads the results back, but it does not include the solvers. This page installs
-SCGSim `3.0.0rc5` and the OrcaPen SC PDK, the component library every example
+SCGSim `3.0.0rc6` and the OrcaPen SC PDK, the component library every example
 draws its layout with, in a study project, then says what each extra adds and
 what Palace and AEDT need. SCGSim supports Python `>=3.12,<3.14`.
 
@@ -23,13 +23,13 @@ Check: `uv --version` and `git --version` each print an installed version.
 ## 2. Create the study project {#create-the-project}
 
 <span id="create-the-project-and-add-scgsim"></span>These are the commands of the [home page](../../index.qmd#install): SCGSim at
-the tag `v3.0.0rc5` with its `palace` extra, and the PDK at the revision the
+the tag `v3.0.0rc6` with its `palace` extra, and the PDK at the revision the
 examples use.
 
 ```bash
 uv init --python 3.12 scgsim-study
 cd scgsim-study
-uv add 'scgsim[palace] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@v3.0.0rc5' \
+uv add 'scgsim[palace] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@v3.0.0rc6' \
   'orcapen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@49e539fd59f3224ecda965d777c7ec3aadcc3b85'
 ```
 
@@ -40,7 +40,7 @@ dependency in `uv.lock`. Check the installation:
 uv run python -c 'import scgsim; from importlib.metadata import version; print(version("scgsim"))'
 ```
 
-Check: the command prints `3.0.0rc5` without an import error.
+Check: the command prints `3.0.0rc6` without an import error.
 
 ## 3. Choose the extras {#extras}
 
@@ -59,7 +59,7 @@ results only.
 the pinned tag:
 
 ```bash
-uv add 'scgsim[palace,aedt] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@v3.0.0rc5'
+uv add 'scgsim[palace,aedt] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@v3.0.0rc6'
 ```
 
 ## 4. Install Palace {#palace}
@@ -88,7 +88,7 @@ the `aedt` extra installs; AEDT itself is not a Python package.
 
 ## Pair SCGSim with the PDK {#pair-with-the-pdk}
 
-SCGSim `3.0.0rc5` pairs with the OrcaPen SC PDK at revision
+SCGSim `3.0.0rc6` pairs with the OrcaPen SC PDK at revision
 [`49e539f`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85),
 the one above: version `1.0.0`, installed as `orcapen-sc-pdk` and imported as
 `orcapen_sc_pdk`, with GDSFactory 9.48. When an example names another
