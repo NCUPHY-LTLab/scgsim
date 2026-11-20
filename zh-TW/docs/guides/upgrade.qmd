@@ -1,7 +1,7 @@
 ---
-title: "升級到 3.0.0rc4"
+title: "升級到 3.0.0rc5"
 lang: zh-TW
-description: "找出你的程式碼是為哪個版本寫的，再依該版本的清單升級到 3.0.0rc4，附最終程式碼。"
+description: "找出你的程式碼是為哪個版本寫的，再依該版本的清單升級到 3.0.0rc5，附最終程式碼。"
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/api-migration"

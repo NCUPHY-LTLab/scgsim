@@ -16,7 +16,7 @@ Capacitance matrix (fF): pad
      pad     112.54
 ```
 
-You need SCGSim `3.0.0rc4` with its `palace` extra and the OrcaPen SC PDK, the
+You need SCGSim `3.0.0rc5` with its `palace` extra and the OrcaPen SC PDK, the
 component library that draws the layout, in a study project
 ([Install SCGSim](install.qmd)), and Palace 0.18.1 installed on
 the same computer ([Palace installation](https://awslabs.github.io/palace/stable/install/)).
