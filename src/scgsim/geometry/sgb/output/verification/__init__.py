@@ -5,8 +5,8 @@
   volumes and physical groups against the sidecar, and re-applying the embeddings the sidecar records.
   It needs Gmsh only (the ``palace`` extra).
 * ``occt``    -- the official OpenCASCADE checks (``BRepCheck_Analyzer``, ``BOPAlgo_ArgumentAnalyzer``,
-  ``ShapeAnalysis``) of a written file, through OCP.  OCP is the optional ``occt`` dependency group: tests
-  use it; end-user installs do not pull it.  ``sidecar_mismatches`` there is
+  ``ShapeAnalysis``) of a written file, through OCP.  OCP is optional: the ``aedt`` extras install it for the
+  STEP export, the ``occt`` dependency group for the tests, and a Palace install has none.  ``sidecar_mismatches`` there is
   the OCP twin of the load-side comparison, used by the STEP export to refuse a file that does not
   belong to its sidecar.
 * ``tolerances`` -- the one set of tolerances both comparisons use (vertex position, relative area and volume).

@@ -256,10 +256,12 @@ def test_self_interference_is_a_switch_and_the_default_report_is_complete(
     )
 
 
-def test_without_ocp_the_checks_name_the_dependency_group(monkeypatch):
-    """Without ocp the checks name the dependency group."""
+def test_without_ocp_the_checks_name_the_extra_that_installs_it(monkeypatch):
+    """Without OCP the checks name the extras that install it, and the checkout's group."""
     monkeypatch.setattr(ocp, "ocp_available", lambda: False)
-    with pytest.raises(ocp.OcctUnavailable, match=r"occt` dependency group"):
+    with pytest.raises(
+        ocp.OcctUnavailable, match=r"`aedt` or `aedt-epr` extra.*`uv sync --group occt`"
+    ):
         ocp.require_ocp()
 
 

@@ -1,9 +1,10 @@
 """Whether OCP is installed, and the readable error when it is not.
 
-Owns the one place that knows OCP (``cadquery-ocp``, the OpenCASCADE binding) is an *optional* dependency, the
-``occt`` dependency group: nothing in a normal build needs it, the OCCT
-checks (``occt``) and the STEP export (``output.exchange.step``) do.  This module imports without OCP; the two that use it
-import it at module level, so reach them only after :func:`require_ocp` has said yes.
+Owns the one place that knows OCP (``cadquery-ocp-novtk``, the OpenCASCADE binding) is an *optional* dependency:
+the ``aedt`` and ``aedt-epr`` extras install it, and so does the ``occt`` dependency group of a checkout.  A
+Palace build does not need it; the OCCT checks (``occt``) and the STEP export AEDT imports
+(``output.exchange.step``) do.  This module imports without OCP; the two that use it import it at module level,
+so reach them only after :func:`require_ocp` has said yes.
 """
 
 from __future__ import annotations
@@ -23,10 +24,9 @@ def ocp_available() -> bool:
 
 
 def require_ocp() -> None:
-    """Raise :class:`OcctUnavailable`, naming the dependency group, when OCP cannot be imported."""
+    """Raise :class:`OcctUnavailable`, naming the extra that installs it, when OCP cannot be imported."""
     if not ocp_available():
         raise OcctUnavailable(
-            "the official OCCT checks and the STEP export need OCP (cadquery-ocp), the optional `occt` "
-            "dependency group: install it with `uv sync --group occt` (or `pip install cadquery-ocp-novtk`); "
-            "end-user installs do not pull it"
+            "the STEP export AEDT imports and the official OCCT checks need OCP (cadquery-ocp-novtk): install "
+            "SCGSim with the `aedt` or `aedt-epr` extra, or, in an SCGSim checkout, `uv sync --group occt`"
         )
