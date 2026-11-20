@@ -40,7 +40,8 @@ Sources -- what the layout drew and asked for
     a family has bands to integrate is read from its own ``bands`` and from ``surface_epr_row``.
 ``port``
     each lumped-port sheet: index, name, direction, its Entity and hosts, layers, group, faces, host and
-    adjacent volumes.
+    adjacent volumes.  ``host_entity_ids`` lists the hosts in the order ``direction`` meets them: the host
+    at the sheet's start, then the host it points to.
 
 Derived -- what SGB computed from the sources
 ---------------------------------------------
