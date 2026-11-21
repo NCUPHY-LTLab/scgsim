@@ -4,7 +4,8 @@ The traces cut the section ``[0, length] x [lowest level, highest level]`` into 
 breakpoints along the cut (every crossing) and consecutive levels, so a row of cells is one slab of the 3D
 model.  Cells that no trace separates form one region, and the traces on a region's boundary say which 3D volume
 fills it; they must agree.  A region filled by an emitted volume is a face of the section; the others (an
-excluded conductor, the outside) are not.  Nothing is decided here that the 3D model did not decide.
+excluded conductor, the outside) are not.  The regions a conductor fills, a face or not, are also recorded as
+the section's conductors.  Nothing is decided here that the 3D model did not decide.
 
 Three cut rules can only be read on the regions, and are checked here before any record is made: an end of the
 cut inside the model, where the model's boundary does not close the section; a stretch of the cut outside the
@@ -24,6 +25,7 @@ from scgsim.geometry.sgb.records import identity
 from scgsim.geometry.sgb.records.labels import Domain, SheetOwner
 from scgsim.geometry.sgb.section.frame import CutFrame
 from scgsim.geometry.sgb.section.records import (
+    SectionConductor,
     SectionEdge,
     SectionFace,
     SectionVertex,
@@ -511,6 +513,41 @@ def _loops(
             problems.append(f"face {face_id}: a boundary loop does not close")
         loops.append(tuple(loop))
     return loops
+
+
+def section_conductors(
+    model: ConformalModel, assembled: AssembledSection
+) -> tuple[SectionConductor, ...]:
+    """One record per region a conductor fills, in order along the cut, then up the stack.
+
+    A face's region holds its volume; an excluded region holds the volumes the traces around it see, which on
+    Route B are the excluded conductors there.
+    """
+    grid, volumes = assembled.grid, model.topology.volumes
+    face_of = {index: face_id for face_id, index in assembled.face_regions.items()}
+    found = []
+    for index, region in enumerate(grid.regions):
+        filling = {region.volume} if region.volume is not None else region.seen
+        domains = sorted(
+            {
+                volumes[volume].domain
+                for volume in filling
+                if volume is not None and volumes[volume].domain.kind == "conductor"
+            }
+        )
+        if not domains:
+            continue
+        columns = [i for i, _ in region.cells]
+        slabs = [j for _, j in region.cells]
+        found.append(
+            SectionConductor(
+                tuple(domains),
+                (grid.us[min(columns)], grid.us[max(columns) + 1]),
+                (grid.zs[min(slabs)], grid.zs[max(slabs) + 1]),
+                face_of.get(index),
+            )
+        )
+    return tuple(sorted(found, key=lambda c: (c.u, c.z, c.domains)))
 
 
 def loop_twice_area(
