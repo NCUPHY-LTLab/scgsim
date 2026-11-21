@@ -1,5 +1,11 @@
 ---
 title: ""
+pagetitle: "Superconducting qubit and chip layout simulation with Palace and Ansys HFSS"
+image: /docs/assets/scgsim-overview-orca-penguin.png
+description-meta: >-
+  SCGSim turns a superconducting chip layout into a 3D model for Palace or Ansys AEDT (HFSS, Q3D, Q2D)
+  and reads back capacitance matrices, resonant modes, Q, energy participation ratios (EPR) and
+  S-parameters in Python.
 output-file: index.html
 ---
 

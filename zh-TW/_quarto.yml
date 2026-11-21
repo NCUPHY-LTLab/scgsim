@@ -35,7 +35,12 @@ askr:
       href: /zh-TW/
 website:
   title: SCGSim
-  description: 從具名版圖、材料與物理模型，準備求解器輸入並解讀電磁計算結果。
+  description: >-
+    以 Python 模擬超導量子位元與量子晶片版圖的電磁特性：用 Palace 與 Ansys HFSS、Q3D、Q2D
+    計算電容矩陣、本徵模態、Q 值與能量參與比（EPR）。
+  image: /docs/assets/scgsim-overview-orca-penguin.png
+  open-graph: true
+  twitter-card: true
   page-navigation: true
   search:
     location: navbar
@@ -210,6 +215,7 @@ website:
       - docs/contribute/history/curved-source-installation.qmd
 format:
   askr-html:
+    canonical-url: true
     html-math-method: mathjax
     respect-user-color-scheme: true
     toc: true
