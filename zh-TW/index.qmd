@@ -2,9 +2,7 @@
 title: ""
 pagetitle: "超導量子晶片版圖的電磁模擬（Palace、Ansys HFSS）"
 image: /docs/assets/scgsim-overview-orca-penguin.png
-description-meta: >-
-  SCGSim 把超導量子晶片版圖建成 3D 模型，交給 Palace 或 Ansys AEDT（HFSS、Q3D、Q2D）求解，
-  再用 Python 讀回電容矩陣、共振模態、Q 值、能量參與比（EPR）與 S 參數。
+description-meta: "SCGSim 把超導量子晶片版圖建成 3D 模型，交給 Palace 或 Ansys AEDT（HFSS、Q3D、Q2D）求解，再用 Python 讀回電容矩陣、共振模態、Q 值、能量參與比（EPR）與 S 參數。"
 output-file: index.html
 ---
 
