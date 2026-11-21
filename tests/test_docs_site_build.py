@@ -137,9 +137,12 @@ class _BuildHarness:
                 raise subprocess.CalledProcessError(19, ["quarto-test", "render"])
             rendered = source / "_site"
             rendered.mkdir()
-            # The real post-render step renders the Chinese project into ``_site/zh-TW``.
+            # Quarto writes each project's sitemap, the site-url being set; the real post-render step
+            # renders the Chinese project into ``_site/zh-TW``.
+            (rendered / "sitemap.xml").write_text("Doubled Quarto sitemap.\n")
             if (source / "zh-TW/_quarto.yml").is_file():
                 (rendered / "zh-TW").mkdir()
+                (rendered / "zh-TW/sitemap.xml").write_text("Doubled Quarto sitemap.\n")
             if not self.missing_home:
                 (rendered / "index.html").write_text("Doubled Quarto home output.\n")
             observed = {
@@ -298,6 +301,24 @@ def test_versions_overlay_only_presentation_and_publish_after_all_renders(publis
         '"/scgsim/v1.9.0-dev/": "/scgsim/v2.0.0-dev/"'
         in (output / "404.html").read_text()
     )
+
+
+def test_the_sitemap_index_names_the_development_and_latest_stable_sitemaps(publisher):
+    """A search engine reads the index at the site's root; it leads to those two versions, in both languages."""
+    output = publisher.invoke()
+    index = (output / "sitemap.xml").read_text()
+    locations = re.findall(r"<loc>([^<]+)</loc>", index)
+    assert locations == [
+        "https://ncuphy-ltlab.github.io/scgsim/v2.0.0-dev/sitemap.xml",
+        "https://ncuphy-ltlab.github.io/scgsim/v2.0.0-dev/zh-TW/sitemap.xml",
+        "https://ncuphy-ltlab.github.io/scgsim/v1.1.0/sitemap.xml",
+        "https://ncuphy-ltlab.github.io/scgsim/v1.1.0/zh-TW/sitemap.xml",
+    ]
+    for location in locations:
+        assert (
+            output / location.removeprefix("https://ncuphy-ltlab.github.io/scgsim/")
+        ).is_file()
+    assert index.startswith('<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex ')
 
 
 def test_every_page_menu_leads_to_the_published_versions(publisher):

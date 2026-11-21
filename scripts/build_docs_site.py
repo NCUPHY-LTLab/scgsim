@@ -389,6 +389,28 @@ def redirect_page(destination: str) -> str:
     )
 
 
+def sitemap_index(site: Path, roots: list[str]) -> str:
+    """The sitemap index of the site's root: the sitemap Quarto wrote for each language project of ``roots``.
+
+    A search engine looks for a site's sitemap at its root, and each version's sitemaps sit below its own
+    root.  ``roots`` are the versions a search should lead to; a project without a sitemap is left out.
+    """
+    locations = [
+        SITE_URL + root.removeprefix(PREFIX) + language + "sitemap.xml"
+        for root in roots
+        for language in LANGUAGE_PROJECTS
+        if (site / root.removeprefix(PREFIX) / language / "sitemap.xml").is_file()
+    ]
+    entries = "".join(
+        f"<sitemap><loc>{html.escape(location)}</loc></sitemap>"
+        for location in locations
+    )
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        f'<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{entries}</sitemapindex>\n'
+    )
+
+
 def missing_page(roots: list[str], aliases: dict[str, str], latest: str) -> str:
     """Route known aliases and version roots without inventing missing pages."""
     routes = json.dumps({"roots": roots, "aliases": aliases, "latest": latest}).replace(
@@ -689,11 +711,15 @@ def _write_routes(
     aliases: dict[str, str],
     folders: dict[str, str],
 ) -> None:
-    """Write the stable landing page, branch aliases and version-aware missing page.
+    """Write the stable landing page, the sitemap index, branch aliases and version-aware missing page.
 
     A moved folder is a route of the missing page only: its old path holds the redirects of its pages.
+    The sitemap index names the development version and the latest stable one, the documentation a
+    search should lead to; ``entries[0]`` is the development version.
     """
     (site / "index.html").write_text(redirect_page(latest["root"]))
+    searched = list(dict.fromkeys([entries[0]["root"], latest["root"]]))
+    (site / "sitemap.xml").write_text(sitemap_index(site, searched))
     for alias, destination in aliases.items():
         target = site / alias.removeprefix(PREFIX)
         target.mkdir()
