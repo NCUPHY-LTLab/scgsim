@@ -18,9 +18,9 @@ builder, solver adapters and result readers.
 SCGSim computes with Palace Electrostatic and Eigenmode, and with AEDT HFSS
 Eigenmode, HFSS Driven Terminal, Q3D and Q2D;
 [Supported calculations](../reference/supported-calculations.qmd) lists the
-input and the returned quantity of each. Palace Driven and Magnetostatic are
-not implemented, and Meep is outside the scope. The public component
-notebooks belong to OrcaPen SC PDK.
+input and the returned quantity of each. Palace Driven, Magnetostatic and
+Transient are not implemented, and Meep is outside the scope. The public
+component notebooks belong to OrcaPen SC PDK.
 
 SCGSim does not install a native solver, does not run a prepared handoff on
 its own, and does not treat a result as accurate because the calculation

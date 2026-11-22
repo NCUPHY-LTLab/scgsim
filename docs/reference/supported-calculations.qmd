@@ -71,7 +71,9 @@ keeps its own boundaries, units and conductor, port or mode order.
   refused. Tracked in [issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135).
 - Q3D AC/RL: Q3D extracts C and G only. Tracked in
   [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265).
-- Palace Driven and Magnetostatic.
+- Palace Driven. Tracked in
+  [issue #187](https://github.com/NCUPHY-LTLab/scgsim/issues/187).
+- Palace Magnetostatic and Transient.
 - Spline curves read as curves.
 
 Palace's [problem types](https://awslabs.github.io/palace/stable/guide/problem/)
