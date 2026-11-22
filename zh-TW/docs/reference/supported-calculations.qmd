@@ -48,7 +48,8 @@ aliases:
 
 - HFSS Driven Modal 與 Driven Terminal 的 wave port：含有它們的要求會被拒絕。追蹤於 [issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135)。
 - Q3D AC/RL：Q3D 只萃取 C 與 G。追蹤於 [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265)。
-- Palace Driven 與 Magnetostatic。
+- Palace Driven。追蹤於 [issue #187](https://github.com/NCUPHY-LTLab/scgsim/issues/187)。
+- Palace Magnetostatic 與 Transient。
 - 把 spline 當成曲線讀取。
 
 求解器本身提供什麼，見 Palace 的[問題類型](https://awslabs.github.io/palace/stable/guide/problem/)與 [PyAEDT 使用者指南](https://aedt.docs.pyansys.com/version/stable/User_guide/index.html)。
