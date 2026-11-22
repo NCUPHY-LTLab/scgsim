@@ -33,6 +33,10 @@ QUARTO_VERSION = "1.10.18"
 ASKR_COMMIT = "ab12c10b61d590c00ce1316f700ed56227027d71"
 # The Quarto projects of one version: English at its root, Traditional Chinese below it.
 LANGUAGE_PROJECTS = ("", "zh-TW/")
+GOOGLE_VERIFICATION_FILE = (
+    Path(__file__).resolve().parents[1]
+    / ".github/pages-assets/google76ef899619e30d2a.html"
+)
 
 
 @dataclass(frozen=True)
@@ -602,6 +606,8 @@ def _stage_publication(sources: _SourceCatalog, work: Path, quarto: str) -> Path
     _render_versions(sources, site, menus, quarto)
     _write_routes(site, sources.entries, latest, aliases, folders)
     _write_build_manifest(site, sources, latest)
+    if sources.selection.candidate_source is None:
+        shutil.copyfile(GOOGLE_VERIFICATION_FILE, site / GOOGLE_VERIFICATION_FILE.name)
     return site
 
 

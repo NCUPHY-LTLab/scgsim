@@ -265,6 +265,8 @@ def test_versions_overlay_only_presentation_and_publish_after_all_renders(publis
         ["historical"],
     ]
     assert build["preview"] is False
+    verification = ROOT / ".github/pages-assets/google76ef899619e30d2a.html"
+    assert (output / verification.name).read_bytes() == verification.read_bytes()
     assert [call[1] for call in publisher.calls if call[0] == "archive"] == [
         DEVELOP,
         PRESENTATION,
@@ -486,6 +488,7 @@ def test_preview_binds_inventory_without_published_commit_attribution(publisher)
     )
     manifest = json.loads((output / "build.json").read_text())
     assert manifest["preview"] is True
+    assert not (output / "google76ef899619e30d2a.html").exists()
     assert manifest["presentation_export_sha256"] == digest
     candidate = manifest["versions"][0]
     assert candidate["candidate_inventory"] == inventory
