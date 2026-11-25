@@ -52,7 +52,7 @@ Every name below is importable from the package it is listed under. Each group l
 
 **Reports.** The run, physics and cost views of a result. [Reference](specs/report-model.qmd#common-envelope)
 
-`PalaceCost`, `PalacePerformance`, `PalaceTrustReport`, `PassCostRecord`, `PhysicsQuantitiesReport`, `SimulationBenchmarkReport`, `SurfaceMarginEprRecord`, `SurfaceMarginEprSeriesSnapshot`.
+`DrivenPhysicsReport`, `DrivenTrustReport`, `PalaceCost`, `PalacePerformance`, `PalaceTrustReport`, `PassCostRecord`, `PhysicsQuantitiesReport`, `SimulationBenchmarkReport`, `SurfaceMarginEprRecord`, `SurfaceMarginEprSeriesSnapshot`.
 
 **EPR.** Detach, reread, reanalyze and plot an EPR result. [Reference](specs/palace-eigenmode.qmd#results-and-offline-analysis)
 
@@ -119,14 +119,14 @@ Every name below is importable from the package it is listed under. Each group l
 | Source | SHA-256 |
 |---|---|
 | `scripts/generate_knowledge_reference.py` | `a66b84bc16c213b694b20d3ef1c6f8867d3dfb30a7d6f9d5034ac2e292c0eb49` |
-| `docs/knowledge-sources.json` | `59332fc0b427a88eafd90bb9e6f2617e2e0c4148735cbb52c931bdda94c5deaf` |
+| `docs/knowledge-sources.json` | `692ce9324c3cea91d1e52602d15b26c425ce88921509ef4bbf5b23e9b936ac93` |
 | `src/scgsim/aedt/epr/workflow.py` | `67e0c56b737aa0b7d7804b8c2836ebe107af0850573c496fe432b8658eebd760` |
 | `docs/reference/api/analyze-epr-usage.md` | `99d31a61922a5b4938bb2b6d5f0bc094037045b51377ee711c1683c78cd7e728` |
 | `zh-TW/docs/reference/api/analyze-epr-usage.md` | `a91990007fa95a2979b3a2d039c4e70f3d4efcdb950835e552bee4c1a6fcf779` |
 | `src/scgsim/aedt/__init__.py` | `e826ea4631ce25d51151e4d730793dea1b4672f19ebf672ff8b963e48e6039c8` |
 | `src/scgsim/aedt/specs/__init__.py` | `4a3e47c42a136f11ee1db472436411c715106c367cfe80e7d34342627814e15c` |
 | `src/scgsim/geometry/__init__.py` | `542d6fe45d106be73696e75f83c8ad555e5aca2fb690edfa5ff62acffc0f26cb` |
-| `src/scgsim/palace/__init__.py` | `562e8a4ab8258fb57efe56c4d69b1e42b5cf4eb2fca95cadfa6310c7bbb7895a` |
+| `src/scgsim/palace/__init__.py` | `7f54e4cd3eb17d1262ca1fa5b1e4fa79ff864fa3f575409ab2fcb1ff42ed2a40` |
 | `src/scgsim/semantics/__init__.py` | `e9b198a8741516203f5dd77be7ee97d184fe1c70cfc32506e6536be609132e0a` |
 | `src/scgsim/visualization/__init__.py` | `89a6eb15003c49dc9243c7f2c9bf5cd4adfd8c4c2494b031d25e3cfef4feb8b7` |
 

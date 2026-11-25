@@ -43,8 +43,9 @@ from scgsim.refusal import Declared, found_text, internal
 
 READ_PROBLEMS = (ELECTROSTATIC.name, EIGENMODE.name, DRIVEN.name)
 """The problems whose returned run folders ``resolve_palace_result`` reads: every problem SCGSim writes."""
-REPORTED_PROBLEMS = (ELECTROSTATIC.name, EIGENMODE.name)
-"""The problems the trust report and the notebook views show.  A Driven run is read, and not shown yet."""
+SNAPSHOT_PROBLEMS = (ELECTROSTATIC.name, EIGENMODE.name)
+"""The problems whose tables the AMR snapshot readers read, a row per mode or excitation.  A Driven run's rows
+are frequencies: ``driven_result()`` reads them, and its report never reaches these readers."""
 
 
 def read_problem(name: object, subject: str) -> PalaceProblem:
@@ -72,26 +73,22 @@ def read_problem(name: object, subject: str) -> PalaceProblem:
     return problem
 
 
-def reported_problem(name: object, subject: str) -> PalaceProblem:
-    """The problem record of ``subject``, for a problem the trust report and the notebook views show.
+def snapshot_problem(name: object, subject: str) -> PalaceProblem:
+    """The problem record of ``subject``, for a problem whose tables the AMR snapshot readers read.
 
-    The report reads a run's tables as an Electrostatic or Eigenmode run's, so a Driven run is refused by name
-    before any of its tables is read that way.
+    Those readers take a row as a mode or an excitation.  The report sends a Driven run, whose rows are
+    frequencies, to its own view before any snapshot is read, so reaching here with one is SCGSim's error.
 
     Raises:
         ValueError: ``name`` is not a problem SCGSim writes.
-        NotImplementedError: ``name`` is a problem SCGSim reads but does not show yet, Driven.
+        RuntimeError: ``name`` is Driven.
     """
     problem = read_problem(name, subject)
-    if problem.name not in REPORTED_PROBLEMS:
-        raise NotImplementedError(
-            Declared(
-                f"the {problem.name} run {subject}",
-                "your notebook: read the run with resolve_palace_result(...).driven_result(), whose "
-                "S-parameters, Surface EPR and adaptive sampling are the run's results",
-            ).refusal(
-                f"SCGSim reads {problem.name} runs and does not show a report or view of them yet; it shows "
-                f"{' and '.join(REPORTED_PROBLEMS)} runs"
+    if problem.name not in SNAPSHOT_PROBLEMS:
+        raise RuntimeError(
+            internal(
+                f"the AMR snapshot readers were given the {problem.name} table {subject}; they read "
+                f"{' and '.join(SNAPSHOT_PROBLEMS)} tables"
             )
         )
     return problem

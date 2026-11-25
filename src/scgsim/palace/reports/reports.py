@@ -2,20 +2,26 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal, cast
 
+from scgsim.contracts.palace_convergence import returned_passes
 from scgsim.contracts.palace_run_folder import (
     CONFIG,
+    DRIVEN,
     HANDOFF_METADATA,
     INDEX_MAP,
     MESH_MANIFEST,
+    NATIVE_METADATA,
+    OUTPUT_DIR,
     PROBLEMS,
     RETURNED_RECEIPT,
     read_json,
 )
 from scgsim.palace.mesh.summary import recorded_mesh_summary
+from scgsim.palace.reports.driven import DrivenPhysicsReport, DrivenTrustReport
 from scgsim.palace.reports.observations import (
     CostCards,
     configured_refinement,
@@ -48,6 +54,9 @@ from scgsim.palace.results.convergence import (
     passes_allowed,
     read_plan,
 )
+from scgsim.palace.results.driven import driven_result
+from scgsim.palace.results.driven_records import PalaceDrivenResult
+from scgsim.palace.results.driven_tables import requested_sweep
 from scgsim.palace.results.index_contract import (
     require_index_map_schema,
     require_manifest_schema,
@@ -70,7 +79,7 @@ from scgsim.palace.results.surface_readers import (
     read_surface_bindings,
     read_surface_margin_bindings,
 )
-from scgsim.palace.results.tables import configured_mode_count, reported_problem
+from scgsim.palace.results.tables import configured_mode_count
 from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
 from scgsim.refusal import Declared
 
@@ -79,7 +88,7 @@ _WHERE_REPORT_VIEW = "the call to the report view"
 
 def inspect_run_trustworthiness(
     run_dir: str | Path, *, theme: ReportTheme = "light"
-) -> PalaceTrustReport:
+) -> PalaceTrustReport | DrivenTrustReport:
     """Build the trustworthiness report from a returned run folder.
 
     This path is for complete or incomplete returned runs. It does not replace
@@ -97,8 +106,8 @@ def show_run_trustworthiness(
     *,
     theme: ReportTheme = "light",
     show_details: bool = False,
-) -> PalaceTrustReport:
-    """Build the resolved-run identity, AMR and failure view with the requested theme."""
+) -> PalaceTrustReport | DrivenTrustReport:
+    """Build the resolved-run identity, convergence and failure view with the requested theme."""
     _require_resolved(result, "show_run_trustworthiness")
     report = _build_trust_report(result.run_dir, resolved=result, theme=theme)
     return report.show_run_trustworthiness(theme=theme, show_details=show_details)
@@ -109,13 +118,12 @@ def show_physics_quantities(
     *,
     theme: ReportTheme = "light",
     ranking_limit: int | None = 20,
-) -> PhysicsQuantitiesReport:
-    """Return the latest-readable physical series after building their trust context."""
-    report = show_run_trustworthiness(result, theme=theme)
-    return report.show_physics_quantities(
-        theme=theme,
-        ranking_limit=ranking_limit,
-    )
+) -> PhysicsQuantitiesReport | DrivenPhysicsReport:
+    """Return the latest-readable physical series after building their trust context.
+
+    ``ranking_limit`` caps the surfaces ranked for each mode or excitation; a Driven run's view ranks none.
+    """
+    return _physics(show_run_trustworthiness(result, theme=theme), theme, ranking_limit)
 
 
 def show_all_results(
@@ -137,12 +145,10 @@ def show_all_results(
         show_details=show_details,
     )
     display(trust)
-    display(
-        trust.show_physics_quantities(
-            theme=theme,
-            ranking_limit=ranking_limit,
-        )
-    )
+    display(_physics(trust, theme, ranking_limit))
+    if isinstance(trust, DrivenTrustReport):
+        display(trust.show_simulation_benchmark(theme=theme, show_details=show_details))
+        return
     pass_cost_records = trust.pass_cost_records()
     display(
         SimulationBenchmarkReport(
@@ -164,12 +170,26 @@ def show_simulation_benchmark(
     _require_resolved(result, "show_simulation_benchmark")
 
     trust = show_run_trustworthiness(result, theme=theme)
+    # A Driven trust report holds the cost of its full solves and builds its own benchmark.
+    if isinstance(trust, DrivenTrustReport):
+        return trust.show_simulation_benchmark(theme=theme, show_details=show_details)
     pass_cost_records = trust.pass_cost_records()
     return SimulationBenchmarkReport(
         trust=trust,
         data=_resolved_benchmark_data(result, pass_cost_records),
         show_details=checked_show_details(show_details),
     )
+
+
+def _physics(
+    trust: PalaceTrustReport | DrivenTrustReport,
+    theme: ReportTheme,
+    ranking_limit: int | None,
+) -> PhysicsQuantitiesReport | DrivenPhysicsReport:
+    """The physics view of ``trust``: a Driven run's S-parameters and Surface EPR rank no surface."""
+    if isinstance(trust, DrivenTrustReport):
+        return trust.show_physics_quantities(theme=theme)
+    return trust.show_physics_quantities(theme=theme, ranking_limit=ranking_limit)
 
 
 def _require_resolved(result: object, view: str) -> None:
@@ -232,8 +252,12 @@ def _build_trust_report(
     *,
     resolved: ResolvedRunData | None = None,
     theme: ReportTheme = "light",
-) -> PalaceTrustReport:
-    """Bind source identity, readable snapshots and failure state into the Palace trust view."""
+) -> PalaceTrustReport | DrivenTrustReport:
+    """Bind source identity, readable snapshots and failure state into the Palace trust view.
+
+    A Driven run has its own report (``_driven_trust_report``): the AMR snapshots below read Electrostatic and
+    Eigenmode tables.
+    """
     try:
         run = _InspectedRun.read(root, resolved)
     except (FileNotFoundError, TypeError, ValueError) as error:
@@ -243,6 +267,8 @@ def _build_trust_report(
             "the run left it. Fetch the folder again from the host that ran Palace."
         )
         raise
+    if run.problem == DRIVEN.name:
+        return _driven_trust_report(root, run, resolved, theme)
     collected = collect_amr_passes(
         root,
         run.problem,
@@ -337,8 +363,6 @@ class _InspectedRun:
                     RETURNED_RUN_FOLDER,
                 ).refusal(f"is not one SCGSim writes: {sorted(PROBLEMS)}")
             )
-        # The report reads the tables as an Electrostatic or Eigenmode run's: every view of a Driven run stops here.
-        reported_problem(problem, str(root))
         config = read_optional_json(root / CONFIG)
         receipt = read_optional_json(root / RETURNED_RECEIPT)
         receipt_paths = validate_inspection_receipt(root, handoff, receipt)
@@ -409,6 +433,84 @@ def _completeness(
         "complete"
         if receipt_status == "completed" and (final or stopped)
         else "partial"
+    )
+
+
+def _driven_trust_report(
+    root: Path,
+    run: _InspectedRun,
+    resolved: ResolvedRunData | None,
+    theme: ReportTheme,
+) -> DrivenTrustReport:
+    """The trust report of a Driven run: identity, failure, sweep and cost, and a resolved run's S-parameters.
+
+    A resolved run is complete, and its result is its ``driven_result()``; a run ``driven_result()`` refuses,
+    an adaptive sweep that reached its maximum for a port say, is still reported, with the refusal in place of
+    the S-parameters.  A folder read as it came back is complete when the receipt says completed and the top
+    level of ``results/palace`` is a solve of its own; its S-parameters are not read.
+    """
+    palace_json = (
+        resolved.provenance.palace_json
+        if resolved is not None
+        else read_optional_json(root / NATIVE_METADATA)
+    )
+    returned = returned_passes(root / OUTPUT_DIR)
+    status = run.receipt.get("status") if run.receipt is not None else None
+    detached, refusal = _detached_result(resolved)
+    cost = cost_cards(palace_json, resolved)
+    return DrivenTrustReport(
+        run_dir=root,
+        route=run.route,
+        profile=run.profile,
+        completeness="complete"
+        if resolved is not None or (status == "completed" and returned.final == "pass")
+        else "partial",
+        failure=failure_diagnosis(root, run.receipt, run.receipt_paths),
+        identity=_report_identity(cost, run.handoff, run.receipt, resolved),
+        passes_recorded=len(returned.passes),
+        sweep=None if run.config is None else requested_sweep(run.config),
+        finite_element_order=_finite_element_order(run.config),
+        full_solves=_full_solves(
+            palace_json.get("LinearSolver") if palace_json is not None else None
+        ),
+        cost=cost,
+        durations=recorded_durations(palace_json),
+        provenance=_report_provenance(
+            run.config, run.handoff, run.mesh_manifest, run.problem, run.receipt
+        ),
+        convergence=resolved.convergence
+        if resolved is not None
+        else check_passes(read_plan(root, run.handoff, run.problem), root),
+        result=detached,
+        readback_refusal=refusal,
+        theme=checked_theme(theme),
+    )
+
+
+def _detached_result(
+    resolved: ResolvedRunData | None,
+) -> tuple[PalaceDrivenResult | None, str | None]:
+    """A resolved run's ``driven_result()``, or why it refused the run; neither for a folder not resolved."""
+    if resolved is None:
+        return None, None
+    try:
+        return driven_result(resolved), None
+    except ValueError as error:
+        return None, str(error)
+
+
+def _finite_element_order(config: Mapping[str, Any] | None) -> int | None:
+    """The FEM order the config solves at (``Solver.Order``); None when the folder has no config."""
+    solver = config.get("Solver") if config is not None else None
+    return as_int(solver.get("Order")) if isinstance(solver, Mapping) else None
+
+
+def _full_solves(linear_solver: object) -> int | None:
+    """Palace's count of linear solves (``LinearSolver.TotalSolves``), one per excited port and solved frequency."""
+    return (
+        as_int(linear_solver.get("TotalSolves"))
+        if isinstance(linear_solver, Mapping)
+        else None
     )
 
 

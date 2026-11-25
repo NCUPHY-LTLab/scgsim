@@ -18,8 +18,8 @@ aliases:
 | 呼叫 | 顯示 |
 |---|---|
 | `show_run_trustworthiness()` | 是哪一次計算、是否收斂：即[下方](#declared-convergence)的可信度報告 |
-| `show_physics_quantities()` | 電容矩陣或模態頻率，以及 Surface EPR |
-| `show_simulation_benchmark()` | 每個回合（pass）的時間與規模 |
+| `show_physics_quantities()` | 電容矩陣、模態頻率或 S 參數，以及 Surface EPR |
+| `show_simulation_benchmark()` | 每個回合（pass）的時間與規模，或 Driven 計算各次求解的時間與規模 |
 | `show_all_results()` | 依序顯示以上三者 |
 
 已解析的 AEDT 計算（`ResolvedRun`）有 `show_all_results()`，順序是身分（專案、設定、要求的模態、最後一個回合及是否完成）、數值依據、效能、物理量與細節；另有單獨的 `show_simulation_benchmark()` （[AEDT 的時間與記憶體](aedt-runtime.qmd#native-simulation-benchmark)）。
@@ -51,6 +51,22 @@ aliases:
 沒有收斂的計算，會說明在最後讀到的回合中哪個條件不成立、它最差的數字、門檻，以及是門檻的幾倍，並以「Palace ended by itself at its limit of 6 passes.」作結。收斂時停止的計算沒有自己的最終求解：它的結果、效能與成本都是最後那個回合的。沒有完成的停止屬於失敗的計算，失敗類別為 `convergence_stop`。`ResolvedPalaceResult.convergence` 為程式提供同樣的判定。
 
 只回傳一部分的計算，`inspect_run_trustworthiness()` 對資料夾中有的回合顯示同一張表，判定會計算讀到的回合，例如「3 passes read (passes 1, 4 and 5)」。
+
+## Driven 計算 {#driven-run}
+
+已解析的 Palace Driven 計算（S 參數，來自 `DrivenSim`）使用相同的呼叫。它的可信度與物理量視圖是 `DrivenTrustReport` 與 `DrivenPhysicsReport`；效能視圖與其他問題共用。
+
+`show_run_trustworthiness()` 依序顯示：
+
+1. **Run Identity**：同樣的五張卡片；失敗的計算另附一則通知。
+2. **Convergence**：頻率掃描（`2–10 GHz, 81 points`）、取樣方式（`uniform`，或 `adaptive, tolerance 0.001`，設了上限時一併列出）、FEM 階數、網格元素數，以及宣告的收斂：`not declared`，因為 Driven 計算目前還不能宣告收斂。自適應掃描另有一張表，列出每個埠的取樣數（建立降階模型所用的完整求解）、模型的估計誤差（欄首帶容許值，`Estimated error ≤ 0.001`），以及它求解的頻率，依 Palace 加入的順序。自適應掃描在某個埠達到取樣上限的計算仍會顯示報告：原因列在 **Not read** 之下，且不畫 S 參數。
+3. **Reciprocity and passivity**（互易性與被動性），只記錄、不評判。互易誤差（Reciprocity error）是所有埠對與所有頻率中最大的 `|Sij − Sji|`；不含磁化或主動元件的網路沒有互易誤差。S 在各頻率的最大奇異值（Largest singular value），被動網路至多為 1。單埠計算只有後者，列在 **Passivity** 之下。
+
+`show_physics_quantities()` 依 S 矩陣的順序列出各埠在規劃中的名稱與阻抗；接著以兩張圖畫 |S|（dB）對頻率：**Reflection**（反射，`S11`、`S22`）與 **Transmission**（穿透，`S21`、`S12`）分開畫，因為匹配的線路反射約 −40 dB、穿透約 −0.001 dB；再以一張 **Phase** 圖畫每個元素的相位（度）。每個元素使用其激發埠的線型，所以在互易網路中 `S12` 以虛線疊在 `S21` 上，兩者都看得見。接著是 **Surface EPR**：每種介面類型 MA、MS 與 SA 一張圖，畫參與比對頻率。有兩個以上的埠時，每個被驅動的埠是一組線：整個表面一條線，每個邊距各一條線。不推導 T1 或元件 Q：驅動計算的參與比，是在某一頻率、驅動某一埠時電場能量的占比。
+
+`show_simulation_benchmark()` 顯示完整求解次數（Full solves，Palace 的線性求解次數，每個激發埠與每個求解的頻率一次：均勻掃描是每個頻率，自適應掃描是其取樣）、總牆鐘時間與每次求解的牆鐘時間、節點與 rank 的記憶體峰值、自由度、網格元素數，以及 MPI 與 OpenMP 數量；接著是網格與 Palace 的計時器。
+
+`inspect_run_trustworthiness(run_dir)` 依回傳時的樣子讀取 Driven 資料夾，完整或部分皆可：身分、失敗、頻率掃描與成本。只有已解析的計算才會讀取並畫出 S 參數。
 
 ## 物理量 {#physics-quantities}
 
@@ -86,4 +102,4 @@ Palace 報告顯示計算的網格摘要（`mesh_summary()`）：尺寸配方及
 
 ## 尚未提供 {#current-palace-scope}
 
-Palace Driven 與 Magnetostatic 的報告、Palace `domain-E.csv` 體積能量的圖，以及報告的匯出格式。
+Palace Magnetostatic 的報告、Driven 計算的收斂宣告、Palace `domain-E.csv` 體積能量的圖，以及報告的匯出格式。

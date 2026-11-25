@@ -21,8 +21,8 @@ A resolved Palace run (`ResolvedPalaceResult`) has one call per view:
 | Call | Shows |
 |---|---|
 | `show_run_trustworthiness()` | Which run it is and whether it converged: the trust report, [below](#declared-convergence) |
-| `show_physics_quantities()` | The capacitance matrix or the mode frequencies, and Surface EPR |
-| `show_simulation_benchmark()` | The time and size of each pass |
+| `show_physics_quantities()` | The capacitance matrix, the mode frequencies or the S-parameters, and Surface EPR |
+| `show_simulation_benchmark()` | The time and size of each pass, or of a Driven run's solves |
 | `show_all_results()` | All three, in this order |
 
 A resolved AEDT run (`ResolvedRun`) has `show_all_results()`, in the order
@@ -104,6 +104,54 @@ For a run that came back in part, `inspect_run_trustworthiness()` shows the
 same table for the passes the folder holds, and the verdict counts the passes
 read, for example "3 passes read (passes 1, 4 and 5)".
 
+## A Driven run {#driven-run}
+
+A resolved Palace Driven run (S-parameters, from `DrivenSim`) has the same
+calls. Its trust and physics views are a `DrivenTrustReport` and a
+`DrivenPhysicsReport`; its benchmark is the shared one.
+
+`show_run_trustworthiness()` shows, in order:
+
+1. **Run Identity**: the same five cards, and the notice of a failed run.
+2. **Convergence**: the sweep (`2–10 GHz, 81 points`), the sampling
+   (`uniform`, or `adaptive, tolerance 0.001` with its cap when one is set),
+   the FEM order, the mesh elements and the declared convergence, which is
+   `not declared`: a Driven run declares none yet. For an adaptive sweep, a
+   table gives each port's samples (the full solves its reduced model was
+   built from), the model's estimated error, headed by the tolerance
+   (`Estimated error ≤ 0.001`), and the frequencies it solved at, in the
+   order Palace added them. A run whose adaptive sweep reached its maximum
+   number of samples for a port is still reported: the reason is under
+   **Not read**, and no S-parameters are drawn.
+3. **Reciprocity and passivity**, recorded and not judged. The reciprocity
+   error is the largest `|Sij − Sji|` over every pair of ports and every
+   frequency; a network without magnetized or active parts has none. The
+   largest singular value of S over the frequencies is at most 1 for a
+   passive network. A one-port run has only the second, under **Passivity**.
+
+`show_physics_quantities()` shows the ports in the S-matrix's order, each with
+its name in the plan and its impedance; |S| in dB against frequency in two
+figures, **Reflection** (`S11`, `S22`) apart from **Transmission** (`S21`,
+`S12`), since a matched line reflects at about −40 dB and transmits at about
+−0.001 dB; and the **Phase** of every entry in degrees. An entry takes its
+excited port's line style, so `S12` is dashed over `S21` where a reciprocal
+network draws them on top of each other. Then **Surface EPR**: one figure per
+interface type, MA, MS and SA, its participation against frequency. With two
+ports or more, each driven port is a group of lines: the whole surfaces, and
+one line for each inset. No T1 and no device Q is derived: a driven
+participation is the share of the electric energy at one frequency with one
+port driven.
+
+`show_simulation_benchmark()` shows the full solves (Palace's linear solves,
+one per excited port and solved frequency: every frequency of a uniform
+sweep, the samples of an adaptive one), the total wall time and the wall time
+per solve, the peak node and rank memory, the degrees of freedom, the mesh
+elements and the MPI and OpenMP counts; then the mesh and Palace's timers.
+
+`inspect_run_trustworthiness(run_dir)` reads a returned Driven folder as it
+came back, complete or partial: its identity, its failure, its sweep and its
+cost. Only a resolved run's S-parameters are read and drawn.
+
 ## Physics quantities {#physics-quantities}
 
 Each quantity stays the solver's, with its own units, conductor or port order
@@ -183,5 +231,6 @@ says how to read them for a study.
 
 ## Not available {#current-palace-scope}
 
-Palace Driven and Magnetostatic reports, a plot of Palace's `domain-E.csv`
-volume energy, and an export format for a report.
+Palace Magnetostatic reports, a convergence declaration for a Driven run, a
+plot of Palace's `domain-E.csv` volume energy, and an export format for a
+report.

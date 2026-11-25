@@ -185,6 +185,7 @@ making them public.
 | `scgsim.semantics.s_parameters` | The S-parameter record every driven solver returns, and its Touchstone writer | `SParameters`, `SParameterPort` |
 | `scgsim.palace.results.inspection_records` | Detached records the reports read | `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PassCostRecord`, `SurfaceMarginEprRecord`, `SurfaceMarginEprSeriesSnapshot` |
 | `scgsim.palace.reports.reports`, `scgsim.palace.reports.trust`, `scgsim.palace.reports.views` | The trust, physics and benchmark views | `inspect_run_trustworthiness`, `PalaceTrustReport`, `PhysicsQuantitiesReport`, `SimulationBenchmarkReport` |
+| `scgsim.palace.reports.driven` | The trust and physics views of a Driven run | `DrivenTrustReport`, `DrivenPhysicsReport` |
 
 `scgsim.palace.results.inspection_records` also defines `AmrPassSnapshot`,
 `SurfaceEprRecord` and `SurfaceEprSeriesSnapshot`, which the package does not

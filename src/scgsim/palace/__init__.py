@@ -9,8 +9,7 @@ One folder per stage, in the order the work flows:
 - ``run``: the run folder handed to Palace, and what Palace returns.
 - ``results``: from a returned run folder to the checked records of the run and the detached results it yields:
   an Eigenmode run's EPR, a Driven run's S-parameters.
-- ``reports``: the result a user holds (``resolve_palace_result``) and the notebook views of it (Electrostatic and
-  Eigenmode; a Driven run is refused by name until SCGSim shows it).
+- ``reports``: the result a user holds (``resolve_palace_result``) and the notebook views of it.
 
 A public entry point refuses state it cannot run from (no bound plan, a stage called out of order, a name that
 binds nothing) with an error that says which call fixes it.  A setting with a documented default, such as Route B
@@ -32,6 +31,7 @@ from .config.convergence import (
     ModeFrequency,
     SurfaceEpr,
 )
+from .reports.driven import DrivenPhysicsReport, DrivenTrustReport
 from .reports.epr import show_epr
 from .reports.reports import inspect_run_trustworthiness
 from .reports.resolved_result import ResolvedPalaceResult, resolve_palace_result
@@ -72,8 +72,10 @@ __all__ = [
     "ConvergenceVerdict",
     "Criterion",
     "CriterionGroup",
+    "DrivenPhysicsReport",
     "DrivenSim",
     "DrivenSurfaceEpr",
+    "DrivenTrustReport",
     "EigenmodeSim",
     "ElectrostaticSim",
     "ErrorIndicator",

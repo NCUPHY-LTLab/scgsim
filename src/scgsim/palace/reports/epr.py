@@ -6,6 +6,7 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
+from scgsim.palace.results.driven_records import PalaceDrivenResult
 from scgsim.palace.results.epr_records import PalaceEprResult
 from scgsim.refusal import Declared
 
@@ -77,9 +78,16 @@ def show_epr(result: PalaceEprResult, *, mode: int | None = None) -> Any:
     """Plot one mode with separate surface, bulk, and signed Palace port axes."""
 
     if not isinstance(result, PalaceEprResult):
+        # A Driven run's Surface EPR is per excited port and frequency, drawn by its physics view.
+        driven = (
+            "; a Driven run's Surface EPR is drawn by show_physics_quantities()"
+            if isinstance(result, PalaceDrivenResult)
+            else ""
+        )
         raise TypeError(
             Declared("show_epr", _WHERE_SHOW_EPR).refusal(
                 f"requires a PalaceEprResult from epr_result() or resolve_epr_result(); got {type(result).__name__}"
+                + driven
             )
         )
     return epr_mode_figure(result, mode=mode)
