@@ -177,7 +177,7 @@ class DrivenSweep:
             number, or ``adaptive_max_samples`` is not an integer.
         ValueError: ``ranges`` is empty; two merged frequencies are closer than the 9 significant digits Palace
             prints them with; ``adaptive_tolerance`` is not finite and above zero; an adaptive sweep has fewer
-            than 3 frequencies; or ``adaptive_max_samples`` is below 1 or is given without ``adaptive_tolerance``.
+            than 3 frequencies; or ``adaptive_max_samples`` is below 2 or is given without ``adaptive_tolerance``.
     """
 
     ranges: Sequence[FrequencyRange]
@@ -313,10 +313,14 @@ def _check_adaptive_settings(where: Declared, sweep: DrivenSweep) -> None:
                 "adaptive_max_samples out"
             )
         )
-    if _sweep_integer(where, "adaptive_max_samples", sweep.adaptive_max_samples) < 1:
+    # Palace's model starts from full solves at the lowest and highest frequency, and Palace 0.18.1 stops with
+    # an error when the cap is below those two (``SweepAdaptive``).
+    if _sweep_integer(where, "adaptive_max_samples", sweep.adaptive_max_samples) < 2:
         raise ValueError(
             where.expected(
-                "adaptive_max_samples", "at least 1", sweep.adaptive_max_samples
+                "adaptive_max_samples",
+                "at least 2, the solves at the lowest and highest frequency",
+                sweep.adaptive_max_samples,
             )
         )
 

@@ -504,10 +504,10 @@ def test_a_plan_without_a_port_is_refused_by_every_call_that_prepares_it(
             id="cap without tolerance",
         ),
         pytest.param(
-            lambda: {**UNIFORM, "adaptive_tolerance": 1e-3, "adaptive_max_samples": 0},
+            lambda: {**UNIFORM, "adaptive_tolerance": 1e-3, "adaptive_max_samples": 1},
             ValueError,
-            "adaptive_max_samples must be at least 1",
-            id="cap 0",
+            "adaptive_max_samples must be at least 2",
+            id="cap 1",
         ),
     ],
 )

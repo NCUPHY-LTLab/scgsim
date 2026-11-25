@@ -103,7 +103,7 @@ class DrivenSim(PalaceSimulation):
                 ``adaptive_max_samples`` is not an integer.
             ValueError: ``frequencies`` is empty; two of its frequencies are closer than the 9 significant digits
                 Palace prints them with, so they could not be read back apart; ``adaptive_tolerance`` is not
-                above 0; an adaptive sweep has fewer than 3 frequencies; or ``adaptive_max_samples`` is below 1
+                above 0; an adaptive sweep has fewer than 3 frequencies; or ``adaptive_max_samples`` is below 2
                 or is given without ``adaptive_tolerance``.
         """
         self.sweep = DrivenSweep(
