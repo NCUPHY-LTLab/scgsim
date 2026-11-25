@@ -1,0 +1,266 @@
+---
+lang: zh-TW
+title: "以 Palace 計算 S 參數"
+description: "以 Palace 的 Driven 求解器，計算以共平面波導相連的兩個 launcher 的 S 參數，讀回結果並寫出 Touchstone 檔。"
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/palace-driven"
+---
+
+Palace 的 Driven 求解器會逐一驅動版圖的每個埠，逐頻率算出 S 參數：送進一個埠的波，有多少從同一個埠反射回來、又有多少從其他各埠出去。本頁的版圖是一條直通傳輸線：OrcaPen SC PDK 的兩個 launcher，各是一塊 150 µm 的焊墊、漸縮成共平面波導（CPW），中間以 900 µm 的同一種 CPW 相連。每個 launcher 是一個 50 Ω 的埠，頻率從 2 GHz 掃到 10 GHz。腳本會印出：
+
+```text
+P1 chip/o_lumped_left: LumpedPort, R 50.0 ohm, excitation 1: port 1 of the S-matrix, driven from chip/SIGNAL to chip/GROUND
+P2 chip/o_lumped_right: LumpedPort, R 50.0 ohm, excitation 2: port 2 of the S-matrix, driven from chip/SIGNAL to chip/GROUND
+Status: completed
+Port 1 driven: 4 frequencies solved, error 1.2e-06
+Port 2 driven: 4 frequencies solved, error 4.6e-06
+ 2.0 GHz  |S11| = -41.08 dB  |S21| = -0.0004 dB  arg S21 =  -11.118 deg
+ 4.0 GHz  |S11| = -35.38 dB  |S21| = -0.0015 dB  arg S21 =  -22.235 deg
+ 6.0 GHz  |S11| = -32.39 dB  |S21| = -0.0030 dB  arg S21 =  -33.352 deg
+ 8.0 GHz  |S11| = -30.67 dB  |S21| = -0.0045 dB  arg S21 =  -44.469 deg
+10.0 GHz  |S11| = -29.81 dB  |S21| = -0.0058 dB  arg S21 =  -55.589 deg
+```
+
+幾乎所有功率都穿透過去：|S21| 與 0 dB 相差不到 0.006 dB，反射回來的功率最多 0.1 %（|S11| 最高 −29.8 dB）。S21 的相位隨頻率成正比下降，這正是傳輸線延遲的表現。[讀懂結果](#read-the-result)會逐一拆解這些數字。腳本也會把全部 81 個頻率寫進 Touchstone 檔 `launchers.s2p`，電路模擬器可以讀取它。
+
+你需要和第一個模擬相同的安裝：含 `palace` extra 的 SCGSim、OrcaPen SC PDK、Palace 0.18.1，並把 `SCGSIM_PALACE_EXECUTABLE` 設為 `palace` 命令（[第一個模擬](../start/first-simulation.qmd#palace-executable)）。
+
+## 版圖 {#the-layout}
+
+埠放在埠薄片上：埠圖層上的一塊矩形，連接埠的訊號金屬與參考金屬，在這裡是跨過焊墊後方 85 µm 的間隙，連接焊墊與接地。薄片必須稍微伸入兩邊的金屬，SCGSim 才找得到它所連接的兩個導體。PDK 的 `launcher` 所畫的薄片只與焊墊和接地邊對邊相接，所以這個版圖自己畫兩片薄片，每片伸入焊墊與接地各 10 nm。把下面的程式存成研究專案裡的 `launchers.py`：
+
+```python
+import gdsfactory as gf
+from orcapen_sc_pdk.ports import add_driven_lumped_port
+from orcapen_sc_pdk.tech import LAYER
+
+LINE_UM = 900.0  # the CPW between the two launchers
+PAD_UM = 150.0  # the launcher's square pad
+TAPER_UM = 150.0  # its taper from the pad to the CPW
+BACK_GAP_UM = 85.0  # the gap behind the pad, which the port sheet spans
+LANDING_UM = 0.01  # how far each sheet reaches into the pad and into the ground
+
+
+def launcher_to_launcher() -> gf.Component:
+    """Two PDK launchers joined by a 900 µm CPW on a 1870 × 900 µm die, a port sheet behind each pad."""
+    chip = gf.Component()
+    # The launcher's own sheet only touches its pad and the ground, so it goes to a layer nothing reads.
+    launcher = gf.get_component(
+        "launcher",
+        cpw_xs="cpw_6_7_6",
+        sim_boundary_layer=(250, 0),
+        curve_sampling="simulation",
+    )
+    left = chip << launcher
+    left.move(origin=left.ports["o_neck"].center, destination=(-LINE_UM / 2, 0.0))
+    right = chip << launcher
+    right.rotate(180)
+    right.move(origin=right.ports["o_neck"].center, destination=(LINE_UM / 2, 0.0))
+    line = chip << gf.components.straight(
+        length=LINE_UM, cross_section=gf.get_cross_section("cpw_6_7_6")
+    )
+    line.move(origin=line.ports["o1"].center, destination=left.ports["o_neck"].center)
+    chip << gf.components.rectangle(
+        size=(1870.0, 900.0), centered=True, layer=LAYER.D0_SUBSTRATE_AREA
+    )
+
+    # A port sheet across the gap behind each pad, from the ground to the pad.
+    pad_back = LINE_UM / 2 + TAPER_UM + PAD_UM
+    for name, side in (("o_lumped_left", -1.0), ("o_lumped_right", 1.0)):
+        x0, x1 = sorted(
+            (side * (pad_back - LANDING_UM), side * (pad_back + BACK_GAP_UM + LANDING_UM))
+        )
+        y = PAD_UM / 2
+        chip.add_polygon(
+            [(x0, -y), (x1, -y), (x1, y), (x0, y)], layer=LAYER.D0_TOP_SIM_BOUNDARY
+        )
+        add_driven_lumped_port(
+            chip,
+            name=name,
+            center=(side * (pad_back + BACK_GAP_UM / 2), 0.0),
+            orientation=0.0 if side < 0 else 180.0,
+            layer=LAYER.D0_TOP_SIM_BOUNDARY,
+        )
+
+    # What the plan reads: the signal metal, the ground metal and the two sheets.
+    chip.info["component_semantics"] = {
+        "schema_version": 2,
+        "conductor_regions": [
+            {
+                "semantic_id": "SIGNAL",
+                "level": "D0_TOP_M1",
+                "gds_layer": tuple(LAYER.D0_TOP_M1_DRAW),
+                "geometry": {
+                    "geometry_source": "gds_polygon",
+                    "selector_point_um": (0.0, 0.0),
+                },
+            },
+            {
+                "semantic_id": "GROUND",
+                "level": "D0_TOP_M1",
+                "gds_layer": tuple(LAYER.D0_TOP_GROUND_MASK),
+            },
+        ],
+        "ports": [
+            {
+                "name": name,
+                "layer": tuple(LAYER.D0_TOP_SIM_BOUNDARY),
+                "target_layer": "D0_TOP_M1",
+            }
+            for name in ("o_lumped_left", "o_lumped_right")
+        ],
+    }
+    return chip
+```
+
+CPW 是 PDK 的 `cpw_6_7_6`：7 µm 的訊號線，兩側各有 6 µm 的間隙。launcher 與傳輸線構成同一塊訊號金屬 `SIGNAL`；晶片頂面的其餘部分是接地 `GROUND`。晶片是 1870 × 900 µm、厚 500 µm 的矽，上面是 0.1 µm 的鋁，取自 PDK 的單晶片疊層。
+
+## 腳本 {#the-script}
+
+把下面的程式存成 `launcher_s_parameters.py`，與 `launchers.py` 放在同一個資料夾：
+
+```python
+import cmath
+import math
+import os
+import subprocess
+from pathlib import Path
+from uuid import uuid4
+
+import orcapen_sc_pdk
+from orcapen_sc_pdk import get_material_records, validate_interface_preset_records
+from orcapen_sc_pdk.tech import get_single_die_layer_stack
+from scgsim.geometry import GeometryPlan, LumpedPort
+from scgsim.palace import DrivenSim, resolve_palace_result
+
+from launchers import launcher_to_launcher
+
+# 1. The layout and its plan: the signal and ground Nets, the vacuum, and thin lossy films (PDK presets).
+orcapen_sc_pdk.activate()
+plan = GeometryPlan(
+    component=launcher_to_launcher(),
+    root_id="chip",
+    layer_stack=get_single_die_layer_stack(),
+    material_records=get_material_records(),
+    coupon_padding_um=0.0,
+)
+plan.set_nets({"signal": ("chip/SIGNAL",), "ground": ("chip/GROUND",)})
+plan.set_vacuum_region(padding=(0.0, 0.0, 1000.0))
+presets = validate_interface_preset_records()
+plan.set_surface_epr({
+    kind: {
+        "film_thickness_m": presets[f"LiteratureCentral_{kind}"]["thickness"] * 1e-6,
+        "permittivity": presets[f"LiteratureCentral_{kind}"]["permittivity"],
+        "loss_tangent": presets[f"LiteratureCentral_{kind}"]["loss_tangent"],
+        "source": presets[f"LiteratureCentral_{kind}"]["source"],
+        "preset": f"LiteratureCentral_{kind}",
+    }
+    for kind in ("MA", "MS", "SA")
+})
+
+# 2. The ports: each sheet is a 50 Ω port to the ground; the left one, given first, is port 1.
+plan.set_lumped_elements([
+    LumpedPort("chip/o_lumped_left", reference_net="ground", impedance_ohm=50.0),
+    LumpedPort("chip/o_lumped_right", reference_net="ground", impedance_ohm=50.0),
+])
+print("\n".join(DrivenSim.simulation_drc(plan).lumped_elements))
+
+# 3. The sweep, 81 frequencies from 2 to 10 GHz, and second-order elements.
+sim = DrivenSim()
+sim.set_plan(plan.prepare())
+sim.set_output_dir(Path(".artifacts/launchers") / uuid4().hex[:12])
+sim.set_driven(start=2e9, stop=10e9, points=81, adaptive_tolerance=1e-3)
+sim.set_numerical(order=2)
+
+# 4. Mesh, write Palace's input, run Palace with 8 MPI processes.
+sim.mesh()
+sim.write_config()
+handoff = sim.prepare_handoff(
+    profile="direct-local",
+    executable=os.environ["SCGSIM_PALACE_EXECUTABLE"],
+    resources={"command_style": "wrapper", "processes": 8, "threads": 1},
+)
+subprocess.run(["bash", "run_palace.sh"], cwd=handoff.run_dir, check=True)
+
+# 5. Read the S-parameters back, print them every 2 GHz and write the Touchstone file.
+result = resolve_palace_result(handoff.run_dir, expected_handoff_id=handoff.handoff_id)
+print("Status:", result.status)
+s_params = result.driven_result()
+for sampling in s_params.adaptive_sampling:
+    print(
+        f"Port {sampling.excited_port} driven: {sampling.samples} frequencies solved, "
+        f"error {sampling.error:.1e}"
+    )
+s11, s21 = s_params.s(1, 1), s_params.s(2, 1)
+for k, frequency in enumerate(s_params.frequencies_hz):
+    if k % 20 == 0:  # every 2 GHz
+        print(
+            f"{frequency / 1e9:4.1f} GHz  |S11| = {20 * math.log10(abs(s11[k])):6.2f} dB"
+            f"  |S21| = {20 * math.log10(abs(s21[k])):7.4f} dB"
+            f"  arg S21 = {math.degrees(cmath.phase(s21[k])):8.3f} deg"
+        )
+s_params.write_touchstone("launchers.s2p")
+```
+
+第 1 段建立計畫的方式與[以 Palace 計算共振模態](modes-palace.qmd#the-script)相同，使用相同的真空與薄膜，只是換成這個版圖與它的兩個 Net：`signal` 與 `ground`。新的部分：
+
+- **第 2 段在計畫上宣告埠。** 每個 `LumpedPort` 指名它的薄片、參考導體的 Net（薄片連接的另一個導體是訊號），以及埠阻抗（Ω）。你給的順序就是埠的編號：埠 1 是 S 矩陣的第 1 列與第 1 行。Palace 從訊號金屬往參考金屬驅動每個埠，所以薄片畫的方向不影響結果。`simulation_drc` 在幾秒內、建網格之前，就檢查版圖能否以這些埠建模與建網格，並回報它如何處理每一個埠：也就是輸出中 `P1` 與 `P2` 那兩行（[檢查版圖](check-a-layout.qmd)）。沒有 `LumpedPort` 的計畫會在這裡被拒絕。
+- **第 3 段設定頻率掃描，單位是 Hz。** `start`、`stop` 與 `points` 給出含兩端在內的 81 個頻率。`adaptive_tolerance=1e-3` 開啟 Palace 的自適應掃頻：對每個埠，它先在少數幾個頻率求解電場，由這些解建立一個小模型、在全部 81 個頻率上計算，並持續增加求解，直到模型與這些解的相對誤差在 10⁻³ 以內。這裡每個埠只需要 4 次求解，若逐一求解每個頻率則需要 81 次。輸出中兩行 `Port ... driven` 回報的就是這件事；`error` 是模型最後的誤差估計。
+- **第 3 段也要求二階元素，** `set_numerical(order=2)`。若用預設的一階元素，在 `mesh()` 寫出的網格上，傳輸線造成的相位會多出約 7 %（二階約 1 %），而 |S11| 在 10 GHz 達到 −21.2 dB，而不是 −29.8 dB。二階的未知數是一階的五倍，這裡是 1,433,702 個。
+- **第 4 段**建網格、寫出 Palace 的輸入並執行 Palace，與共振器相同。
+- **第 5 段讀回計算結果。** `driven_result()` 依計畫中埠的順序，回傳掃描中每個頻率的 S 參數。`s(2, 1)` 是 S21，也就是驅動埠 1 時從埠 2 出去的波，在每個頻率上是一個複數；`s(1, 1)` 是 S11。`write_touchstone` 把這份紀錄寫成 Touchstone 1.1 檔：頻率以 GHz、|S| 以 dB、arg S 以度表示，參考阻抗是各埠的 50 Ω；兩埠的檔名必須以 `.s2p` 結尾。
+
+在研究專案中、設定過 `SCGSIM_PALACE_EXECUTABLE` 的 shell 裡執行：
+
+```bash
+uv run launcher_s_parameters.py
+```
+
+在一台工作站上以 8 個 MPI 行程執行，花了約六分鐘，Palace 最多使用 14 GB 記憶體。
+
+## 讀懂結果 {#read-the-result}
+
+**參考面就是埠薄片。** 每個埠位在焊墊後方的薄片上，所以 S 參數包含兩塊焊墊與兩段漸縮：它描述的是晶片從一個 launcher 的接點到另一個 launcher 的接點。
+
+**穿透。** |S21| 在 2 GHz 是 −0.0004 dB，在 10 GHz 是 −0.0058 dB：幾乎所有功率都穿透過去。唯一有損耗的材料是矽，損耗正切為 2.6 × 10⁻⁷，所以既沒有反射、也沒有穿透的功率 1 − |S11|² − |S21|² 應該接近零；它在整個頻段內最多是 2.9 × 10⁻⁴。
+
+**反射。** 以保角映射計算，這條 CPW 的特性阻抗約為 54.4 Ω，不是 50 Ω，所以兩端各有少許反射：Γ = (54.37 − 50)/(54.37 + 50) = 0.042。若只看一段 900 µm 的傳輸線，兩端的反射會給出 |S11| ≈ 2Γ|sin βL|，在 2 GHz 是 −42.0 dB，在 10 GHz 是 −28.3 dB。Palace 給出 −41.1 與 −29.8 dB，大小相當：launcher 本身也會反射，其中一部分抵銷了傳輸線的反射，所以這個估計只說明 |S11| 的大小，而不是它的值。
+
+**延遲。** arg S21 每 GHz 下降 5.559°，相當於 15.44 ps 的延遲。其中傳輸線占 7.57 ps（900 µm，有效折射率 2.5212）；其餘 7.87 ps 來自兩個 launcher 的焊墊與漸縮段。
+
+**互易與對稱。** S12 與 S21 相等到 7.7 × 10⁻¹⁵，這是互易元件必須滿足的；版圖左右鏡像對稱，所以 S11 與 S22 應該相等：兩者最多相差 1.6 × 10⁻⁴。
+
+## 表面參與率 {#surface-participation}
+
+Driven 計算也會在每個頻率、驅動每個埠時，算出電能中位在 `set_surface_epr` 各層薄膜裡的比例，也就是它的參與率 p。`s_params.surface_epr` 對每個被驅動的埠與每個頻率各有一筆紀錄，這裡共 162 筆，先依埠、再依掃描的頻率排序：
+
+```python
+epr = s_params.surface_epr[0]  # port 1 driven, at 2 GHz
+for row in epr.surfaces:
+    print(row.name, f"p = {row.participation:.3e}")
+```
+
+驅動埠 1、在 2 GHz 時，它會印出：
+
+```text
+MA::chip/GROUND__sidewall p = 5.399e-08
+MA::chip/GROUND__top p = 3.887e-07
+MA::chip/SIGNAL__sidewall p = 1.280e-07
+MA::chip/SIGNAL__top p = 1.085e-06
+MS::chip/GROUND__bottom p = 4.615e-05
+MS::chip/SIGNAL__bottom p = 1.314e-04
+SA::D0_SUBSTRATE|VACUUM_REGION__interface p = 1.558e-04
+```
+
+金屬–基板（MS）與基板–空氣（SA）薄膜占得最多，金屬–空氣（MA）薄膜約少一百倍。這些列與同一個計畫的共振器研究所回報的列相同（[Surface EPR](../concepts/surface-epr.qmd#rows)），但 Driven 的參與率是某個頻率、驅動某個埠時儲存的能量，不是模態的參與率。只有在孤立的共振附近，它才會接近模態的參與率，所以 SCGSim 不從它推導 Q 或 T1。薄膜規格中的 `inset_margins_um` 會在 `epr.margins` 中加上邊距列，與共振器相同（[間隙附近的表面 EPR](modes-palace.qmd#surface-epr-margin-rows)）。
+
+## 可以調整的設定 {#settings-you-may-change}
+
+- **在每個頻率都完整求解。** 不給 `adaptive_tolerance`，Palace 就會對每個埠、在每個頻率各求解一次。這次掃描需要 162 次求解，在這個晶片上以二階元素每次約 37 秒；適合只看少數幾個頻率，或在其中幾個頻率檢查自適應掃頻。在這個晶片上以一階元素計算時，自適應掃頻在 2、4、6、8、10 GHz 與完整求解相比，arg S21 相差在 3 × 10⁻⁵° 以內，|S11| 相差在 2 × 10⁻⁴ dB 以內。
+- **自適應掃頻的上限。** `adaptive_max_samples` 限制每個埠的求解次數；不給時套用 Palace 自己的上限 20。若某個埠在模型達到容許誤差之前就用完上限，Palace 的記錄檔會記下這件事，`driven_result()` 會拒絕這次計算並指出是哪個埠：請以較大的上限重新執行。
+- **更多埠，或其他元件。** 版圖有幾片薄片，就可以給幾個 `LumpedPort`；第 i 個就是埠 i，每個埠都會輪流被驅動。`write_touchstone` 要求所有埠使用同一個阻抗，因為 Touchstone 1.1 只有一個參考阻抗。計畫中與埠並列的 `LumpedElement`（例如接面的電感）會以它的 R、L、C 當作負載求解，但從不被驅動；S 矩陣只包含各埠，所以一個埠加一個元件會得到單埠結果與 `.s1p` 檔（[集總元件](../reference/specs/geometry-plan.qmd#lumped-elements)）。
+- **網格細化。** 除非開啟細化 `set_numerical(amr_max_passes=..., amr_tolerance=..., amr_update_fraction=...)`，Palace 都在 `mesh()` 寫出的網格上求解。每個細化回合都會重新求解整個掃描，每個埠、每個頻率都算一次，所以請在只有幾個點的短掃描上細化。Driven 計算目前還不接受收斂宣告：`set_convergence` 會拒絕，細化回合在 `amr_max_passes` 或 Palace 的 `amr_tolerance` 處停止。
+- **外邊界。** 真空區域的外表面不給邊界條件，Palace 把它當成理想磁導體，與共振器相同：模型是一個幾乎沒有損耗的封閉盒子。這樣的盒子有自己的共振，晶片較大時，這些共振可能落在掃描範圍內，在 S 參數中顯現為元件本身沒有的特徵。
+- **把金屬當成薄片。** 在 `mesh()` 之前呼叫 `sim.set_route("A")`，與電容計算相同（[把金屬當成薄片](capacitance-palace.qmd#select-the-geometry-approximation-and-build-inputs)）。
+- **HFSS。** [以 HFSS 計算 S 參數](s-parameters-hfss.qmd)以相同方式為 HFSS Driven Terminal 宣告兩個埠，使用的計畫不帶 Surface EPR。

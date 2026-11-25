@@ -86,8 +86,9 @@ What the inputs mean:
 - `HfssRunControl` sets the solution setup and the sweep: here 201 points from
   4 GHz to 8 GHz. Choose the bounds and the number of points for the response
   you need ([sweep reference](../reference/specs/aedt-runtime.qmd#hfss-driven-sweep-count)).
-- A Driven model carries no junctions, lumped RLC loads or Surface EPR; those
-  belong to [HFSS Eigenmode](modes-hfss.qmd).
+- An HFSS Driven model carries no junctions, lumped RLC loads or Surface
+  EPR; those belong to [HFSS Eigenmode](modes-hfss.qmd). Palace Driven takes
+  them ([S-parameters with Palace](s-parameters-palace.qmd)).
 
 In AEDT the run imports the model into an empty Driven Terminal design and
 puts a lumped port on each sheet, with its terminal on the edge where the

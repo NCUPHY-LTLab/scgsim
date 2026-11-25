@@ -58,7 +58,7 @@ Every name below is importable from the package it is listed under. Each group l
 
 `PalaceEprResult`, `epr_result`, `reanalyze_epr`, `resolve_epr_result`, `show_epr`.
 
-**S-parameters.** Detach a Driven run's S-parameters, with its Surface EPR, and write its Touchstone file. [Reference](specs/report-model.qmd)
+**S-parameters.** Detach a Driven run's S-parameters, with its Surface EPR, and write its Touchstone file. [Reference](../guides/s-parameters-palace.qmd)
 
 `AdaptiveSampling`, `DrivenSurfaceEpr`, `PalaceDrivenResult`, `SParameterPort`, `SParameters`.
 
@@ -119,7 +119,7 @@ Every name below is importable from the package it is listed under. Each group l
 | Source | SHA-256 |
 |---|---|
 | `scripts/generate_knowledge_reference.py` | `a66b84bc16c213b694b20d3ef1c6f8867d3dfb30a7d6f9d5034ac2e292c0eb49` |
-| `docs/knowledge-sources.json` | `59332fc0b427a88eafd90bb9e6f2617e2e0c4148735cbb52c931bdda94c5deaf` |
+| `docs/knowledge-sources.json` | `9c2a1cbca56e1b43caedfe0b5d1ac8531805c9aee72240117bcfe31beb186680` |
 | `src/scgsim/aedt/epr/workflow.py` | `67e0c56b737aa0b7d7804b8c2836ebe107af0850573c496fe432b8658eebd760` |
 | `docs/reference/api/analyze-epr-usage.md` | `99d31a61922a5b4938bb2b6d5f0bc094037045b51377ee711c1683c78cd7e728` |
 | `zh-TW/docs/reference/api/analyze-epr-usage.md` | `a91990007fa95a2979b3a2d039c4e70f3d4efcdb950835e552bee4c1a6fcf779` |
@@ -172,6 +172,7 @@ The README and English `docs/*.qmd` pages are bundled; the following public docu
 - `zh-TW/docs/guides/preview-the-geometry.qmd`
 - `zh-TW/docs/guides/run-elsewhere.qmd`
 - `zh-TW/docs/guides/s-parameters-hfss.qmd`
+- `zh-TW/docs/guides/s-parameters-palace.qmd`
 - `zh-TW/docs/guides/saved-fields.qmd`
 - `zh-TW/docs/guides/upgrade.qmd`
 - `zh-TW/docs/guides/xmon/aedt.qmd`

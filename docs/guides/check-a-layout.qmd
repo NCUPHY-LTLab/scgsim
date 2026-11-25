@@ -167,6 +167,7 @@ every simulation the cell is meant for:
 |---|---|
 | Palace Eigenmode | `scgsim.palace.EigenmodeSim.simulation_drc(plan, route=...)` |
 | Palace Electrostatic | `scgsim.palace.ElectrostaticSim.simulation_drc(plan, route=...)` |
+| Palace Driven | `scgsim.palace.DrivenSim.simulation_drc(plan, route=...)` |
 | AEDT HFSS Eigenmode | `scgsim.aedt.EigenmodeSim.simulation_drc(plan, modeling=...)` |
 | AEDT HFSS Driven Terminal or Q3D | No separate call: `prepare_hfss_driven_from_geometry` and `prepare_q3d_from_geometry` run the same steps before AEDT starts, and refuse there |
 
@@ -175,9 +176,10 @@ metal's thickness, and `"A"` makes each film a sheet of zero thickness; pass
 `approximation_profile` as you pass it to `set_route`. `modeling` is the AEDT
 one, `"thin_film"` or `"solid"`, with no default. A pass on one route or
 modeling says nothing about another, and Palace and AEDT never stand for each
-other. Only the two Palace classes, on the same plan and route, build the same
-model when the plan has no port sheet; with port sheets they differ, because
-Eigenmode cuts each sheet to a lumped port.
+other. Palace Eigenmode and Electrostatic, on the same plan and route, build
+the same model only when the plan has no port sheet; with port sheets they
+differ, because Eigenmode cuts each sheet to a lumped port. Driven cuts the
+sheets as Eigenmode does, and needs at least one `LumpedPort`.
 
 For a cell meant for several simulations, check the one plan with each:
 

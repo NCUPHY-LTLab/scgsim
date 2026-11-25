@@ -3,8 +3,8 @@
 Everything else (the plan with its vacuum, Surface EPR and lumped elements, route, mesh controls, ``mesh()``,
 ``simulation_drc``, the summaries and the handoff) is ``PalaceSimulation`` in ``core``; this file shows only what
 the Driven problem adds.  Palace solves the field at each frequency with one port excited and the others
-terminated in their impedance, and writes the S-matrix (``port-S``).  SCGSim prepares the run; it does not
-read a Driven run back yet.
+terminated in their impedance, and writes the S-matrix (``port-S``).  ``resolve_palace_result(...).driven_result()``
+reads the returned run back (``scgsim.palace.results.driven``).
 """
 
 from __future__ import annotations

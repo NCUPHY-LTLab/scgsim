@@ -22,7 +22,7 @@ Palace, in one script.
 |---|---|---|
 | What is the capacitance of a pad? | [Palace: terminal capacitance](../guides/capacitance-palace.qmd) · [AEDT: Q3D extraction](../guides/capacitance-q3d.qmd) | SimplePad: [Palace Electrostatic](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/palace_electrostatic.qmd) · [AEDT Q3D](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_q3d.qmd) |
 | What are the frequency and Q of a resonator, and how does its energy divide among surfaces, bulk and the junction? | [Palace: resonant modes](../guides/modes-palace.qmd) · [AEDT: HFSS Eigenmode](../guides/modes-hfss.qmd) | SimplePad: [Palace Eigenmode and EPR](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/palace_eigenmode.qmd) · [HFSS Eigenmode and surface EPR](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.qmd) |
-| What are the S-parameters of a two-port? | [AEDT: HFSS Driven Terminal](../guides/s-parameters-hfss.qmd) | [17-bridge CPW–meander coupon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/CpwMeanderAirbridge) (HFSS Driven Terminal) |
+| What are the S-parameters of a two-port? | [Palace: S-parameters](../guides/s-parameters-palace.qmd) · [AEDT: HFSS Driven Terminal](../guides/s-parameters-hfss.qmd) | [17-bridge CPW–meander coupon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/CpwMeanderAirbridge) (HFSS Driven Terminal) |
 | What are the per-length C, G, L and R of a line? | [AEDT: Q2D cross-section extraction](../guides/line-parameters-q2d.qmd) | Finite-ground CPW: [AEDT Q2D](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/CrossSectionSimulation/CpwFiniteGround/aedt_q2d.qmd) |
 
 The notebooks are those of PDK revision `49e539f`, the revision the
@@ -30,8 +30,9 @@ The notebooks are those of PDK revision `49e539f`, the revision the
 SCGSim and are being moved to this version, so where a notebook and a guide
 differ, follow the guide.
 
-S-parameters need a layout with a lumped-port sheet for each of the two ports;
-Driven Modal and wave ports are not available in this version.
+S-parameters need a layout with a lumped-port sheet for each port; HFSS
+takes exactly two. Wave ports and HFSS Driven Modal are not available in this
+version.
 
 ## A larger worked example {#public-inputs}
 
