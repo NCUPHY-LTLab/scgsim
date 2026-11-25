@@ -2,8 +2,10 @@
 
 Columns are bound to ports by name, never by position.  ``|S[o][e]|`` is the port with ``Index`` o in the index
 map, which names it as the plan does, at excitation e, which the config gives (``driven_excitations``: each
-port is excited by its own ``Index``).  The ports are in the index map's order, the plan's: port i is row and
-column i of the S-matrix.
+port is excited by its own ``Index``).  The S-matrix is over the plan's ports, in the index map's order, the
+plan's: port i is row and column i.  The plan's other lumped elements are unexcited lumped ports; Palace writes
+their columns too, which the table validators check and the record leaves out, since an element is a
+termination of the device, not one of its ports.
 
 Whether the adaptive fast sweep converged is written only to Palace's log, so a run whose log says an excitation
 reached its maximum number of samples is refused, naming the port and ``adaptive_max_samples``.
@@ -28,6 +30,7 @@ from scgsim.palace.results.driven_records import (
 from scgsim.palace.results.driven_tables import (
     FREQUENCY_COLUMN,
     driven_excitations,
+    excitation_suffix,
     requested_sweep,
 )
 from scgsim.palace.results.inspection_records import (
@@ -57,15 +60,9 @@ def driven_result(run: ResolvedRunData) -> PalaceDrivenResult:
     """
     _require_driven(run)
     config = run.provenance.config
-    ports = _ports(run.provenance.index_map, config)
+    # The ports are the excited lumped ports; each excitation is its port's Index.
     excitations = driven_excitations(config)
-    if excitations != tuple(range(1, len(ports) + 1)):
-        raise ValueError(
-            internal(
-                "the Driven excitations are not the ports 1..N the index map lists: "
-                + found_text(excitations, tuple(range(1, len(ports) + 1)))
-            )
-        )
+    ports = _ports(run.provenance.index_map, config, excitations)
     port_s = run.tables["port-S"]
     # The frequencies as Palace printed them, which the table validators checked are the requested ones.
     frequencies_hz = tuple(row[FREQUENCY_COLUMN] * 1e9 for row in port_s.rows)
@@ -73,12 +70,12 @@ def driven_result(run: ResolvedRunData) -> PalaceDrivenResult:
     return PalaceDrivenResult(
         ports=ports,
         frequencies_hz=frequencies_hz,
-        magnitude_db=_s_matrices(port_s, len(ports), "|S[{o}][{e}]| (dB)"),
-        phase_deg=_s_matrices(port_s, len(ports), "arg(S[{o}][{e}]) (deg.)"),
+        magnitude_db=_s_matrices(port_s, excitations, "|S[{o}][{e}]| (dB)"),
+        phase_deg=_s_matrices(port_s, excitations, "arg(S[{o}][{e}]) (deg.)"),
         sweep=sweep.to_payload(),
         provenance=_provenance(run, sweep),
         surface_epr=_surface_epr(run, excitations, frequencies_hz),
-        adaptive_sampling=_adaptive_sampling(run, ports, sweep),
+        adaptive_sampling=_adaptive_sampling(run, excitations, ports, sweep),
     )
 
 
@@ -97,9 +94,11 @@ def _require_driven(run: object) -> None:
 
 
 def _ports(
-    index_map: Mapping[str, Any], config: Mapping[str, Any]
+    index_map: Mapping[str, Any],
+    config: Mapping[str, Any],
+    excitations: tuple[int, ...],
 ) -> tuple[SParameterPort, ...]:
-    """The S-matrix ports in the index map's order, the plan's, each with the impedance its config row has."""
+    """The S-matrix ports, the excited ones, in the index map's order, each with the impedance its config row has."""
     rows = {
         row["Index"]: row
         for row in expect_mapping(config.get("Boundaries"), "config.Boundaries")[
@@ -110,7 +109,7 @@ def _ports(
         (
             entry
             for entry in index_map["entries"]
-            if entry["section"] == LUMPED_PORT_SECTION
+            if entry["section"] == LUMPED_PORT_SECTION and entry["index"] in excitations
         ),
         key=lambda entry: entry["index"],
     )
@@ -129,14 +128,14 @@ def _ports(
 
 
 def _s_matrices(
-    port_s: ParsedTable, ports: int, column: str
+    port_s: ParsedTable, ports: tuple[int, ...], column: str
 ) -> tuple[tuple[tuple[float, ...], ...], ...]:
-    """One value of ``column`` (``{o}`` the output port, ``{e}`` the excitation) per frequency, output and port."""
+    """One value of ``column`` (``{o}`` the output port, ``{e}`` the excitation) per frequency, output and port.
+
+    ``ports`` are the Palace indices of the plan's ports, which are also their excitations.
+    """
     return tuple(
-        tuple(
-            tuple(float(row[column.format(o=o, e=e)]) for e in range(1, ports + 1))
-            for o in range(1, ports + 1)
-        )
+        tuple(tuple(float(row[column.format(o=o, e=e)]) for e in ports) for o in ports)
         for row in port_s.rows
     )
 
@@ -182,10 +181,12 @@ def _surface_epr(
             internal(
                 "the Surface-EPR bindings do not cover the surface-Q columns: "
                 + found_text(
-                    len(surfaces) + len(margins), (len(table.headers) - 1) // 2
+                    len(surfaces) + len(margins),
+                    (len(table.headers) - 1) // (2 * len(excitations)),
                 )
             )
         )
+    suffix = {e: excitation_suffix(e, excitations) for e in excitations}
     return tuple(
         DrivenSurfaceEpr(
             excited_port=excitation,
@@ -193,14 +194,14 @@ def _surface_epr(
             surfaces=tuple(
                 SurfaceEprRecord(
                     **binding.record_fields(),
-                    **_row_values(row, binding.index, excitation),
+                    **_row_values(row, binding.index, suffix[excitation]),
                 )
                 for binding in surfaces
             ),
             margins=tuple(
                 SurfaceMarginEprRecord(
                     **binding.record_fields(),
-                    **_row_values(row, binding.index, excitation),
+                    **_row_values(row, binding.index, suffix[excitation]),
                 )
                 for binding in margins
             ),
@@ -210,13 +211,11 @@ def _surface_epr(
     )
 
 
-def _row_values(
-    row: Mapping[str, Any], surface: int, excitation: int
-) -> dict[str, Any]:
-    """One Surface-EPR row's participation and Q at one frequency with one port excited."""
+def _row_values(row: Mapping[str, Any], surface: int, suffix: str) -> dict[str, Any]:
+    """One Surface-EPR row's participation and Q at one frequency, ``suffix`` naming the excited port."""
     return {
-        "participation": float(row[f"p_surf[{surface}][{excitation}]"]),
-        "quality_factor": float(row[f"Q_surf[{surface}][{excitation}]"]),
+        "participation": float(row[f"p_surf[{surface}]{suffix}"]),
+        "quality_factor": float(row[f"Q_surf[{surface}]{suffix}"]),
     }
 
 
@@ -225,7 +224,8 @@ def _row_values(
 # Palace 0.18.1 prints, for each excitation, "Adding excitation index {k} ({i}/{n}):", then once its
 # reduced model is built "Adaptive sampling converged with {N} frequency samples:" or "Adaptive sampling
 # reached maximum {N} frequency samples:", then " n = .., error = {e}, tol = .., memory = ../.." and
-# " Sampled frequencies (GHz): {f}, {f}, ...".  An AMR pass repeats them; the last pass's are the result's.
+# " Sampled frequencies (GHz): {f}, {f}, ...".  A run with one excitation prints no "Adding excitation" line
+# (issue 187, round 2 of slice 5).  An AMR pass repeats them; the last pass's are the result's.
 _EXCITATION_LINE = re.compile(r"^Adding excitation index (\d+) \(\d+/\d+\):")
 _STATUS_LINE = re.compile(
     r"^Adaptive sampling (converged with|reached maximum) (\d+) frequency samples:"
@@ -245,19 +245,25 @@ class _LoggedSampling:
 
 
 def _adaptive_sampling(
-    run: ResolvedRunData, ports: tuple[SParameterPort, ...], sweep: DrivenSweep
+    run: ResolvedRunData,
+    excitations: tuple[int, ...],
+    ports: tuple[SParameterPort, ...],
+    sweep: DrivenSweep,
 ) -> tuple[AdaptiveSampling, ...]:
-    """The adaptive sampling of every port, from the log; a uniform sweep has none."""
+    """The adaptive sampling of every port, from the log; a uniform sweep has none.
+
+    ``excitations`` are the ports' excitation indices, in the order of ``ports``.
+    """
     if not sweep.adaptive:
         return ()
     log = run.returned_receipt.log
     if log is None:
         raise ValueError(internal("a resolved run has no returned log record"))
     logged = _logged_sampling(
-        confined_path(run.run_dir, log["path"]).read_text(encoding="utf-8")
+        confined_path(run.run_dir, log["path"]).read_text(encoding="utf-8"), excitations
     )
     sampling = []
-    for number, port in enumerate(ports, start=1):
+    for number, port in zip(excitations, ports, strict=True):
         status = logged.get(number)
         if status is not None and status.reached_maximum:
             raise ValueError(_not_converged(number, port, status, sweep))
@@ -279,10 +285,13 @@ def _adaptive_sampling(
     return tuple(sampling)
 
 
-def _logged_sampling(text: str) -> dict[int, _LoggedSampling]:
+def _logged_sampling(
+    text: str, excitations: tuple[int, ...]
+) -> dict[int, _LoggedSampling]:
     """The last adaptive-sampling record of each excitation in a Palace log."""
     logged: dict[int, _LoggedSampling] = {}
-    excitation: int | None = None
+    # With one excitation, no line names it, so every record is that excitation's.
+    excitation = excitations[0] if len(excitations) == 1 else None
     current: _LoggedSampling | None = None
     for line in text.splitlines():
         if match := _EXCITATION_LINE.match(line):

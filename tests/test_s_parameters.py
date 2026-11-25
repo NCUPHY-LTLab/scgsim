@@ -11,7 +11,7 @@ import cmath
 import math
 
 import pytest
-from palace_driven_e1_support import read_touchstone
+from palace_driven_runs_support import read_touchstone
 
 from scgsim.semantics.s_parameters import SParameterPort, SParameters
 

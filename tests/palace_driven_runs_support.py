@@ -1,15 +1,23 @@
-"""The two real Palace Driven runs of issue 187's E1, kept as test fixtures, and the result they resolve to.
+"""Five real Palace Driven runs of issue 187, kept as test fixtures, and the result each resolves to.
 
-``tests/fixtures/palace_driven_e1`` keeps, for each run, the files of its returned run folder that the readback
+``tests/fixtures/palace_driven_runs`` keeps, for each run, the files of its returned run folder that the readback
 reads, at their run-folder paths: the sealed ``config.json`` and ``metadata/palace_index_map.json``; the six
 tables and the ``palace.json`` stock Palace 0.18.1 wrote into ``results/palace``; and its log
 ``logs/palace-manual.log``, whose launch line is scrubbed of the local install paths.  Nothing else is changed.
-The layout is the launcher-to-launcher composition of ``palace_driven_support`` (two 50 ohm ports, the left
-launcher port 1; MA, MS and SA Surface EPR without bands, 7 ``Dielectric`` rows; Route B), prepared with
-``DrivenSim`` and solved on 8 MPI ranks:
+The layout is the launcher-to-launcher composition of ``palace_driven_support`` (MA, MS and SA Surface EPR without
+bands, 7 ``Dielectric`` rows; Route B; the left sheet a 50 ohm port, port 1), prepared with ``DrivenSim`` and
+solved on 8 MPI ranks, the same mesh in each.  E1's two runs have the right sheet as port 2, 50 ohm:
 
 - ``r1_order1_uniform5``: FEM order 1, a uniform sweep of 5 points from 2 to 10 GHz.
 - ``r3_order2_adaptive81``: FEM order 2, the adaptive sweep (tolerance 1e-3) of 81 points from 2 to 10 GHz.
+
+The runs of round 2 of slice 5 have the right sheet as an unexcited ``LumpedElement``, at FEM order 1, so they
+have one excitation:
+
+- ``ra_element_r50_uniform5``: ``resistance_ohm=50.0``, r1's sweep.  Port 1 sees the same 50 ohm termination as
+  in r1, so its S11 is r1's.
+- ``rb_element_l10nh_uniform5``: ``inductance_h=10e-9``, r1's sweep.
+- ``rc_element_r50_adaptive11``: ra's element, the adaptive sweep (tolerance 1e-3) of 11 points.
 
 The 12 MB mesh is not kept, so these files alone cannot pass the run folder's identity checks.
 ``fixture_result`` builds the ``ResolvedPalaceResult`` those checks lead to, from the real tables read by the
@@ -46,9 +54,12 @@ from scgsim.palace.results.tables import (
     read_result_table,
 )
 
-FIXTURES = Path(__file__).parent / "fixtures" / "palace_driven_e1"
+FIXTURES = Path(__file__).parent / "fixtures" / "palace_driven_runs"
 UNIFORM_RUN = "r1_order1_uniform5"
 ADAPTIVE_RUN = "r3_order2_adaptive81"
+RESISTOR_RUN = "ra_element_r50_uniform5"
+INDUCTOR_RUN = "rb_element_l10nh_uniform5"
+RESISTOR_ADAPTIVE_RUN = "rc_element_r50_adaptive11"
 LOG = solver_log("manual")
 
 

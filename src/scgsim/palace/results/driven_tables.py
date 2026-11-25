@@ -1,10 +1,13 @@
 """Validate the native tables of a Palace Driven run: Palace 0.18.1's headers, one row per requested frequency.
 
-``DrivenSim`` excites each lumped port of the plan on its own, with ``Excitation`` equal to the port's ``Index``
-(``driven_excitations``).  So each table but ``error-indicators`` has one block of columns per excitation, in
-excitation order, and one row per frequency of the sweep the sealed config requests (``requested_sweep``,
-``requested_frequencies_ghz``).  Its ``f (GHz)`` column must be those frequencies, in order, to the 9
-significant digits Palace prints.
+``DrivenSim`` excites each port of the plan on its own, with ``Excitation`` equal to the port's ``Index``, and
+writes the plan's other lumped elements as unexcited lumped ports (``Excitation: false``; ``driven_excitations``).
+So each table but ``error-indicators`` has one block of columns per excitation, in excitation order, and one row
+per frequency of the sweep the sealed config requests (``requested_sweep``, ``requested_frequencies_ghz``).  Its
+``f (GHz)`` column must be those frequencies, in order, to the 9 significant digits Palace prints.
+
+Within a block, ``port-S``, ``port-V`` and ``port-I`` have columns for every lumped port, the unexcited elements
+included: stock Palace 0.18.1 wrote them so for an element of R 50 ohm and one of L 10 nH (issue 187).
 """
 
 from __future__ import annotations
@@ -37,11 +40,15 @@ _PRINTED_DIGITS = 9
 
 
 class _Counts(NamedTuple):
-    """How many lumped ports, energy domains and Surface-EPR rows the index map configures."""
+    """How many lumped ports (the elements included), energy domains and Surface-EPR rows the index map configures."""
 
     ports: int
     domains: int
     surfaces: int
+
+
+_Columns = Callable[[int, str, _Counts], list[str]]
+"""The columns of one table for one excitation, given the excitation, its header suffix and the counts."""
 
 
 def validate_driven_table(
@@ -57,12 +64,15 @@ def validate_driven_table(
     counts = _Counts(
         index_counts["lumped_port"], index_counts["domain"], index_counts["surface"]
     )
+    excitations = driven_excitations(config)
     expected = (
         FREQUENCY_COLUMN,
         *(
             column
-            for excitation in driven_excitations(config)
-            for column in columns(excitation, counts)
+            for excitation in excitations
+            for column in columns(
+                excitation, excitation_suffix(excitation, excitations), counts
+            )
         ),
     )
     _require_headers(table, expected)
@@ -76,11 +86,10 @@ def validate_driven_table(
 
 
 def driven_excitations(config: Mapping[str, Any]) -> tuple[int, ...]:
-    """The excitation indices of a Driven config, in order: each lumped port excited by its own ``Index``.
+    """The excitation indices of a Driven config, in order: each port excited by its own ``Index``.
 
     The column block of excitation e is then the one with port e driven.  An unexcited lumped element
-    (``Excitation: false``) is refused: Palace 0.18.1's ``port-S`` columns for a run with one are not
-    verified, so SCGSim does not read its S-matrix yet.
+    (``Excitation: false``) is no excitation; its columns are in every block.
     """
     boundaries = expect_mapping(config.get("Boundaries"), "config.Boundaries")
     rows = expect_list(boundaries.get("LumpedPort"), "config.Boundaries.LumpedPort")
@@ -90,26 +99,34 @@ def driven_excitations(config: Mapping[str, Any]) -> tuple[int, ...]:
         index = expect_int(port.get("Index"), "config LumpedPort Index")
         excitation = port.get("Excitation")
         if excitation is False:
-            raise NotImplementedError(
-                Declared(
-                    f"the Driven run's lumped element at LumpedPort Index {index}",
-                    "the plan: GeometryPlan.set_lumped_elements, with the Driven ports only",
-                ).refusal(
-                    "is an unexcited lumped port, and SCGSim does not read the S-parameters of a run with "
-                    "one yet: stock Palace 0.18.1's port-S columns for it are not verified"
-                )
-            )
+            continue
         if type(excitation) is not int or excitation != index:
             raise ValueError(
                 Declared(
                     f"{CONFIG} LumpedPort Index {index} Excitation", RETURNED_RUN_FOLDER
                 ).refusal(
-                    "must be the port's own Index, as DrivenSim writes it: "
-                    + found_text(excitation, index)
+                    "must be the port's own Index, or false for a lumped element, as DrivenSim "
+                    "writes it: " + found_text(excitation, index)
                 )
             )
         excitations.append(index)
+    if not excitations:
+        raise ValueError(
+            Declared(f"{CONFIG} Boundaries.LumpedPort", RETURNED_RUN_FOLDER).refusal(
+                "excites no port, and a Driven run drives at least one"
+            )
+        )
     return tuple(sorted(excitations))
+
+
+def excitation_suffix(excitation: int, excitations: tuple[int, ...]) -> str:
+    """What follows a port, domain or row index in a header of excitation ``excitation``: ``[e]``, or nothing.
+
+    Palace 0.18.1 writes the excitation into ``port-V``, ``port-I``, ``domain-E`` and ``surface-Q`` headers only
+    when the run has more than one (``V_inc[2][2]``, ``p_surf[7][2]``); with one it writes ``V_inc[1]`` and
+    ``p_surf[7]``.  ``port-S`` always writes it.
+    """
+    return f"[{excitation}]" if len(excitations) > 1 else ""
 
 
 def requested_frequencies_ghz(config: Mapping[str, Any]) -> tuple[float, ...]:
@@ -167,8 +184,8 @@ def _linear_range(config: Mapping[str, Any]) -> _LinearRange:
     return _LinearRange(low, high, count, driven)
 
 
-def _port_s_columns(excitation: int, counts: _Counts) -> list[str]:
-    """``|S[o][e]|`` in dB and ``arg(S[o][e])`` in degrees at every port o, with port e excited."""
+def _port_s_columns(excitation: int, _suffix: str, counts: _Counts) -> list[str]:
+    """``|S[o][e]|`` in dB and ``arg(S[o][e])`` in degrees at every lumped port o, with port e excited."""
     return [
         column
         for port in range(1, counts.ports + 1)
@@ -179,18 +196,18 @@ def _port_s_columns(excitation: int, counts: _Counts) -> list[str]:
     ]
 
 
-def _port_wave_columns(kind: str, unit: str) -> Callable[[int, _Counts], list[str]]:
-    """The ``port-V`` or ``port-I`` block of one excitation: its incident value, then each port's complex one."""
+def _port_wave_columns(kind: str, unit: str) -> _Columns:
+    """The ``port-V`` or ``port-I`` block of one excitation: its incident value, then each lumped port's complex one."""
 
-    def columns(excitation: int, counts: _Counts) -> list[str]:
+    def columns(excitation: int, suffix: str, counts: _Counts) -> list[str]:
         return [
-            f"{kind}_inc[{excitation}][{excitation}] ({unit})",
+            f"{kind}_inc[{excitation}]{suffix} ({unit})",
             *(
                 column
                 for port in range(1, counts.ports + 1)
                 for column in (
-                    f"Re{{{kind}[{port}][{excitation}]}} ({unit})",
-                    f"Im{{{kind}[{port}][{excitation}]}} ({unit})",
+                    f"Re{{{kind}[{port}]{suffix}}} ({unit})",
+                    f"Im{{{kind}[{port}]{suffix}}} ({unit})",
                 )
             ),
         ]
@@ -198,39 +215,33 @@ def _port_wave_columns(kind: str, unit: str) -> Callable[[int, _Counts], list[st
     return columns
 
 
-def _domain_columns(excitation: int, counts: _Counts) -> list[str]:
+def _domain_columns(_excitation: int, suffix: str, counts: _Counts) -> list[str]:
     """The field energies of one excitation, then each domain's energies and participations."""
     return [
-        *(
-            f"{name}[{excitation}] (J)"
-            for name in ("E_elec", "E_mag", "E_cap", "E_ind")
-        ),
+        *(f"{name}{suffix} (J)" for name in ("E_elec", "E_mag", "E_cap", "E_ind")),
         *(
             column
             for domain in range(1, counts.domains + 1)
             for column in (
-                f"E_elec[{domain}][{excitation}] (J)",
-                f"p_elec[{domain}][{excitation}]",
-                f"E_mag[{domain}][{excitation}] (J)",
-                f"p_mag[{domain}][{excitation}]",
+                f"E_elec[{domain}]{suffix} (J)",
+                f"p_elec[{domain}]{suffix}",
+                f"E_mag[{domain}]{suffix} (J)",
+                f"p_mag[{domain}]{suffix}",
             )
         ),
     ]
 
 
-def _surface_columns(excitation: int, counts: _Counts) -> list[str]:
+def _surface_columns(_excitation: int, suffix: str, counts: _Counts) -> list[str]:
     """Each Surface-EPR row's participation and Q with one port excited."""
     return [
         column
         for surface in range(1, counts.surfaces + 1)
-        for column in (
-            f"p_surf[{surface}][{excitation}]",
-            f"Q_surf[{surface}][{excitation}]",
-        )
+        for column in (f"p_surf[{surface}]{suffix}", f"Q_surf[{surface}]{suffix}")
     ]
 
 
-_EXCITATION_COLUMNS: dict[str, Callable[[int, _Counts], list[str]]] = {
+_EXCITATION_COLUMNS: dict[str, _Columns] = {
     "port-S": _port_s_columns,
     "port-V": _port_wave_columns("V", "V"),
     "port-I": _port_wave_columns("I", "A"),

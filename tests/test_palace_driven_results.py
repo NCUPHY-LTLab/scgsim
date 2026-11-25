@@ -1,10 +1,10 @@
 """Reading a returned Palace Driven run back: the strict tables, the S-parameters, Surface EPR and adaptive sampling.
 
-The tables, ``palace.json`` and logs are the real outputs of stock Palace 0.18.1 in issue 187's E1
-(``palace_driven_e1_support``): an order-1 uniform sweep of 5 points and an order-2 adaptive sweep of 81, on the
-launcher-to-launcher layout.  Each refusal is shown on a copy of a real file with one change.  The run folder's
-identity checks are stood in for here; ``test_palace_driven_launchers`` (PDK) runs ``resolve_palace_result`` on
-a run folder of the same config.
+The tables, ``palace.json`` and logs are the real outputs of stock Palace 0.18.1 on the launcher-to-launcher
+layout (``palace_driven_runs_support``): issue 187's E1, two ports at order 1 and 2, and three runs with the
+right sheet an unexcited lumped element, one excitation each.  Each refusal is shown on a copy of a real file
+with one change.  The run folder's identity checks are stood in for here; ``test_palace_driven_launchers`` (PDK)
+runs ``resolve_palace_result`` on a run folder of the same config.
 """
 
 from __future__ import annotations
@@ -16,9 +16,12 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from palace_driven_e1_support import (
+from palace_driven_runs_support import (
     ADAPTIVE_RUN,
+    INDUCTOR_RUN,
     LOG,
+    RESISTOR_ADAPTIVE_RUN,
+    RESISTOR_RUN,
     UNIFORM_RUN,
     copied_run,
     fixture_result,
@@ -36,7 +39,16 @@ from scgsim.palace import (
 
 PORTS = ("chip/o_lumped_left", "chip/o_lumped_right")
 SHEETS = tuple(f"PORT_SHEET__{name}__0000" for name in PORTS)
-POINTS = {UNIFORM_RUN: 5, ADAPTIVE_RUN: 81}
+POINTS = {
+    UNIFORM_RUN: 5,
+    ADAPTIVE_RUN: 81,
+    RESISTOR_RUN: 5,
+    INDUCTOR_RUN: 5,
+    RESISTOR_ADAPTIVE_RUN: 11,
+}
+ALL_RUNS = tuple(POINTS)
+TWO_PORT_RUNS = (UNIFORM_RUN, ADAPTIVE_RUN)
+ELEMENT_RUNS = (RESISTOR_RUN, INDUCTOR_RUN, RESISTOR_ADAPTIVE_RUN)
 
 
 def _result(tmp_path: Path, run: str) -> PalaceDrivenResult:
@@ -63,8 +75,8 @@ def _rows(root: Path, family: str) -> list[dict[str, float]]:
 # ---- The tables, at Palace 0.18.1's headers ----------------------------------------------------------------
 
 
-@pytest.mark.parametrize("run", [UNIFORM_RUN, ADAPTIVE_RUN])
-def test_the_real_tables_of_both_runs_pass_their_validators(tmp_path, run):
+@pytest.mark.parametrize("run", ALL_RUNS)
+def test_the_real_tables_of_every_run_pass_their_validators(tmp_path, run):
     """Every table stock Palace wrote is read, one row per requested frequency."""
     result = fixture_result(copied_run(run, tmp_path))
     assert set(result.tables) == {
@@ -176,16 +188,38 @@ def _rewrite_config(root: Path, change) -> None:
     (root / CONFIG).write_text(json.dumps(config), encoding="utf-8")
 
 
-def test_an_unexcited_lumped_element_is_refused_by_name(tmp_path):
-    """Palace's columns for a run with an unexcited element are not verified, so its S-matrix is not read."""
-    root = copied_run(UNIFORM_RUN, tmp_path)
+@pytest.mark.parametrize(
+    ("family", "header", "multiple"),
+    [
+        ("port-V", "V_inc[1] (V)", "V_inc[1][1] (V)"),
+        ("port-I", "Re{I[2]} (A)", "Re{I[2][1]} (A)"),
+        ("domain-E", "p_elec[2]", "p_elec[2][1]"),
+        ("surface-Q", "p_surf[7]", "p_surf[7][1]"),
+    ],
+)
+def test_a_run_with_one_excitation_names_no_excitation_in_its_headers(
+    tmp_path, family, header, multiple
+):
+    """Palace writes ``[e]`` into these headers only for two excitations or more, so one run's ``[1]`` is refused."""
+    root = copied_run(RESISTOR_RUN, tmp_path)
+    rows = _cells(root, family)
+    assert header in rows[0]
+    rows[0] = [multiple if cell == header else cell for cell in rows[0]]
+    _write_cells(root, family, rows)
+    with pytest.raises(
+        ValueError, match="are not the .* columns stock Palace 0.18.1 writes"
+    ):
+        fixture_result(root)
+
+
+def test_a_config_that_excites_no_port_is_refused(tmp_path):
+    """A Driven run drives at least one port; a config with only unexcited lumped ports has no S-matrix."""
+    root = copied_run(RESISTOR_RUN, tmp_path)
     _rewrite_config(
         root,
-        lambda config: config["Boundaries"]["LumpedPort"][1].update(Excitation=False),
+        lambda config: config["Boundaries"]["LumpedPort"][0].update(Excitation=False),
     )
-    with pytest.raises(
-        NotImplementedError, match="LumpedPort Index 2: is an unexcited lumped port"
-    ):
+    with pytest.raises(ValueError, match="excites no port"):
         fixture_result(root)
 
 
@@ -202,7 +236,7 @@ def test_an_excitation_that_is_not_the_port_s_index_is_refused(tmp_path):
 # ---- The S-parameters --------------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("run", [UNIFORM_RUN, ADAPTIVE_RUN])
+@pytest.mark.parametrize("run", TWO_PORT_RUNS)
 def test_the_ports_are_the_plan_s_in_the_index_map_s_order(tmp_path, run):
     """A9: port i of the index map (port i of the plan) is port i of the record and of its Touchstone file."""
     root = copied_run(run, tmp_path)
@@ -232,7 +266,7 @@ def test_the_ports_are_the_plan_s_in_the_index_map_s_order(tmp_path, run):
     ]
 
 
-@pytest.mark.parametrize("run", [UNIFORM_RUN, ADAPTIVE_RUN])
+@pytest.mark.parametrize("run", TWO_PORT_RUNS)
 def test_each_entry_is_the_cell_its_ports_name(tmp_path, run):
     """``magnitude_db[k][o-1][e-1]`` is the cell under ``|S[o][e]| (dB)``: columns are bound by name."""
     root = copied_run(run, tmp_path)
@@ -282,6 +316,63 @@ def test_the_order_2_run_is_the_matched_lossless_line_of_the_plan(tmp_path):
     )
 
 
+@pytest.mark.parametrize("run", ELEMENT_RUNS)
+def test_an_unexcited_element_is_a_termination_not_a_port_of_the_record(tmp_path, run):
+    """The S-matrix is over the plan's one port; the element's columns are validated and left out.
+
+    Palace writes ``|S[2][1]|`` and ``V[2]``, ``I[2]`` for the unexcited element on the right sheet, which the
+    strict headers require.  The record has port 1 only, and its ``.s1p`` holds S11 alone.
+    """
+    root = copied_run(run, tmp_path)
+    result = fixture_result(root).driven_result()
+    entries = [
+        e["port_name"]
+        for e in read_json(root, INDEX_MAP)["entries"]
+        if e["section"] == LUMPED_PORT_SECTION
+    ]
+    assert entries == list(PORTS)
+    assert [port.name for port in result.ports] == [PORTS[0]]
+    header = _cells(root, "port-S")[0]
+    assert header == [
+        "f (GHz)",
+        "|S[1][1]| (dB)",
+        "arg(S[1][1]) (deg.)",
+        "|S[2][1]| (dB)",
+        "arg(S[2][1]) (deg.)",
+    ]
+    for row, magnitude, phase in zip(
+        _rows(root, "port-S"), result.magnitude_db, result.phase_deg, strict=True
+    ):
+        assert (magnitude, phase) == (
+            ((row["|S[1][1]| (dB)"],),),
+            ((row["arg(S[1][1]) (deg.)"],),),
+        )
+    option, frequencies, values = read_touchstone(
+        result.write_touchstone(tmp_path / "pad.s1p")
+    )
+    assert option == ["#", "GHz", "S", "DB", "R", "50"]
+    assert values == [
+        [m[0][0], p[0][0]]
+        for m, p in zip(result.magnitude_db, result.phase_deg, strict=True)
+    ]
+
+
+def test_s11_with_a_50_ohm_element_is_s11_with_a_50_ohm_port(tmp_path):
+    """Port 1 sees the right sheet terminated in 50 ohm either way, so ra's S11 is r1's.
+
+    Same mesh, same order, same sweep: they agree to the last digit Palace prints (3.8e-14 measured).
+    """
+    element = _result(tmp_path / "ra", RESISTOR_RUN).s(1, 1)
+    port = _result(tmp_path / "r1", UNIFORM_RUN).s(1, 1)
+    assert max(abs(a - b) for a, b in zip(element, port, strict=True)) < 1e-12
+
+
+def test_a_line_ended_in_an_inductor_reflects_what_it_does_not_lose(tmp_path):
+    """With no resistance at the far end, the near-lossless box returns the power: 1 - |S11|^2 below A4's 1e-3."""
+    s11 = _result(tmp_path, INDUCTOR_RUN).s(1, 1)
+    assert max(1 - abs(value) ** 2 for value in s11) < 1e-3
+
+
 def test_the_touchstone_of_the_uniform_run_is_palace_s_numbers_in_s2p_order(tmp_path):
     """A1: the ``.s2p`` holds Palace's printed |S| (dB) and arg S (degrees) digit for digit, S11 S21 S12 S22."""
     path = _result(tmp_path, UNIFORM_RUN).write_touchstone(tmp_path / "r1.s2p")
@@ -322,11 +413,11 @@ def test_the_touchstone_of_the_adaptive_run_reads_back_as_its_record(tmp_path):
     ]
 
 
-@pytest.mark.parametrize("run", [UNIFORM_RUN, ADAPTIVE_RUN])
+@pytest.mark.parametrize("run", ALL_RUNS)
 def test_the_sweep_and_the_provenance_name_the_request_and_the_files(tmp_path, run):
     """``sweep`` is the request as ``set_driven`` set it; ``provenance`` lists the returned files read, with hashes."""
     result = _result(tmp_path, run)
-    adaptive = run == ADAPTIVE_RUN
+    adaptive = run in {ADAPTIVE_RUN, RESISTOR_ADAPTIVE_RUN}
     assert dict(result.sweep) == {
         "kind": "adaptive" if adaptive else "uniform",
         "start_hz": 2e9,
@@ -347,16 +438,20 @@ def test_the_sweep_and_the_provenance_name_the_request_and_the_files(tmp_path, r
 # ---- Surface EPR -------------------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("run", [UNIFORM_RUN, ADAPTIVE_RUN])
+@pytest.mark.parametrize("run", ALL_RUNS)
 def test_the_surface_epr_is_each_row_s_participation_per_excited_port_and_frequency(
     tmp_path, run
 ):
-    """A8: every configured row, for both ports driven, at every frequency, bound as Eigenmode binds it."""
+    """A8: every configured row, for every port driven, at every frequency, bound as Eigenmode binds it.
+
+    With one excitation Palace's headers carry no excitation index (``p_surf[7]``), with two they do.
+    """
     root = copied_run(run, tmp_path)
     result = fixture_result(root).driven_result()
     rows = _rows(root, "surface-Q")
+    driven = (1, 2) if run in TWO_PORT_RUNS else (1,)
     assert [(item.excited_port, item.frequency_hz) for item in result.surface_epr] == [
-        (port, f) for port in (1, 2) for f in result.frequencies_hz
+        (port, f) for port in driven for f in result.frequencies_hz
     ]
     first = result.surface_epr[0]
     assert [(r.index, r.interface_type) for r in first.surfaces] == [
@@ -372,15 +467,10 @@ def test_the_surface_epr_is_each_row_s_participation_per_excited_port_and_freque
     assert first.margins == ()
     for item in result.surface_epr:
         row = rows[result.frequencies_hz.index(item.frequency_hz)]
+        suffix = f"[{item.excited_port}]" if len(driven) > 1 else ""
         for record in item.surfaces:
-            assert (
-                record.participation
-                == row[f"p_surf[{record.index}][{item.excited_port}]"]
-            )
-            assert (
-                record.quality_factor
-                == row[f"Q_surf[{record.index}][{item.excited_port}]"]
-            )
+            assert record.participation == row[f"p_surf[{record.index}]{suffix}"]
+            assert record.quality_factor == row[f"Q_surf[{record.index}]{suffix}"]
 
 
 # ---- The adaptive sweep in Palace's log --------------------------------------------------------------------
@@ -400,6 +490,34 @@ def test_the_adaptive_sampling_of_each_port_is_read_from_the_log(tmp_path):
         3.744e9,
     )
     assert _result(tmp_path / "uniform", UNIFORM_RUN).adaptive_sampling == ()
+
+
+def test_the_adaptive_sampling_of_a_single_excitation_is_read_from_the_log(tmp_path):
+    """With one excitation Palace prints no "Adding excitation index" line; its one status line is port 1's."""
+    root = copied_run(RESISTOR_ADAPTIVE_RUN, tmp_path)
+    assert "Adding excitation index" not in (root / LOG).read_text(encoding="utf-8")
+    result = fixture_result(root).driven_result()
+    assert [
+        (a.excited_port, a.samples, a.error, a.sampled_frequencies_hz)
+        for a in result.adaptive_sampling
+    ] == [(1, 4, 1.425e-06, (2e9, 10e9, 6.109e9, 3.730e9))]
+
+
+def test_a_single_excitation_that_reached_its_maximum_is_refused_naming_it(tmp_path):
+    """A one-port adaptive sweep is checked as a two-port one: "reached maximum" refuses it, naming port 1."""
+    root = copied_run(RESISTOR_ADAPTIVE_RUN, tmp_path)
+    _rewrite_log(
+        root,
+        lambda text: text.replace(
+            "Adaptive sampling converged with 4 frequency samples:",
+            "Adaptive sampling reached maximum 4 frequency samples:",
+        ),
+    )
+    with pytest.raises(
+        ValueError,
+        match=r"the adaptive sweep with port 1 \(chip/o_lumped_left\) excited",
+    ):
+        fixture_result(root).driven_result()
 
 
 def _rewrite_log(root: Path, change) -> None:

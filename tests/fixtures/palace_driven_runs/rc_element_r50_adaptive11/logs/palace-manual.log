@@ -1,0 +1,317 @@
+SCGSim Palace config compatibility: schema=1-7-0 dry_run_exit=0 compatible=true native_git_tag=0dc74cd binary_sha_recorded=false
+>> mpirun -n 8 palace-x86_64.bin config.json
+
+_____________     _______
+_____   __   \____ __   /____ ____________
+____   /_/  /  __ ` /  /  __ ` /  ___/  _ \
+___   _____/  /_/  /  /  /_/  /  /__/  ___/
+  /__/     \___,__/__/\___,__/\_____\_____/
+
+Git changeset ID: 0dc74cd
+Running with 8 MPI processes, 1 OpenMP thread
+Device configuration: omp,cpu
+Memory configuration: host-std
+libCEED backend: /cpu/self/xsmm/blocked
+
+
+[38;2;255;255;000m--> Warning![0m
+One or more external boundary attributes has no associated boundary condition!
+"PMC"/"ZeroCharge" condition is assumed!
+
+Boundary attribute list: 4, 1-3
+
+
+Characteristic length and time scales:
+ Lc = 2.500e-03 m, tc = 8.339e-03 ns
+Finished partitioning mesh into 8 subdomains
+
+Mesh curvature order: 1
+Mesh bounding box:
+ (Xmin, Ymin, Zmin) = (-9.350e-04, -4.500e-04, -1.500e-03) m
+ (Xmax, Ymax, Zmax) = (+9.350e-04, +4.500e-04, +1.000e-03) m
+
+Parallel Mesh Stats:
+
+                minimum     average     maximum       total
+ vertices          5846        6029        6099       48233
+ edges            34452       35067       35535      280541
+ faces            53502       54538       55085      436310
+ elements         25037       25500       25698      204000
+ neighbors            3           4           7
+
+            minimum     maximum
+ h      3.06018e-05    0.103924
+ kappa      1.06125     205.313
+
+Estimated current per-rank memory usage is: Min. 47.4M, Max. 131.6M, Avg. 58.8M, Total 470.1M
+Estimated current per-node memory usage is: Min. 470.4M, Max. 470.4M, Avg. 470.4M, Total 470.4M
+
+Configuring Robin impedance BC for lumped ports at attributes:
+ 11: Rs = 8.824e+01 Ω/sq, n = (+0.0,+0.0,+1.0)
+ 12: Rs = 8.824e+01 Ω/sq, n = (+0.0,+0.0,+1.0)
+
+Configuring lumped port circuit properties:
+ Index = 1: R = 5.000e+01 Ω
+ Index = 2: R = 5.000e+01 Ω
+
+Configuring lumped port excitation source term at attributes:
+ 11: Index = 1
+
+Configuring Dirichlet PEC BC at attributes:
+ 5-10
+
+Computing adaptive fast frequency response for:
+Excitation with index 1 has contributions from:
+ Lumped port  1
+
+Beginning PROM construction offline phase:
+ 11 points for frequency sweep over [2.000e+00, 1.000e+01] GHz
+
+Assembling system matrices, number of global unknowns:
+ H1 (p = 1): 48233, ND (p = 1): 280541, RT (p = 1): 436310
+ Operator assembly level: Partial
+ Mesh geometries:
+  Tetrahedron: P = 6, Q = 4 (quadrature order = 2)
+ SuperLUSolver: Using 2D processor grid 2 x 4
+
+Assembling multigrid hierarchy:
+ Level 0 (p = 1): 280541 unknowns
+ Level 0 (auxiliary) (p = 1): 48233 unknowns
+
+  Residual norms for GMRES solve
+
+** Memory Usage **********************************
+** Total highmark (MB):
+    Sum-of-all :  3801.78 | Avg :   475.22  | Max :   492.56
+    Max at rank 5, different stages (MB):
+	. symbfact          129.35
+	. distribution      476.22
+	. numfact           124.25
+** NUMfact space (MB): (sum-of-all-processes)
+    L\U :          647.91 |  Total :   969.06
+	. max at rank 5, max L+U memory (MB):    94.88
+	. max at rank 4, peak buffer (MB):       41.28
+**************************************************
+
+** number of Tiny Pivots:        0
+
+  0 (restart 0) KSP residual norm 2.978622e+01
+  1 (restart 0) KSP residual norm 1.094953e+00
+  2 (restart 0) KSP residual norm 1.364198e-02
+  3 (restart 0) KSP residual norm 3.568472e-05
+  4 (restart 0) KSP residual norm 2.524183e-05
+GMRES solver converged in 4 iterations (avg. reduction factor: 3.034e-02)
+ Field energy E (8.695e-12 J) + H (7.293e-12 J) = 1.599e-11 J
+
+  Residual norms for GMRES solve
+
+** Memory Usage **********************************
+** Total highmark (MB):
+    Sum-of-all :  2946.78 | Avg :   368.35  | Max :   384.02
+    Max at rank 5, different stages (MB):
+	. symbfact            0.00
+	. distribution      368.89
+	. numfact           124.25
+** NUMfact space (MB): (sum-of-all-processes)
+    L\U :          647.91 |  Total :   969.06
+	. max at rank 5, max L+U memory (MB):    94.88
+	. max at rank 4, peak buffer (MB):       41.28
+**************************************************
+
+** number of Tiny Pivots:        0
+
+  0 (restart 0) KSP residual norm 7.597321e+01
+  1 (restart 0) KSP residual norm 3.573528e+00
+  2 (restart 0) KSP residual norm 6.046278e-02
+  3 (restart 0) KSP residual norm 7.267243e-04
+  4 (restart 0) KSP residual norm 5.205716e-04
+  5 (restart 0) KSP residual norm 6.801497e-06
+GMRES solver converged in 5 iterations (avg. reduction factor: 3.894e-02)
+ Field energy E (8.348e-12 J) + H (7.602e-12 J) = 1.595e-11 J
+
+  Residual norms for GMRES solve
+
+** Memory Usage **********************************
+** Total highmark (MB):
+    Sum-of-all :  2946.78 | Avg :   368.35  | Max :   384.02
+    Max at rank 5, different stages (MB):
+	. symbfact            0.00
+	. distribution      368.89
+	. numfact           124.25
+** NUMfact space (MB): (sum-of-all-processes)
+    L\U :          647.91 |  Total :   969.06
+	. max at rank 5, max L+U memory (MB):    94.88
+	. max at rank 4, peak buffer (MB):       41.28
+**************************************************
+
+** number of Tiny Pivots:        0
+
+  0 (restart 0) KSP residual norm 4.228182e+01
+  1 (restart 0) KSP residual norm 2.573721e+00
+  2 (restart 0) KSP residual norm 4.016843e-02
+  3 (restart 0) KSP residual norm 3.085595e-04
+  4 (restart 0) KSP residual norm 2.197878e-04
+  5 (restart 0) KSP residual norm 1.707291e-06
+GMRES solver converged in 5 iterations (avg. reduction factor: 3.321e-02)
+
+Greedy iteration 1 (n = 4): ω* = 6.109e+00 GHz (3.201e-01), error = 6.370e-05, memory = 1/2
+ Field energy E (8.566e-12 J) + H (7.408e-12 J) = 1.597e-11 J
+
+  Residual norms for GMRES solve
+
+** Memory Usage **********************************
+** Total highmark (MB):
+    Sum-of-all :  2946.78 | Avg :   368.35  | Max :   384.02
+    Max at rank 5, different stages (MB):
+	. symbfact            0.00
+	. distribution      368.89
+	. numfact           124.25
+** NUMfact space (MB): (sum-of-all-processes)
+    L\U :          647.91 |  Total :   969.06
+	. max at rank 5, max L+U memory (MB):    94.88
+	. max at rank 4, peak buffer (MB):       41.28
+**************************************************
+
+** number of Tiny Pivots:        0
+
+  0 (restart 0) KSP residual norm 3.384122e+01
+  1 (restart 0) KSP residual norm 1.806337e+00
+  2 (restart 0) KSP residual norm 2.524738e-02
+  3 (restart 0) KSP residual norm 1.213253e-04
+  4 (restart 0) KSP residual norm 8.608079e-05
+  5 (restart 0) KSP residual norm 4.002236e-07
+GMRES solver converged in 5 iterations (avg. reduction factor: 2.598e-02)
+
+Greedy iteration 2 (n = 6): ω* = 3.730e+00 GHz (1.955e-01), error = 1.425e-06, memory = 2/2
+ Field energy E (8.656e-12 J) + H (7.328e-12 J) = 1.598e-11 J
+
+Adaptive sampling converged with 4 frequency samples:
+ n = 8, error = 1.425e-06, tol = 1.000e-03, memory = 2/2
+ Sampled frequencies (GHz): 2.000e+00, 1.000e+01, 6.109e+00, 3.730e+00
+ Sample errors: inf, inf, 6.370e-05, 1.425e-06
+ Total offline phase elapsed time: 1.09e+01 s
+
+Beginning fast frequency sweep online phase
+
+It 1/11: ω/2π = 2.000e+00 GHz (total elapsed time = 1.09e+01 s)
+
+ Sol. ||E|| = 2.635979e+01
+ Field energy E (8.695e-12 J) + H (7.293e-12 J) = 1.599e-11 J
+ S[1][1] = -3.576e-03-1.762e-02i, |S[1][1]| = -3.490e+01, arg(S[1][1]) = -1.015e+02
+ S[2][1] = -9.797e-01+1.995e-01i, |S[2][1]| = -1.470e-03, arg(S[2][1]) = +1.685e+02
+
+It 2/11: ω/2π = 2.800e+00 GHz (total elapsed time = 1.10e+01 s)
+
+ Sol. ||E|| = 2.634056e+01
+ Field energy E (8.680e-12 J) + H (7.306e-12 J) = 1.599e-11 J
+ S[1][1] = -6.954e-03-2.416e-02i, |S[1][1]| = -3.199e+01, arg(S[1][1]) = -1.061e+02
+ S[2][1] = -9.604e-01+2.775e-01i, |S[2][1]| = -2.875e-03, arg(S[2][1]) = +1.639e+02
+
+It 3/11: ω/2π = 3.600e+00 GHz (total elapsed time = 1.11e+01 s)
+
+ Sol. ||E|| = 2.631505e+01
+ Field energy E (8.660e-12 J) + H (7.325e-12 J) = 1.598e-11 J
+ S[1][1] = -1.138e-02-3.020e-02i, |S[1][1]| = -2.982e+01, arg(S[1][1]) = -1.106e+02
+ S[2][1] = -9.348e-01+3.536e-01i, |S[2][1]| = -4.738e-03, arg(S[2][1]) = +1.593e+02
+
+It 4/11: ω/2π = 4.400e+00 GHz (total elapsed time = 1.12e+01 s)
+
+ Sol. ||E|| = 2.628337e+01
+ Field energy E (8.635e-12 J) + H (7.347e-12 J) = 1.598e-11 J
+ S[1][1] = -1.677e-02-3.560e-02i, |S[1][1]| = -2.810e+01, arg(S[1][1]) = -1.152e+02
+ S[2][1] = -9.032e-01+4.274e-01i, |S[2][1]| = -7.049e-03, arg(S[2][1]) = +1.547e+02
+
+It 5/11: ω/2π = 5.200e+00 GHz (total elapsed time = 1.12e+01 s)
+
+ Sol. ||E|| = 2.624564e+01
+ Field energy E (8.605e-12 J) + H (7.373e-12 J) = 1.598e-11 J
+ S[1][1] = -2.306e-02-4.024e-02i, |S[1][1]| = -2.667e+01, arg(S[1][1]) = -1.198e+02
+ S[2][1] = -8.657e-01+4.983e-01i, |S[2][1]| = -9.797e-03, arg(S[2][1]) = +1.501e+02
+
+It 6/11: ω/2π = 6.000e+00 GHz (total elapsed time = 1.13e+01 s)
+
+ Sol. ||E|| = 2.620205e+01
+ Field energy E (8.571e-12 J) + H (7.404e-12 J) = 1.597e-11 J
+ S[1][1] = -3.014e-02-4.402e-02i, |S[1][1]| = -2.546e+01, arg(S[1][1]) = -1.244e+02
+ S[2][1] = -8.226e-01+5.660e-01i, |S[2][1]| = -1.297e-02, arg(S[2][1]) = +1.455e+02
+
+It 7/11: ω/2π = 6.800e+00 GHz (total elapsed time = 1.13e+01 s)
+
+ Sol. ||E|| = 2.615277e+01
+ Field energy E (8.533e-12 J) + H (7.437e-12 J) = 1.597e-11 J
+ S[1][1] = -3.790e-02-4.683e-02i, |S[1][1]| = -2.440e+01, arg(S[1][1]) = -1.290e+02
+ S[2][1] = -7.743e-01+6.299e-01i, |S[2][1]| = -1.655e-02, arg(S[2][1]) = +1.409e+02
+
+It 8/11: ω/2π = 7.600e+00 GHz (total elapsed time = 1.14e+01 s)
+
+ Sol. ||E|| = 2.609803e+01
+ Field energy E (8.492e-12 J) + H (7.474e-12 J) = 1.597e-11 J
+ S[1][1] = -4.622e-02-4.858e-02i, |S[1][1]| = -2.347e+01, arg(S[1][1]) = -1.336e+02
+ S[2][1] = -7.209e-01+6.896e-01i, |S[2][1]| = -2.051e-02, arg(S[2][1]) = +1.363e+02
+
+It 9/11: ω/2π = 8.400e+00 GHz (total elapsed time = 1.14e+01 s)
+
+ Sol. ||E|| = 2.603809e+01
+ Field energy E (8.447e-12 J) + H (7.515e-12 J) = 1.596e-11 J
+ S[1][1] = -5.495e-02-4.921e-02i, |S[1][1]| = -2.264e+01, arg(S[1][1]) = -1.382e+02
+ S[2][1] = -6.630e-01+7.448e-01i, |S[2][1]| = -2.484e-02, arg(S[2][1]) = +1.317e+02
+
+It 10/11: ω/2π = 9.200e+00 GHz (total elapsed time = 1.15e+01 s)
+
+ Sol. ||E|| = 2.597322e+01
+ Field energy E (8.399e-12 J) + H (7.557e-12 J) = 1.596e-11 J
+ S[1][1] = -6.396e-02-4.866e-02i, |S[1][1]| = -2.190e+01, arg(S[1][1]) = -1.427e+02
+ S[2][1] = -6.008e-01+7.951e-01i, |S[2][1]| = -2.951e-02, arg(S[2][1]) = +1.271e+02
+
+It 11/11: ω/2π = 1.000e+01 GHz (total elapsed time = 1.16e+01 s)
+
+ Sol. ||E|| = 2.590374e+01
+ Field energy E (8.348e-12 J) + H (7.602e-12 J) = 1.595e-11 J
+ S[1][1] = -7.309e-02-4.689e-02i, |S[1][1]| = -2.123e+01, arg(S[1][1]) = -1.473e+02
+ S[2][1] = -5.349e-01+8.402e-01i, |S[2][1]| = -3.450e-02, arg(S[2][1]) = +1.225e+02
+
+Completed 0 iterations of adaptive mesh refinement (AMR):
+ Indicator norm = 4.497e-01, global unknowns = 280541
+ Max. iterations = 0, tol. = 1.000e-02
+
+Estimated peak per-rank memory usage is: Min. 697.7M, Max. 793.6M, Avg. 739.7M, Total 5.8G
+Estimated peak per-node memory usage is: Min. 5.8G, Max. 5.8G, Avg. 5.8G, Total 5.8G
+
+Elapsed Time Report (s)           Min.        Max.        Avg.
+==============================================================
+Initialization                   0.282       0.683       0.633
+  Mesh Preprocessing             0.612       1.014       0.663
+Operator Construction            0.086       0.096       0.094
+  Wave Ports                     0.000       0.000       0.000
+Linear Solve                     0.482       0.541       0.533
+  Setup                          0.980       0.989       0.983
+  Preconditioner                 4.941       4.998       4.950
+PROM Construction                0.142       0.143       0.142
+PROM Solve                       0.005       0.006       0.006
+Estimation                       0.071       0.080       0.075
+  Construction                   1.767       1.767       1.767
+  Solve                          3.992       3.996       3.995
+Postprocessing                   0.920       0.922       0.921
+Disk IO                          0.523       0.523       0.523
+--------------------------------------------------------------
+Total                           15.301      15.304      15.303
+
+Peak Memory                   Per-Node       Total   Total HWM
+==============================================================
+Initialization                   15.5M       15.5M       15.5M
+  Mesh Preprocessing            134.0M      134.0M      149.5M
+Operator Construction           154.6M      154.6M      304.0M
+  Wave Ports                      0.0K        0.0K      304.0M
+Linear Solve                    512.0K      512.0K      304.5M
+  Setup                         516.3M      516.3M      820.8M
+  Preconditioner                  4.4G        4.4G        5.2G
+PROM Construction                 0.0K        0.0K        5.2G
+PROM Solve                        0.0K        0.0K        5.2G
+Estimation                        0.0K        0.0K        5.2G
+  Construction                  294.4M      294.4M        5.5G
+  Solve                           0.0K        0.0K        5.5G
+Postprocessing                    0.0K        0.0K        5.5G
+Disk IO                          77.4M       77.4M        5.5G
+--------------------------------------------------------------
+Total                             5.6G        5.6G        5.6G
+

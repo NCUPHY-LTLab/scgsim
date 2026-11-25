@@ -5,9 +5,10 @@ pdk-tests job.  ``mesh()`` builds the real SGB model on Routes A and B and stand
 config is written from that model's physical groups.  The same layout, meshed and solved on stock Palace
 0.18.1 through these calls, is the run recorded on issue 187.
 
-The readback tests run the run script ``prepare_handoff()`` writes for that config; the ``palace`` it starts is a
-stand-in that returns E1's real outputs (``palace_driven_e1_support``), and the copied recorder writes the
-receipt, so ``resolve_palace_result`` checks a run folder with every identity a real return has.
+The readback tests run the run script ``prepare_handoff()`` writes for each fixture run's config; the
+``palace`` it starts is a stand-in that returns that run's real outputs (``palace_driven_runs_support``), and the
+copied recorder writes the receipt, so ``resolve_palace_result`` checks a run folder with every identity a real
+return has.
 """
 
 from __future__ import annotations
@@ -20,10 +21,13 @@ from dataclasses import fields
 from pathlib import Path
 
 import pytest
-from palace_driven_e1_support import (
+from palace_driven_runs_support import (
     ADAPTIVE_RUN,
     FIXTURES,
+    INDUCTOR_RUN,
     LOG,
+    RESISTOR_ADAPTIVE_RUN,
+    RESISTOR_RUN,
     UNIFORM_RUN,
     copied_run,
     fixture_result,
@@ -157,16 +161,39 @@ def test_simulation_drc_passes_the_launcher_layout_with_its_bands(route):
 
 # ---- Reading the run back --------------------------------------------------------------------------------
 
-# The two E1 runs: FEM order and sweep, as E1 set them through set_numerical and set_driven.
-_E1_SETTINGS = {
-    UNIFORM_RUN: (1, {"start": 2e9, "stop": 10e9, "points": 5}),
+_UNIFORM_SWEEP = {"start": 2e9, "stop": 10e9, "points": 5}
+_LEFT_PORT = LumpedPort(
+    "chip/o_lumped_left", reference_net="ground", impedance_ohm=50.0
+)
+# Each fixture run as it was prepared: its right sheet (None: the 50 ohm port of launcher_plan), FEM order and
+# sweep, through set_lumped_elements, set_numerical and set_driven.
+_RUN_SETTINGS = {
+    UNIFORM_RUN: (None, 1, _UNIFORM_SWEEP),
     ADAPTIVE_RUN: (
+        None,
         2,
         {"start": 2e9, "stop": 10e9, "points": 81, "adaptive_tolerance": 1e-3},
     ),
+    RESISTOR_RUN: (
+        LumpedElement("chip/o_lumped_right", resistance_ohm=50.0),
+        1,
+        _UNIFORM_SWEEP,
+    ),
+    INDUCTOR_RUN: (
+        LumpedElement("chip/o_lumped_right", inductance_h=10e-9),
+        1,
+        _UNIFORM_SWEEP,
+    ),
+    RESISTOR_ADAPTIVE_RUN: (
+        LumpedElement("chip/o_lumped_right", resistance_ohm=50.0),
+        1,
+        {"start": 2e9, "stop": 10e9, "points": 11, "adaptive_tolerance": 1e-3},
+    ),
 }
+# Touchstone 1.1's order of the (output, excited) pairs of one frequency, for one and two ports.
+_TOUCHSTONE_ORDER = {1: ((0, 0),), 2: ((0, 0), (1, 0), (0, 1), (1, 1))}
 _STAND_IN_PALACE = """#!/usr/bin/env bash
-# A stand-in for Palace: it reports the supported release, accepts the dry run, and returns E1's outputs.
+# A stand-in for Palace: it reports the supported release, accepts the dry run, and returns a fixture run's outputs.
 if [ "$1" = "--version" ]; then
   printf 'Palace version: 0.18.1\\nSchema version: 1-7-0\\n'
   exit 0
@@ -180,11 +207,13 @@ cat "{returned}/{log}"
 
 
 def _returned(monkeypatch, tmp_path: Path, run: str):
-    """The E1 run folder as DrivenSim prepares it and its run script returns it, with E1's outputs."""
-    order, sweep = _E1_SETTINGS[run]
+    """The fixture run's folder as DrivenSim prepares it and its run script returns it, with the run's outputs."""
+    right, order, sweep = _RUN_SETTINGS[run]
     mesh_without_gmsh(monkeypatch)
     sim = DrivenSim()
-    sim.set_plan(launcher_plan(surface_epr=True, bands=False).prepare())
+    elements = None if right is None else [_LEFT_PORT, right]
+    plan = launcher_plan(surface_epr=True, bands=False, lumped_elements=elements)
+    sim.set_plan(plan.prepare())
     sim.set_output_dir(tmp_path / run)
     sim.set_driven(**sweep)
     sim.set_numerical(order=order)
@@ -219,13 +248,13 @@ def _returned(monkeypatch, tmp_path: Path, run: str):
     return handoff
 
 
-@pytest.mark.parametrize("run", [UNIFORM_RUN, ADAPTIVE_RUN])
+@pytest.mark.parametrize("run", list(_RUN_SETTINGS))
 def test_a_returned_driven_run_resolves_to_its_s_parameters(monkeypatch, tmp_path, run):
-    """A1 and A9: ``resolve_palace_result(...).driven_result()`` on the E1 config, ports in the plan's order.
+    """A1 and A9: ``resolve_palace_result(...).driven_result()`` on each fixture run's config, ports in the plan's order.
 
-    The config and the index map ``DrivenSim`` writes are E1's, byte for byte, so the returned tables are
-    the ones this config asked for.  The result is the one the fixture's tables give, and its ``.s2p`` reads back
-    as its record.
+    The config and the index map ``DrivenSim`` writes equal the run's, so the returned tables are the ones this
+    config asked for.  The result is the one the fixture's tables give, and its Touchstone file reads back as its
+    record.  With the right sheet an unexcited element, the plan has one port.
     """
     handoff = _returned(monkeypatch, tmp_path, run)
     for relative in (CONFIG, INDEX_MAP):
@@ -242,16 +271,16 @@ def test_a_returned_driven_run_resolves_to_its_s_parameters(monkeypatch, tmp_pat
                 field.name
             )
     assert result.provenance["handoff_id"] == handoff.handoff_id
-    assert [port.name for port in result.ports] == [
-        "chip/o_lumped_left",
-        "chip/o_lumped_right",
-    ]
+    ports = ["chip/o_lumped_left"] + (
+        ["chip/o_lumped_right"] if _RUN_SETTINGS[run][0] is None else []
+    )
+    assert [port.name for port in result.ports] == ports
     option, frequencies, values = read_touchstone(
-        result.write_touchstone(tmp_path / f"{run}.s2p")
+        result.write_touchstone(tmp_path / f"{run}.s{len(ports)}p")
     )
     assert option == ["#", "GHz", "S", "DB", "R", "50"]
     assert frequencies == [f / 1e9 for f in result.frequencies_hz]
-    order = ((0, 0), (1, 0), (0, 1), (1, 1))
+    order = _TOUCHSTONE_ORDER[len(ports)]
     assert values == [
         [part[o][e] for o, e in order for part in (magnitude, phase)]
         for magnitude, phase in zip(result.magnitude_db, result.phase_deg, strict=True)

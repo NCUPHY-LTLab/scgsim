@@ -14,7 +14,7 @@ import json
 from dataclasses import replace
 
 import pytest
-from palace_driven_e1_support import UNIFORM_RUN, copied_run, fixture_result
+from palace_driven_runs_support import UNIFORM_RUN, copied_run, fixture_result
 from palace_driven_support import mesh_without_gmsh
 from test_simulation_drc import BANDED, layout_plan, two_pads
 
@@ -406,7 +406,7 @@ def test_the_report_and_every_view_refuse_a_driven_run_by_name(
     """SCGSim reads a Driven run (``test_palace_driven_results``) but does not report it yet.
 
     The trust report, which every view builds first, says so from the handoff's problem, before it reads a
-    table as another problem's.  The resolved run is E1's (``palace_driven_e1_support``) at this run folder.
+    table as another problem's.  The resolved run is E1's (``palace_driven_runs_support``) at this run folder.
     """
     handoff = handed_off(monkeypatch, tmp_path)
     resolved = replace(
