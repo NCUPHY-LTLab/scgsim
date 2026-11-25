@@ -254,7 +254,7 @@ def test_the_ports_are_the_plan_s_in_the_index_map_s_order(tmp_path, run):
         (name, sheet, 50.0) for name, sheet in zip(PORTS, SHEETS, strict=True)
     ]
     assert isinstance(result, SParameters)
-    assert result.reference_ohm == 50.0
+    assert result.reference_ohm == (50.0, 50.0)
     lines = (
         result.write_touchstone(tmp_path / "run.s2p")
         .read_text(encoding="utf-8")

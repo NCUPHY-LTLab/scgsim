@@ -131,7 +131,7 @@ def test_the_touchstone_reads_back_as_the_record(tmp_path):
 def test_ports_of_different_impedance_are_refused_by_touchstone(tmp_path):
     """Touchstone 1.1 has one reference impedance; the record keeps each port's (#187 decision 10)."""
     record = _record(2, impedances=(50.0, 25.0))
-    assert record.reference_ohm is None
+    assert record.reference_ohm == (50.0, 25.0)
     with pytest.raises(ValueError, match="have different impedances") as refusal:
         record.write_touchstone(tmp_path / "line.s2p")
     assert "'chip/p1': 50.0, 'chip/p2': 25.0" in str(refusal.value)
