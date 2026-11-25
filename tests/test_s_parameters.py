@@ -183,3 +183,14 @@ def test_a_port_needs_a_positive_impedance():
     """A port's impedance is its waves' reference, so it must be above zero."""
     with pytest.raises(ValueError, match="impedance_ohm must be above 0 ohm"):
         SParameterPort("chip/p1", "PORT_SHEET__chip/p1__0000", 0.0)
+
+
+@pytest.mark.parametrize("field", ["name", "sheet_id"])
+@pytest.mark.parametrize("label", ["chip/p1\n# MHz Y MA R 1", "chip/p1\r1 0 0", ""])
+def test_a_port_label_must_be_nonempty_text_on_one_line(field, label):
+    """The Touchstone file names each port on one comment line, so a label with a line break is refused."""
+    labels = {"name": "chip/p1", "sheet_id": "PORT_SHEET__chip/p1__0000"} | {
+        field: label
+    }
+    with pytest.raises(ValueError, match=f"{field} must be nonempty text on one line"):
+        SParameterPort(labels["name"], labels["sheet_id"], 50.0)

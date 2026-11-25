@@ -44,8 +44,12 @@ class SParameterPort:
         where = Declared(f"SParameterPort({self.name!r})", _WHERE_RECORD)
         for field in ("name", "sheet_id"):
             value = getattr(self, field)
-            if not isinstance(value, str) or not value:
-                raise ValueError(where.expected(field, "nonempty text", value))
+            # The Touchstone writer puts both on one "!" comment line: a line break would end the comment and
+            # turn the rest into an option or data line.  ``splitlines`` also refuses the empty string.
+            if not isinstance(value, str) or value.splitlines() != [value]:
+                raise ValueError(
+                    where.expected(field, "nonempty text on one line", value)
+                )
         impedance = _finite(where, "impedance_ohm", self.impedance_ohm)
         if impedance <= 0.0:
             raise ValueError(
