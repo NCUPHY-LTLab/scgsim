@@ -108,10 +108,9 @@ class SParameters:
             object.__setattr__(self, field, MappingProxyType(dict(value)))
 
     @property
-    def reference_ohm(self) -> float | None:
-        """The one impedance every port's waves are referenced to; None when the ports' impedances differ."""
-        impedances = {port.impedance_ohm for port in self.ports}
-        return impedances.pop() if len(impedances) == 1 else None
+    def reference_ohm(self) -> tuple[float, ...]:
+        """Each port's reference impedance in ohms, in port order: the impedance its waves are measured against."""
+        return tuple(port.impedance_ohm for port in self.ports)
 
     def s(self, output: int, excited: int) -> tuple[complex, ...]:
         """S at output port ``output`` with port ``excited`` driven, at every frequency: ``s(2, 1)`` is S21.
@@ -143,8 +142,8 @@ class SParameters:
                     f"must end in {suffix}, the suffix of a {len(self.ports)}-port file"
                 )
             )
-        reference = self.reference_ohm
-        if reference is None:
+        references = set(self.reference_ohm)
+        if len(references) != 1:
             raise ValueError(
                 Declared("the record's ports", _WHERE_TOUCHSTONE).refusal(
                     "have different impedances, and Touchstone 1.1 references every port to one: "
@@ -152,7 +151,7 @@ class SParameters:
                     + ". Declare the ports with one impedance_ohm, or write the record with your own writer"
                 )
             )
-        target.write_text(self._touchstone_text(reference), encoding="utf-8")
+        target.write_text(self._touchstone_text(references.pop()), encoding="utf-8")
         return target
 
     def _position(self, number: int, role: str) -> int:
