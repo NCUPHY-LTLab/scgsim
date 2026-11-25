@@ -68,7 +68,7 @@ class EigenmodeSim(PalaceSimulation):
     problem = "Eigenmode"
     # Nonconformal AMR, with the pass limit and its tolerance left for the user to choose.
     numerical_defaults: ClassVar[ProblemDefaults] = ProblemDefaults(
-        amr_max_passes=None, amr_nonconformal=True, amr_tolerance=None
+        order=1, amr_max_passes=None, amr_nonconformal=True, amr_tolerance=None
     )
 
     def set_epr_request(

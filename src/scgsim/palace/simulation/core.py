@@ -42,7 +42,12 @@ from ..config.convergence import ConvergenceDeclaration, Criterion, CriterionGro
 from ..config.convergence_plan import PlanContext, convergence_plan
 from ..config.files import MetadataFile, persist_problem_files
 from ..config.index import IndexEntry
-from ..config.numerical import PROBLEM_DEFAULT, NumericalControls, ProblemDefaults
+from ..config.numerical import (
+    PROBLEM_DEFAULT,
+    NumericalControls,
+    ProblemDefault,
+    ProblemDefaults,
+)
 from ..mesh.build import (
     MeshBuildResult,
     RouteGeometry,
@@ -486,11 +491,14 @@ class PalaceSimulation(ABC):
             RuntimeError: ``mesh()`` has not built the current mesh.
         """
         mesh = self._require("mesh_summary", self._mesh_result)
+        order = self.numerical.order
+        # The constructor and every set_numerical fill the problem's defaults, the FEM order among them.
+        assert not isinstance(order, ProblemDefault)
         return summary_from_files(
             mesh.mesh_path,
             mesh.mesh_manifest_path,
             problem=self.problem,
-            fem_order=self.numerical.order,
+            fem_order=order,
         )
 
     # ---- Config and handoff -------------------------------------------------------------------------
