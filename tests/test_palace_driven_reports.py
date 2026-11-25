@@ -40,10 +40,14 @@ from scgsim.contracts.palace_run_folder import OUTPUT_DIR, RETURNED_RECEIPT
 from scgsim.palace import (
     DrivenPhysicsReport,
     DrivenTrustReport,
+    Linear,
+    Log,
+    Points,
     SimulationBenchmarkReport,
     inspect_run_trustworthiness,
     show_epr,
 )
+from scgsim.palace.config.driven_sweep import DrivenSweep
 from scgsim.palace.reports.driven_figures import (
     s_parameter_figures,
     surface_epr_figures,
@@ -151,6 +155,34 @@ def test_a_uniform_sweep_solves_every_frequency_and_has_no_samples(tmp_path):
     assert ">uniform</div>" in text and ">2–10 GHz, 5 points</div>" in text
     assert ">1</div>" in text  # FEM order 1
     assert "Samples" not in text
+
+
+@pytest.mark.parametrize(
+    ("ranges", "card"),
+    [
+        (
+            [Linear(4e9, 9e9, points=501), Linear(7.30e9, 7.34e9, points=4001)],
+            "4–9 GHz, 501 points; 7.3–7.34 GHz, 4,001 points; 4,497 frequencies",
+        ),
+        (
+            [Log(1e8, 1e10, points=201), Points([7.3e9, 7.32e9])],
+            "0.1–10 GHz, 201 points, log-spaced; 7.3, 7.32 GHz; 203 frequencies",
+        ),
+        ([Points([7.3e9, 7.4e9, 7.35e9, 7.31e9])], "4 points, 7.3–7.4 GHz"),
+        ([Points([7.3e9, 7.3e9])], "7.3, 7.3 GHz; 1 frequency"),
+    ],
+    ids=["band and window", "log and points", "many points", "a repeated point"],
+)
+def test_the_sweep_card_names_each_range_and_the_frequencies_they_merge_into(
+    tmp_path, ranges, card
+):
+    """The sweep card lists each range, then the frequencies Palace solves at when one range alone does not say it.
+
+    The sweep is set on the report of a real run, to show the card alone: no Palace run of these ranges is read.
+    """
+    trust = resolved(UNIFORM_RUN, tmp_path).show_run_trustworthiness()
+    text = replace(trust, sweep=DrivenSweep(ranges=ranges)).convergence_html()
+    assert f">{card}</div>" in text
 
 
 def test_the_full_record_is_behind_show_details(tmp_path):

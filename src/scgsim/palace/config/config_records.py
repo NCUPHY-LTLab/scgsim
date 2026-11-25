@@ -1,13 +1,12 @@
 """The values a Palace config is built from and the records it returns, with the scalar readers they share.
 
-``ConfigInput`` is what every problem's config is built from; ``EigenmodeSettings``, ``ElectrostaticSettings``
-and ``DrivenSweep`` are what each problem adds.  Each checks its values when it is built, so the config
-builders start from values already refused or accepted.
+``ConfigInput`` is what every problem's config is built from; ``EigenmodeSettings`` and ``ElectrostaticSettings``
+are what Eigenmode and Electrostatic add, and ``DrivenSweep`` (``driven_sweep``) what Driven adds.  Each checks its
+values when it is built, so the config builders start from values already refused or accepted.
 """
 
 from __future__ import annotations
 
-import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,7 +23,6 @@ from .numerical import NumericalControls
 
 _WHERE_EIGENMODE_SETTINGS = "the call to set_eigenmode"
 _WHERE_ELECTROSTATIC_SETTINGS = "the call to set_electrostatic"
-_WHERE_DRIVEN_SWEEP = "the call to set_driven"
 
 MODEL_L0_M = 1e-6
 
@@ -174,112 +172,6 @@ class ElectrostaticConfigBuildResult:
 
 
 @dataclass(frozen=True)
-class DrivenSweep:
-    """The frequency sweep of one Driven solve: ``points`` frequencies from ``start_hz`` to ``stop_hz``, both ends included.
-
-    ``adaptive_tolerance`` None solves the field at every frequency (a uniform sweep).  A tolerance turns on
-    Palace's adaptive fast sweep: it solves a few frequencies, adds solves until a reduced model built from them
-    agrees with them to that relative error, and evaluates the model at every frequency.
-    ``adaptive_max_samples`` caps those solves per excitation; None leaves Palace's own cap.
-
-    Raises on build:
-        TypeError: a frequency or the tolerance is not a number, or ``points`` or ``adaptive_max_samples`` is not
-            an integer.
-        ValueError: ``start_hz`` is not finite and above zero, ``stop_hz`` is not finite and above ``start_hz``,
-            ``points`` is below 2, ``adaptive_tolerance`` is not finite and above zero, or
-            ``adaptive_max_samples`` is below 1 or is given without ``adaptive_tolerance``.
-    """
-
-    start_hz: float
-    stop_hz: float
-    points: int
-    adaptive_tolerance: float | None = None
-    adaptive_max_samples: int | None = None
-
-    def __post_init__(self) -> None:
-        """Refuse a sweep Palace cannot sample, then hold the numbers as floats where Palace reads floats."""
-        where = Declared("the frequency sweep", _WHERE_DRIVEN_SWEEP)
-        start = _sweep_number(where, "start", self.start_hz)
-        stop = _sweep_number(where, "stop", self.stop_hz)
-        # The frequency-domain problem is singular at zero frequency, so the sweep starts above it.
-        if start <= 0.0:
-            raise ValueError(where.expected("start", "above 0 Hz", self.start_hz))
-        if stop <= start:
-            raise ValueError(
-                where.expected("stop", f"above start ({start!r} Hz)", self.stop_hz)
-            )
-        # Palace spaces NSample points by (stop - start) / (NSample - 1), both ends included.
-        if _sweep_integer(where, "points", self.points) < 2:
-            raise ValueError(where.expected("points", "at least 2", self.points))
-        # A frozen dataclass normalizes its own fields through object.__setattr__.
-        object.__setattr__(self, "start_hz", start)
-        object.__setattr__(self, "stop_hz", stop)
-        if self.adaptive_tolerance is not None:
-            tolerance = _sweep_number(
-                where, "adaptive_tolerance", self.adaptive_tolerance
-            )
-            if tolerance <= 0.0:
-                raise ValueError(
-                    where.expected(
-                        "adaptive_tolerance",
-                        "above 0; leave it out for a uniform sweep",
-                        self.adaptive_tolerance,
-                    )
-                )
-            object.__setattr__(self, "adaptive_tolerance", tolerance)
-        if self.adaptive_max_samples is not None:
-            if self.adaptive_tolerance is None:
-                raise ValueError(
-                    where.refusal(
-                        "adaptive_max_samples caps the solves of the adaptive sweep, and no "
-                        "adaptive_tolerance turns that sweep on: give adaptive_tolerance too, or leave "
-                        "adaptive_max_samples out"
-                    )
-                )
-            if (
-                _sweep_integer(where, "adaptive_max_samples", self.adaptive_max_samples)
-                < 1
-            ):
-                raise ValueError(
-                    where.expected(
-                        "adaptive_max_samples", "at least 1", self.adaptive_max_samples
-                    )
-                )
-
-    @property
-    def adaptive(self) -> bool:
-        """Whether the sweep is Palace's adaptive fast sweep rather than a solve at every frequency."""
-        return self.adaptive_tolerance is not None
-
-    def to_payload(self) -> dict[str, Any]:
-        """The sweep as ``input_summary()`` shows it, frequencies in Hz."""
-        return {
-            "kind": "adaptive" if self.adaptive else "uniform",
-            "start_hz": self.start_hz,
-            "stop_hz": self.stop_hz,
-            "points": self.points,
-            "adaptive_tolerance": self.adaptive_tolerance,
-            "adaptive_max_samples": self.adaptive_max_samples,
-        }
-
-
-def _sweep_number(where: Declared, field: str, value: object) -> float:
-    """``value`` as a finite float; a value that is not a finite number is refused."""
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise TypeError(where.expected(field, "a number", value))
-    if not math.isfinite(float(value)):
-        raise ValueError(where.expected(field, "finite", value))
-    return float(value)
-
-
-def _sweep_integer(where: Declared, field: str, value: object) -> int:
-    """``value`` as an int; a value that is not an integer is refused."""
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise TypeError(where.expected(field, "an integer", value))
-    return value
-
-
-@dataclass(frozen=True)
 class PortConfigBuildResult:
     """A config with lumped ports (Eigenmode, Driven), its index entries and the records derived from it."""
 
@@ -300,7 +192,6 @@ def optional_string(value: Any) -> str | None:
 __all__ = [
     "MODEL_L0_M",
     "ConfigInput",
-    "DrivenSweep",
     "EigenmodeSettings",
     "ElectrostaticConfigBuildResult",
     "ElectrostaticSettings",

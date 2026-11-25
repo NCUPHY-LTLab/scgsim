@@ -29,7 +29,7 @@ from typing import Any
 
 import orcapen_sc_pdk
 
-from scgsim.palace import DrivenSim, PalaceDrivenResult, resolve_palace_result
+from scgsim.palace import DrivenSim, Linear, PalaceDrivenResult, resolve_palace_result
 
 # The roster lives in scripts/, beside this folder's parent; `python -I` does not put it on sys.path.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
@@ -119,9 +119,7 @@ def prepare(output: Path, args: argparse.Namespace) -> None:
     sim.set_output_dir(output / "run")
     sim.set_route(args.route)
     sim.set_driven(
-        start=START_HZ,
-        stop=STOP_HZ,
-        points=args.points,
+        [Linear(START_HZ, STOP_HZ, points=args.points)],
         adaptive_tolerance=args.adaptive_tolerance,
     )
     sim.set_numerical(order=args.order)

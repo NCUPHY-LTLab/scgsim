@@ -31,6 +31,7 @@ from .config.convergence import (
     ModeFrequency,
     SurfaceEpr,
 )
+from .config.driven_sweep import Linear, Log, Points
 from .reports.driven import DrivenPhysicsReport, DrivenTrustReport
 from .reports.epr import show_epr
 from .reports.reports import inspect_run_trustworthiness
@@ -79,6 +80,8 @@ __all__ = [
     "EigenmodeSim",
     "ElectrostaticSim",
     "ErrorIndicator",
+    "Linear",
+    "Log",
     "ModeFrequency",
     "PalaceCost",
     "PalaceDrivenResult",
@@ -92,6 +95,7 @@ __all__ = [
     "ParsedTable",
     "PassCostRecord",
     "PhysicsQuantitiesReport",
+    "Points",
     "ResolvedPalaceResult",
     "SParameterPort",
     "SParameters",

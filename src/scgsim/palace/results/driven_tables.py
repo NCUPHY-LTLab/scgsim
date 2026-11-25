@@ -3,8 +3,9 @@
 ``DrivenSim`` excites each port of the plan on its own, with ``Excitation`` equal to the port's ``Index``, and
 writes the plan's other lumped elements as unexcited lumped ports (``Excitation: false``; ``driven_excitations``).
 So each table but ``error-indicators`` has one block of columns per excitation, in excitation order, and one row
-per frequency of the sweep the sealed config requests (``requested_sweep``, ``requested_frequencies_ghz``).  Its
-``f (GHz)`` column must be those frequencies, in order, to the 9 significant digits Palace prints.
+per frequency of the sweep the sealed config requests (``requested_sweep``, ``requested_frequencies_ghz``): its
+``Samples`` entries merged as Palace merges them (``palace_frequencies_ghz``).  Its ``f (GHz)`` column must be
+those frequencies, in order, to the 9 significant digits Palace prints.
 
 Within a block, ``port-S``, ``port-V`` and ``port-I`` have columns for every lumped port, the unexcited elements
 included: stock Palace 0.18.1 wrote them so for an element of R 50 ohm and one of L 10 nH (issue 187).
@@ -12,12 +13,20 @@ included: stock Palace 0.18.1 wrote them so for an element of R 50 ohm and one o
 
 from __future__ import annotations
 
-import math
 from collections.abc import Callable, Mapping
 from typing import Any, NamedTuple
 
 from scgsim.contracts.palace_run_folder import CONFIG, DRIVEN
-from scgsim.palace.config.config_records import DrivenSweep
+from scgsim.palace.config.driven_sweep import (
+    PRINTED_DIGITS,
+    DrivenSweep,
+    FrequencyRange,
+    Linear,
+    Log,
+    Points,
+    palace_frequencies_ghz,
+    printed_unit_ghz,
+)
 from scgsim.palace.results.artifacts import (
     checked_number,
     expect_int,
@@ -35,8 +44,6 @@ from scgsim.refusal import Declared, found_text, internal
 
 FREQUENCY_COLUMN = DRIVEN.series_index
 """The column of every Driven table that names the row's frequency, in GHz."""
-# Palace prints a frequency with 9 significant digits (``2.10000000e+00``).
-_PRINTED_DIGITS = 9
 
 
 class _Counts(NamedTuple):
@@ -132,56 +139,67 @@ def excitation_suffix(excitation: int, excitations: tuple[int, ...]) -> str:
 def requested_frequencies_ghz(config: Mapping[str, Any]) -> tuple[float, ...]:
     """The frequencies the sealed config asks Palace to solve at, in GHz.
 
-    Palace spaces ``NSample`` samples evenly from ``MinFreq`` to ``MaxFreq``, both ends included.
+    They are merged from the config's own ``Samples`` entries, not from the ranges read back in Hz, so each is the
+    value Palace computed from the same numbers.
     """
-    sweep = _linear_range(config)
-    step = (sweep.high_ghz - sweep.low_ghz) / (sweep.samples - 1)
-    return tuple(sweep.low_ghz + step * k for k in range(sweep.samples))
+    return palace_frequencies_ghz(_requested_samples(config).entries)
 
 
 def requested_sweep(config: Mapping[str, Any]) -> DrivenSweep:
     """The sweep the sealed config requests, as ``DrivenSim.set_driven`` set it, frequencies in Hz."""
-    sweep = _linear_range(config)
+    requested = _requested_samples(config)
     return DrivenSweep(
-        start_hz=sweep.low_ghz * 1e9,
-        stop_hz=sweep.high_ghz * 1e9,
-        points=sweep.samples,
-        adaptive_tolerance=sweep.driven.get("AdaptiveTol"),
-        adaptive_max_samples=sweep.driven.get("AdaptiveMaxSamples"),
+        ranges=requested.ranges,
+        adaptive_tolerance=requested.driven.get("AdaptiveTol"),
+        adaptive_max_samples=requested.driven.get("AdaptiveMaxSamples"),
     )
 
 
-class _LinearRange(NamedTuple):
-    """The one ``Linear`` sample range of a Driven config, in GHz, and the ``Solver.Driven`` block it is in."""
+class _RequestedSamples(NamedTuple):
+    """The ``Samples`` entries of a Driven config, the ranges they were written from, and their ``Solver.Driven``."""
 
-    low_ghz: float
-    high_ghz: float
-    samples: int
+    entries: tuple[Mapping[str, Any], ...]
+    ranges: tuple[FrequencyRange, ...]
     driven: dict[str, Any]
 
 
-def _linear_range(config: Mapping[str, Any]) -> _LinearRange:
-    """The sample range ``DrivenSim`` writes: one ``Linear`` range of at least 2 samples, upward."""
+def _requested_samples(config: Mapping[str, Any]) -> _RequestedSamples:
+    """The ``Samples`` entries ``DrivenSim`` writes, each read back as the range ``set_driven`` took, in Hz.
+
+    Building each range checks its values, so the entries are ones Palace can merge.
+    """
     solver = expect_mapping(config.get("Solver"), "config.Solver")
     driven = expect_mapping(solver.get(DRIVEN.name), f"config.Solver.{DRIVEN.name}")
-    samples = expect_list(driven.get("Samples"), "config.Solver.Driven.Samples")
-    sample = samples[0] if len(samples) == 1 else None
-    if not isinstance(sample, dict) or sample.get("Type") != "Linear":
-        raise ValueError(
-            Declared(f"{CONFIG} Solver.Driven.Samples", RETURNED_RUN_FOLDER).refusal(
-                "must be the one Linear range DrivenSim writes: " + found_text(samples)
-            )
+    entries = expect_list(driven.get("Samples"), "config.Solver.Driven.Samples")
+    return _RequestedSamples(
+        tuple(entries), tuple(_requested_range(entry) for entry in entries), driven
+    )
+
+
+def _requested_range(entry: object) -> FrequencyRange:
+    """One ``Samples`` entry as the range it was written from, in Hz; an entry ``DrivenSim`` never writes is refused."""
+    sample = entry if isinstance(entry, dict) else {}
+    kind = sample.get("Type")
+    if kind == "Point":
+        values = expect_list(sample.get("Freq"), "Samples Freq")
+        return Points(
+            [
+                checked_number(value, "Samples Freq", positive=True) * 1e9
+                for value in values
+            ]
         )
-    low = checked_number(sample.get("MinFreq"), "Samples MinFreq", positive=True)
-    high = checked_number(sample.get("MaxFreq"), "Samples MaxFreq", positive=True)
-    count = expect_int(sample.get("NSample"), "Samples NSample")
-    if count < 2 or high <= low:
-        raise ValueError(
-            Declared(f"{CONFIG} Solver.Driven.Samples", RETURNED_RUN_FOLDER).refusal(
-                "must range upward over at least 2 samples: " + found_text(sample)
-            )
+    if kind in {"Linear", "Log"}:
+        low = checked_number(sample.get("MinFreq"), "Samples MinFreq", positive=True)
+        high = checked_number(sample.get("MaxFreq"), "Samples MaxFreq", positive=True)
+        count = expect_int(sample.get("NSample"), "Samples NSample")
+        band = Linear if kind == "Linear" else Log
+        return band(low * 1e9, high * 1e9, count)
+    raise ValueError(
+        Declared(f"{CONFIG} Solver.Driven.Samples", RETURNED_RUN_FOLDER).refusal(
+            "must hold only the Linear, Log and Point entries DrivenSim writes: "
+            + found_text(entry)
         )
-    return _LinearRange(low, high, count, driven)
+    )
 
 
 def _port_s_columns(excitation: int, _suffix: str, counts: _Counts) -> list[str]:
@@ -291,11 +309,10 @@ def _require_requested_frequencies(
         zip(returned, requested, strict=True), start=1
     ):
         # One unit in the last printed digit: Palace rounds its own value of the frequency to that digit.
-        unit = 10.0 ** (math.floor(math.log10(wanted)) - (_PRINTED_DIGITS - 1))
-        if abs(found - wanted) > unit:
+        if abs(found - wanted) > printed_unit_ghz(wanted):
             raise ValueError(
                 Declared(f"{table.path} row {row}", RETURNED_RUN_FOLDER).refusal(
-                    f"is not at the requested frequency to the {_PRINTED_DIGITS} significant digits Palace "
+                    f"is not at the requested frequency to the {PRINTED_DIGITS} significant digits Palace "
                     f"prints, in GHz: " + found_text(found, wanted)
                 )
             )

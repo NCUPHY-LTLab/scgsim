@@ -20,7 +20,7 @@ from typing import Any
 
 from scgsim.contracts.palace_index_map import LUMPED_PORT_SECTION
 from scgsim.contracts.palace_run_folder import DRIVEN, confined_path
-from scgsim.palace.config.config_records import DrivenSweep
+from scgsim.palace.config.driven_sweep import DrivenSweep
 from scgsim.palace.results.artifacts import checked_number, expect_mapping
 from scgsim.palace.results.driven_records import (
     AdaptiveSampling,

@@ -24,8 +24,9 @@ from scgsim.geometry.source.plan import GeometryPlanSnapshot
 from scgsim.refusal import Declared
 
 from ..config.config import build_driven_config
-from ..config.config_records import DrivenSweep, PortConfigBuildResult
+from ..config.config_records import PortConfigBuildResult
 from ..config.convergence_plan import PlanContext
+from ..config.driven_sweep import DrivenSweep, FrequencyRange
 from ..config.files import MetadataFile
 from ..config.index import IndexEntry
 from ..config.numerical import ProblemDefaults
@@ -57,7 +58,7 @@ class DrivenSim(PalaceSimulation):
         sim = DrivenSim()
         sim.set_plan(plan.prepare())
         sim.set_output_dir("runs/through")
-        sim.set_driven(start=2e9, stop=10e9, points=81, adaptive_tolerance=1e-3)
+        sim.set_driven([Linear(2e9, 10e9, points=81)], adaptive_tolerance=1e-3)
         sim.mesh()
         sim.write_config()
         sim.prepare_handoff(
@@ -78,32 +79,35 @@ class DrivenSim(PalaceSimulation):
 
     def set_driven(
         self,
+        frequencies: Sequence[FrequencyRange],
         *,
-        start: float,
-        stop: float,
-        points: int,
         adaptive_tolerance: float | None = None,
         adaptive_max_samples: int | None = None,
     ) -> None:
-        """Set the frequency sweep: ``points`` frequencies from ``start`` to ``stop`` (Hz), both ends included.
+        """Set the frequency sweep: ``frequencies``, a list of ``Linear``, ``Log`` and ``Points`` ranges in Hz.
+
+        ``Linear`` spaces its points evenly, ``Log`` evenly on a log scale, and ``Points`` lists chosen
+        frequencies.  Palace solves at all of their frequencies together, in order, each frequency once (two
+        within 1 Hz are one): ``[Linear(4e9, 9e9, points=501), Linear(7.30e9, 7.34e9, points=4001)]`` is 4,497
+        frequencies, a band 10 MHz apart and a window 10 kHz apart.
 
         Without ``adaptive_tolerance`` Palace solves the field at every frequency, once per port.  With it,
-        Palace's adaptive fast sweep solves a few frequencies per port and evaluates a reduced model built
-        from them at every frequency, adding solves until the model agrees with them to that relative error;
+        Palace's adaptive fast sweep solves a few frequencies per port and evaluates a reduced model built from
+        them at every frequency, adding solves until the model agrees with them to that relative error;
         ``adaptive_max_samples`` caps those solves per port (Palace's own cap when omitted).  Whether the
         adaptive sweep converged is written only to Palace's log.  The values are checked (``DrivenSweep``)
         before any is stored.
 
         Raises:
-            TypeError: a value is not a number, or ``points`` or ``adaptive_max_samples`` is not an integer.
-            ValueError: ``start`` is not above 0, ``stop`` is not above ``start``, ``points`` is below 2,
-                ``adaptive_tolerance`` is not above 0, or ``adaptive_max_samples`` is below 1 or is given
-                without ``adaptive_tolerance``.
+            TypeError: ``frequencies`` is not a list of ranges, ``adaptive_tolerance`` is not a number, or
+                ``adaptive_max_samples`` is not an integer.
+            ValueError: ``frequencies`` is empty; two of its frequencies are closer than the 9 significant digits
+                Palace prints them with, so they could not be read back apart; ``adaptive_tolerance`` is not
+                above 0; an adaptive sweep has fewer than 3 frequencies; or ``adaptive_max_samples`` is below 1
+                or is given without ``adaptive_tolerance``.
         """
         self.sweep = DrivenSweep(
-            start_hz=start,
-            stop_hz=stop,
-            points=points,
+            ranges=frequencies,
             adaptive_tolerance=adaptive_tolerance,
             adaptive_max_samples=adaptive_max_samples,
         )
@@ -182,7 +186,7 @@ class DrivenSim(PalaceSimulation):
             raise ValueError(
                 Declared(
                     "the simulation",
-                    "the call order: call set_driven(start=..., stop=..., points=...) before write_config()",
+                    "the call order: call set_driven([Linear(...), ...]) before write_config()",
                 ).refusal("has no frequency sweep to write a config for")
             )
         result = build_driven_config(

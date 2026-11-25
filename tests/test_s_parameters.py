@@ -44,7 +44,13 @@ def _record(ports: int, *, impedances: tuple[float, ...] | None = None) -> SPara
             ]
             for k in range(2)
         ],
-        sweep={"kind": "uniform", "start_hz": 4e9, "stop_hz": 5e9, "points": 2},
+        sweep={
+            "sampling": "uniform",
+            "ranges": [
+                {"kind": "linear", "start_hz": 4e9, "stop_hz": 5e9, "points": 2}
+            ],
+            "frequency_count": 2,
+        },
         provenance={"solver": "test"},
     )
 

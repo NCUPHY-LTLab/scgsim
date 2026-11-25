@@ -24,7 +24,7 @@ import numpy as np
 
 from scgsim.contracts.palace_convergence import ConvergenceCheck
 from scgsim.contracts.palace_run_folder import DRIVEN
-from scgsim.palace.config.config_records import DrivenSweep
+from scgsim.palace.config.driven_sweep import DrivenSweep, FrequencyRange, Log, Points
 from scgsim.palace.mesh.summary import MeshSummary
 from scgsim.palace.reports.convergence import verdict_card
 from scgsim.palace.reports.driven_figures import (
@@ -380,12 +380,38 @@ def largest_singular_value(result: SParameters) -> float:
 
 
 def _sweep_text(sweep: DrivenSweep | None) -> str | None:
-    """``2–10 GHz, 81 points``: the swept band and its number of frequencies."""
+    """``2–10 GHz, 81 points``: each range, then how many frequencies they merge into when that is not plain.
+
+    Two ranges read ``4–9 GHz, 501 points; 7.3–7.34 GHz, 4,001 points; 4,497 frequencies``.
+    """
     if sweep is None:
         return None
-    return (
-        f"{sweep.start_hz / 1e9:g}–{sweep.stop_hz / 1e9:g} GHz, {sweep.points} points"
-    )
+    texts = [_range_text(item) for item in sweep.ranges]
+    # One range says how many frequencies it has, unless Palace merged some of them.
+    if len(sweep.ranges) > 1 or _range_count(sweep.ranges[0]) != sweep.frequency_count:
+        count = sweep.frequency_count
+        texts.append(f"{count:,} frequency" if count == 1 else f"{count:,} frequencies")
+    return "; ".join(texts)
+
+
+# A Points range is listed in full up to this many frequencies, and as its count and span beyond.
+_LISTED_POINTS = 3
+
+
+def _range_text(item: FrequencyRange) -> str:
+    """One range of a sweep: ``4–9 GHz, 501 points``, ``0.1–10 GHz, 201 points, log-spaced`` or ``7.3, 7.32 GHz``."""
+    if isinstance(item, Points):
+        values = [f / 1e9 for f in item.frequencies_hz]
+        if len(values) <= _LISTED_POINTS:
+            return ", ".join(f"{value:g}" for value in values) + " GHz"
+        return f"{len(values):,} points, {min(values):g}–{max(values):g} GHz"
+    text = f"{item.start_hz / 1e9:g}–{item.stop_hz / 1e9:g} GHz, {item.points:,} points"
+    return text + ", log-spaced" if isinstance(item, Log) else text
+
+
+def _range_count(item: FrequencyRange) -> int:
+    """How many frequencies one range lists, before Palace merges them."""
+    return len(item.frequencies_hz) if isinstance(item, Points) else item.points
 
 
 def _sampling_text(sweep: DrivenSweep | None) -> str | None:

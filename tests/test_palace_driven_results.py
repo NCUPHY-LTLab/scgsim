@@ -419,10 +419,11 @@ def test_the_sweep_and_the_provenance_name_the_request_and_the_files(tmp_path, r
     result = _result(tmp_path, run)
     adaptive = run in {ADAPTIVE_RUN, RESISTOR_ADAPTIVE_RUN}
     assert dict(result.sweep) == {
-        "kind": "adaptive" if adaptive else "uniform",
-        "start_hz": 2e9,
-        "stop_hz": 10e9,
-        "points": POINTS[run],
+        "sampling": "adaptive" if adaptive else "uniform",
+        "ranges": [
+            {"kind": "linear", "start_hz": 2e9, "stop_hz": 10e9, "points": POINTS[run]}
+        ],
+        "frequency_count": POINTS[run],
         "adaptive_tolerance": 1e-3 if adaptive else None,
         "adaptive_max_samples": None,
     }
