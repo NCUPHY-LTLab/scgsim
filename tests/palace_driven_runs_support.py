@@ -21,8 +21,11 @@ have one excitation:
 
 The 12 MB mesh is not kept, so these files alone cannot pass the run folder's identity checks.
 ``fixture_result`` builds the ``ResolvedPalaceResult`` those checks lead to, from the real tables read by the
-real table validators, standing in only for the identity checks; ``test_palace_driven_launchers`` (PDK) runs the
-real ``resolve_palace_result`` on a run folder of the same config whose solver returns these files.
+real table validators and the cost and timers of the real ``palace.json``, standing in only for the identity
+checks; ``test_palace_driven_launchers`` (PDK) runs the real ``resolve_palace_result`` on a run folder of the
+same config whose solver returns these files.  The handoff record is not kept either: ``write_handoff`` writes
+what a report reads of it, the identity each run's handoff recorded (problem, route, the ``direct-local``
+profile) and the config it sealed.
 """
 
 from __future__ import annotations
@@ -34,6 +37,7 @@ from pathlib import Path
 from scgsim.contracts.palace_convergence import ConvergenceCheck
 from scgsim.contracts.palace_run_folder import (
     CONFIG,
+    HANDOFF_METADATA,
     INDEX_MAP,
     NATIVE_METADATA,
     output_table,
@@ -75,6 +79,42 @@ def read_json(root: Path, relative: str) -> dict:
     return json.loads((root / relative).read_text(encoding="utf-8"))
 
 
+def handoff_id(root: Path) -> str:
+    """The handoff id the fixture folder ``root`` stands in with."""
+    return f"fixture-{root.name}"
+
+
+def file_record(root: Path, relative: str) -> dict[str, object]:
+    """The record a handoff or a receipt keeps of one file of the run folder ``root``, or that it is absent."""
+    path = root / relative
+    if not path.is_file():
+        return {"path": relative, "bytes": None, "sha256": None, "present": False}
+    return {
+        "path": relative,
+        "bytes": path.stat().st_size,
+        "sha256": sha256(path),
+        "present": True,
+    }
+
+
+def write_handoff(root: Path) -> list[dict[str, object]]:
+    """Write the handoff record of the fixture folder ``root``: its identity and the config it sealed.
+
+    Returns the input hashes it records, which a receipt of the run repeats.
+    """
+    hashes = [file_record(root, CONFIG)]
+    record = {
+        "problem": "Driven",
+        "route": "B",
+        "profile": "direct-local",
+        "handoff_id": handoff_id(root),
+        "status": "prepared",
+        "hashes": hashes,
+    }
+    (root / HANDOFF_METADATA).write_text(json.dumps(record), encoding="utf-8")
+    return hashes
+
+
 def fixture_result(root: Path) -> ResolvedPalaceResult:
     """The resolved Driven run of the fixture folder ``root``: its tables read and checked as resolve reads them."""
     config = read_json(root, CONFIG)
@@ -95,28 +135,31 @@ def fixture_result(root: Path) -> ResolvedPalaceResult:
         for path in returned
     )
     problem = palace_json["Problem"]
+    elapsed = palace_json["ElapsedTime"]
     return ResolvedPalaceResult(
         run_dir=root,
         problem="Driven",
         route="B",
         has_returned_outputs=True,
         status="completed",
-        performance=PalacePerformance(counts={"Total": 1}, durations={"Total": 1.0}),
+        performance=PalacePerformance(
+            counts=elapsed["Counts"], durations=elapsed["Durations"]
+        ),
         cost=PalaceCost(
             problem_degrees_of_freedom=problem["DegreesOfFreedom"],
             mesh_elements=problem["MeshElements"],
             mpi_size=problem["MPISize"],
             openmp_threads=problem["OpenMPThreads"],
-            peak_memory_megabytes={},
-            peak_node_memory_megabytes={},
-            linear_solver={},
+            peak_memory_megabytes=palace_json["PeakMemoryMegabytes"],
+            peak_node_memory_megabytes=palace_json["PeakNodeMemoryMegabytes"],
+            linear_solver=palace_json["LinearSolver"],
             git_tag=palace_json["GitTag"],
         ),
         tables=tables,
         returned_receipt=PalaceReturnedReceipt(
             schema="palace-returned-run-receipt.v2",
             schema_version=2,
-            handoff_id=f"fixture-{root.name}",
+            handoff_id=handoff_id(root),
             status="completed",
             ending="solver_ended",
             exit_code=0,

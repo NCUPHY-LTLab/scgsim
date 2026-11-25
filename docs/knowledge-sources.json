@@ -256,6 +256,8 @@
           "gloss_zh": "結果的執行、物理量與成本三個視圖。",
           "page": "specs/report-model.qmd#common-envelope",
           "names": [
+            "DrivenPhysicsReport",
+            "DrivenTrustReport",
             "PalaceCost",
             "PalacePerformance",
             "PalaceTrustReport",

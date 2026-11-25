@@ -10,6 +10,7 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import cast
 
+from scgsim.palace.reports.driven import DrivenPhysicsReport, DrivenTrustReport
 from scgsim.palace.reports.plotting import ReportTheme
 from scgsim.palace.reports.reports import (
     show_all_results,
@@ -44,8 +45,8 @@ def resolve_palace_result(
 class ResolvedPalaceResult(ResolvedRunData):
     """One checked Palace run folder, with the result it yields and the views a notebook shows of it.
 
-    An Eigenmode run yields ``epr_result()``, a Driven run ``driven_result()``; the views show Electrostatic and
-    Eigenmode runs.
+    An Eigenmode run yields ``epr_result()``, a Driven run ``driven_result()``.  The views show every problem: a
+    Driven run's are a ``DrivenTrustReport`` and a ``DrivenPhysicsReport``, with the shared benchmark.
     """
 
     def epr_result(self) -> PalaceEprResult:
@@ -63,8 +64,8 @@ class ResolvedPalaceResult(ResolvedRunData):
 
     def show_run_trustworthiness(
         self, *, theme: str = "light", show_details: bool = False
-    ) -> PalaceTrustReport:
-        """Build the identity and AMR view using the original artifact-validation order."""
+    ) -> PalaceTrustReport | DrivenTrustReport:
+        """Build the identity and convergence view using the original artifact-validation order."""
         return show_run_trustworthiness(
             self,
             theme=cast(ReportTheme, theme),
@@ -88,8 +89,11 @@ class ResolvedPalaceResult(ResolvedRunData):
 
     def show_physics_quantities(
         self, *, theme: str = "light", ranking_limit: int | None = 20
-    ) -> PhysicsQuantitiesReport:
-        """Build the selected physics view from this sealed run without recomputing solver data."""
+    ) -> PhysicsQuantitiesReport | DrivenPhysicsReport:
+        """Build the selected physics view from this sealed run without recomputing solver data.
+
+        ``ranking_limit`` caps the surfaces ranked for each mode or excitation; a Driven run's view ranks none.
+        """
         return show_physics_quantities(
             self, theme=cast(ReportTheme, theme), ranking_limit=ranking_limit
         )

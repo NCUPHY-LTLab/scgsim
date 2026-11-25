@@ -11,10 +11,8 @@ are recorded on issue 187.  The launcher-to-launcher layout, two ports and both 
 from __future__ import annotations
 
 import json
-from dataclasses import replace
 
 import pytest
-from palace_driven_runs_support import UNIFORM_RUN, copied_run, fixture_result
 from palace_driven_support import mesh_without_gmsh
 from test_simulation_drc import BANDED, layout_plan, two_pads
 
@@ -28,7 +26,6 @@ from scgsim.palace import (
     DrivenSim,
     EigenmodeSim,
     ErrorIndicator,
-    inspect_run_trustworthiness,
 )
 from scgsim.palace.config.numerical import NumericalControls
 
@@ -401,42 +398,3 @@ def test_the_handoff_records_driven_and_the_tables_palace_writes(monkeypatch, tm
     assert palace_problem("Driven").written_families(
         lumped_ports=True, surfaces=False
     ) == ("port-S", "port-I", "port-V", "domain-E", "error-indicators")
-
-
-@pytest.mark.parametrize(
-    "view",
-    [
-        "inspect_run_trustworthiness",
-        "show_run_trustworthiness",
-        "show_physics_quantities",
-        "show_all_results",
-        "show_simulation_benchmark",
-    ],
-)
-def test_the_report_and_every_view_refuse_a_driven_run_by_name(
-    monkeypatch, tmp_path, view
-):
-    """SCGSim reads a Driven run (``test_palace_driven_results``) but does not report it yet.
-
-    The trust report, which every view builds first, says so from the handoff's problem, before it reads a
-    table as another problem's.  The resolved run is E1's (``palace_driven_runs_support``) at this run folder.
-    """
-    handoff = handed_off(monkeypatch, tmp_path)
-    resolved = replace(
-        fixture_result(copied_run(UNIFORM_RUN, tmp_path / "fixture")),
-        run_dir=handoff.run_dir,
-    )
-    show = (
-        (lambda: inspect_run_trustworthiness(handoff.run_dir))
-        if view == "inspect_run_trustworthiness"
-        else getattr(resolved, view)
-    )
-    with pytest.raises(NotImplementedError) as refusal:
-        show()
-    message = str(refusal.value)
-    assert f"the Driven run {handoff.run_dir}" in message
-    assert (
-        "SCGSim reads Driven runs and does not show a report or view of them yet"
-        in message
-    )
-    assert "resolve_palace_result(...).driven_result()" in message
