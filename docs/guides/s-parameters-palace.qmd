@@ -188,12 +188,11 @@ plan.set_lumped_elements([
 ])
 print("\n".join(DrivenSim.simulation_drc(plan).lumped_elements))
 
-# 3. The sweep, 81 frequencies from 2 to 10 GHz, and second-order elements.
+# 3. The sweep, 81 frequencies from 2 to 10 GHz.
 sim = DrivenSim()
 sim.set_plan(plan.prepare())
 sim.set_output_dir(Path(".artifacts/launchers") / uuid4().hex[:12])
 sim.set_driven(start=2e9, stop=10e9, points=81, adaptive_tolerance=1e-3)
-sim.set_numerical(order=2)
 
 # 4. Mesh, write Palace's input, run Palace with 8 MPI processes.
 sim.mesh()
@@ -247,11 +246,12 @@ does, with the same vacuum and thin films, for this layout and its two Nets,
   10⁻³. Here it needed 4 solves per port, where solving every frequency would
   take 81. The two `Port ... driven` lines report this; `error` is the
   model's last estimate.
-- **Section 3 also asks for second-order elements,** `set_numerical(order=2)`.
-  With the default first-order elements, on the mesh `mesh()` writes, the
-  phase the line adds comes out about 7 % too large (about 1 % at second
-  order), and |S11| reaches −21.2 dB at 10 GHz instead of −29.8 dB. Second
-  order has five times as many unknowns, 1,433,702 here.
+- **Second-order elements, without asking.** A `DrivenSim` solves with
+  second-order elements unless `set_numerical(order=...)` gives another
+  order. With first-order elements, on the mesh `mesh()` writes, the phase
+  the line adds comes out about 7 % too large (about 1 % at second order),
+  and |S11| reaches −21.2 dB at 10 GHz instead of −29.8 dB. Second order has
+  five times as many unknowns, 1,433,702 here.
 - **Section 4** meshes, writes Palace's input and runs Palace, as for a
   resonator.
 - **Section 5 reads the run back.** `driven_result()` returns the
