@@ -25,7 +25,7 @@ from ..config.config_records import EigenmodeSettings, PortConfigBuildResult
 from ..config.convergence_plan import PlanContext
 from ..config.files import MetadataFile
 from ..config.index import EprRequest, IndexEntry, check_epr_request
-from ..config.numerical import NumericalControls, ProblemDefaults
+from ..config.numerical import ProblemDefaults
 from ..source.lumped_elements import (
     eigenmode_ports,
     eigenmode_realization,
@@ -157,23 +157,20 @@ class EigenmodeSim(PalaceSimulation):
             ValueError: a control is out of its range or choices.
             TypeError: a control has the wrong type.
         """
-        current = self.numerical
         self._set_numerical(
-            NumericalControls(
+            self.numerical.with_given(
                 order=order,
                 tolerance=tolerance,
                 max_iterations=max_iterations,
                 solver_type=solver_type,
                 preconditioner=preconditioner,
                 device=device,
-                ksp_type=current.ksp_type if ksp_type is None else ksp_type,
-                amr_max_passes=_kept(amr_max_passes, current.amr_max_passes),
-                amr_nonconformal=_kept(amr_nonconformal, current.amr_nonconformal),
-                amr_nc_levels=_kept(amr_nc_levels, current.amr_nc_levels),
-                amr_tolerance=_kept(amr_tolerance, current.amr_tolerance),
-                amr_update_fraction=_kept(
-                    amr_update_fraction, current.amr_update_fraction
-                ),
+                ksp_type=ksp_type,
+                amr_max_passes=amr_max_passes,
+                amr_nonconformal=amr_nonconformal,
+                amr_nc_levels=amr_nc_levels,
+                amr_tolerance=amr_tolerance,
+                amr_update_fraction=amr_update_fraction,
                 save_adapt_iterations=save_adapt_iterations,
                 save_adapt_mesh=save_adapt_mesh,
                 estimator_mg=estimator_mg,
@@ -264,11 +261,6 @@ class EigenmodeSim(PalaceSimulation):
             "eigenmode_tolerance": self.eigenmode_tolerance,
             "save_fields": self.save_fields,
         }
-
-
-def _kept[Value](given: Value | None, current: Value) -> Value:
-    """``given``, or the current setting when the control was omitted (None)."""
-    return current if given is None else given
 
 
 __all__ = ["EigenmodeSim"]

@@ -34,6 +34,16 @@ _SOLVER_TYPES = {"Default", "SuperLU", "STRUMPACK", "MUMPS"}
 _PRECONDITIONERS = {"Default", "AMS", "BoomerAMG"}
 # The problems whose AMR tolerance and update fraction have no SCGSim default: enabling AMR needs both stated.
 _STATED_AMR_PROBLEMS = (EIGENMODE.name, DRIVEN.name)
+# The controls an omitted set_numerical keyword leaves as they are (``NumericalControls.with_given``); every
+# other omitted keyword is written as given.
+_KEPT_WHEN_OMITTED = (
+    "ksp_type",
+    "amr_max_passes",
+    "amr_nonconformal",
+    "amr_nc_levels",
+    "amr_tolerance",
+    "amr_update_fraction",
+)
 
 DECLARED_CONVERGENCE_TOL = sys.float_info.min
 """``Model.Refinement.Tol`` of a run with a convergence declaration: small enough never to end the run.
@@ -124,6 +134,25 @@ class NumericalControls:
                 if getattr(self, name) is PROBLEM_DEFAULT
             },
         )
+
+    def with_given(self, **given: Any) -> NumericalControls:
+        """The controls one ``set_numerical`` call gives, an omitted Krylov, AMR or NC-level control keeping its value here.
+
+        ``given`` holds every keyword of the call.  A None for a control of ``_KEPT_WHEN_OMITTED`` means it was
+        omitted, so its value in these controls is kept; every other control is taken as given, and None leaves
+        its Palace key out.  ``EigenmodeSim`` and ``DrivenSim`` set their controls with it; ``ElectrostaticSim``
+        gives an omitted control its default instead.
+
+        Raises:
+            ValueError: a given control is out of its range or choices.
+            TypeError: a given control has the wrong type.
+        """
+        kept = {
+            name: getattr(self, name)
+            for name in _KEPT_WHEN_OMITTED
+            if given.get(name) is None
+        }
+        return NumericalControls(**{**given, **kept})
 
     def check_ready_for(
         self,
