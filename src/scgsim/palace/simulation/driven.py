@@ -58,7 +58,6 @@ class DrivenSim(PalaceSimulation):
         sim.set_plan(plan.prepare())
         sim.set_output_dir("runs/through")
         sim.set_driven(start=2e9, stop=10e9, points=81, adaptive_tolerance=1e-3)
-        sim.set_numerical(order=2)
         sim.mesh()
         sim.write_config()
         sim.prepare_handoff(
@@ -69,10 +68,12 @@ class DrivenSim(PalaceSimulation):
     sweep: DrivenSweep | None = None
 
     problem = "Driven"
-    # No AMR by default (accepted on issue 187): the run solves on the mesh mesh() writes.  Enabled, it refines
-    # nonconformally, as Eigenmode does, with the tolerance left for the user to choose.
+    # Second-order elements and no AMR by default (both accepted on issue 187): the run solves on the mesh mesh()
+    # writes, where first-order elements make the phase of a through line's S21 about 7 % too large and
+    # second-order ones about 1 %.  Enabled AMR refines nonconformally, as Eigenmode does, with the tolerance
+    # left for the user to choose.
     numerical_defaults: ClassVar[ProblemDefaults] = ProblemDefaults(
-        amr_max_passes=0, amr_nonconformal=True, amr_tolerance=None
+        order=2, amr_max_passes=0, amr_nonconformal=True, amr_tolerance=None
     )
 
     def set_driven(
@@ -111,7 +112,7 @@ class DrivenSim(PalaceSimulation):
     def set_numerical(  # noqa: PLR0913 -- the public keyword controls of set_numerical
         self,
         *,
-        order: int = 1,
+        order: int = 2,
         tolerance: float = 1e-6,
         max_iterations: int = 400,
         solver_type: str = "Default",
@@ -131,8 +132,9 @@ class DrivenSim(PalaceSimulation):
     ) -> None:
         """Set solver, FEM, AMR, and output controls for the next config write; stored as ``NumericalControls``.
 
-        ``order`` is the FEM order of the Nédélec space.  ``amr_max_passes`` is Palace ``MaxIts``; a
-        ``DrivenSim`` starts at 0, no AMR.  An AMR pass solves the whole sweep again, every port at every
+        ``order`` is the FEM order of the Nédélec space; a ``DrivenSim`` solves with second-order elements,
+        because at first order the phase of the S-parameters comes out too coarse on the mesh ``mesh()``
+        writes.  ``amr_max_passes`` is Palace ``MaxIts``; a ``DrivenSim`` starts at 0, no AMR.  An AMR pass solves the whole sweep again, every port at every
         frequency, so refine on a short sweep.  Enabled AMR needs ``amr_tolerance`` and
         ``amr_update_fraction`` stated.  As in ``EigenmodeSim.set_numerical``, an omitted AMR, Krylov or
         nonconformal-level control keeps its current value; explicit ``ksp_type="Default"`` uses Palace's
