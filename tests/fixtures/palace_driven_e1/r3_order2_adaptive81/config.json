@@ -1,0 +1,186 @@
+{
+  "Problem": {
+    "Type": "Driven",
+    "Verbose": 3,
+    "Output": "results/palace"
+  },
+  "Model": {
+    "Mesh": "palace.msh",
+    "L0": 1e-06,
+    "Refinement": {
+      "UniformLevels": 0,
+      "MaxIts": 0,
+      "Nonconformal": true
+    }
+  },
+  "Solver": {
+    "Linear": {
+      "Type": "Default",
+      "KSPType": "GMRES",
+      "Tol": 1e-06,
+      "MaxIts": 400
+    },
+    "Order": 2,
+    "Device": "CPU",
+    "Driven": {
+      "Samples": [
+        {
+          "Type": "Linear",
+          "MinFreq": 2.0,
+          "MaxFreq": 10.0,
+          "NSample": 81
+        }
+      ],
+      "AdaptiveTol": 0.001
+    }
+  },
+  "Boundaries": {
+    "PEC": {
+      "Attributes": [
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ]
+    },
+    "LumpedPort": [
+      {
+        "Index": 1,
+        "Direction": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "Excitation": 1,
+        "Attributes": [
+          11
+        ],
+        "R": 50.0
+      },
+      {
+        "Index": 2,
+        "Direction": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "Excitation": 2,
+        "Attributes": [
+          12
+        ],
+        "R": 50.0
+      }
+    ],
+    "Postprocessing": {
+      "Dielectric": [
+        {
+          "Index": 1,
+          "Attributes": [
+            5
+          ],
+          "Type": "MA",
+          "Thickness": 0.002,
+          "Permittivity": 10.0,
+          "LossTan": 0.0033
+        },
+        {
+          "Index": 2,
+          "Attributes": [
+            6
+          ],
+          "Type": "MA",
+          "Thickness": 0.002,
+          "Permittivity": 10.0,
+          "LossTan": 0.0033
+        },
+        {
+          "Index": 3,
+          "Attributes": [
+            7
+          ],
+          "Type": "MA",
+          "Thickness": 0.002,
+          "Permittivity": 10.0,
+          "LossTan": 0.0033
+        },
+        {
+          "Index": 4,
+          "Attributes": [
+            8
+          ],
+          "Type": "MA",
+          "Thickness": 0.002,
+          "Permittivity": 10.0,
+          "LossTan": 0.0033
+        },
+        {
+          "Index": 5,
+          "Attributes": [
+            9
+          ],
+          "Type": "MS",
+          "Thickness": 0.002,
+          "Permittivity": 11.4,
+          "LossTan": 0.0004698936049788292
+        },
+        {
+          "Index": 6,
+          "Attributes": [
+            10
+          ],
+          "Type": "MS",
+          "Thickness": 0.002,
+          "Permittivity": 11.4,
+          "LossTan": 0.0004698936049788292
+        },
+        {
+          "Index": 7,
+          "Attributes": [
+            13
+          ],
+          "Type": "SA",
+          "Thickness": 0.002,
+          "Permittivity": 6.635,
+          "LossTan": 0.0017
+        }
+      ]
+    }
+  },
+  "Domains": {
+    "Materials": [
+      {
+        "Attributes": [
+          1
+        ],
+        "Permittivity": 11.9,
+        "LossTan": 2.6e-07
+      },
+      {
+        "Attributes": [
+          2
+        ],
+        "Permittivity": 1.0,
+        "LossTan": 0.0
+      }
+    ],
+    "Postprocessing": {
+      "Energy": [
+        {
+          "Index": 1,
+          "Attributes": [
+            1
+          ]
+        },
+        {
+          "Index": 2,
+          "Attributes": [
+            2
+          ]
+        }
+      ],
+      "Probe": []
+    }
+  }
+}

@@ -7,9 +7,10 @@ One folder per stage, in the order the work flows:
 - ``mesh``: from that input to ``palace.msh`` with its physical groups and manifest.
 - ``config``: from the mesh's groups and the problem's settings to ``config.json`` and the index map.
 - ``run``: the run folder handed to Palace, and what Palace returns.
-- ``results``: from a returned run folder to the checked records of the run (Electrostatic and Eigenmode; a
-  Driven run is refused by name until SCGSim reads it).
-- ``reports``: the result a user holds (``resolve_palace_result``) and the notebook views of it.
+- ``results``: from a returned run folder to the checked records of the run and the detached results it yields:
+  an Eigenmode run's EPR, a Driven run's S-parameters.
+- ``reports``: the result a user holds (``resolve_palace_result``) and the notebook views of it (Electrostatic and
+  Eigenmode; a Driven run is refused by name until SCGSim shows it).
 
 A public entry point refuses state it cannot run from (no bound plan, a stage called out of order, a name that
 binds nothing) with an error that says which call fixes it.  A setting with a documented default, such as Route B
@@ -21,6 +22,7 @@ from scgsim.contracts.palace_convergence import (
     ConvergencePlan,
     ConvergenceVerdict,
 )
+from scgsim.semantics.s_parameters import SParameterPort, SParameters
 
 from .config.convergence import (
     Capacitance,
@@ -36,6 +38,11 @@ from .reports.resolved_result import ResolvedPalaceResult, resolve_palace_result
 from .reports.trust import PalaceTrustReport
 from .reports.views import PhysicsQuantitiesReport, SimulationBenchmarkReport
 from .results.convergence import SolverEnd
+from .results.driven_records import (
+    AdaptiveSampling,
+    DrivenSurfaceEpr,
+    PalaceDrivenResult,
+)
 from .results.epr import epr_result, reanalyze_epr, resolve_epr_result
 from .results.epr_records import PalaceEprResult
 from .results.inspection_records import (
@@ -58,6 +65,7 @@ from .simulation.eigenmode import EigenmodeSim
 from .simulation.electrostatic import ElectrostaticSim
 
 __all__ = [
+    "AdaptiveSampling",
     "Capacitance",
     "ConvergenceCheck",
     "ConvergencePlan",
@@ -65,11 +73,13 @@ __all__ = [
     "Criterion",
     "CriterionGroup",
     "DrivenSim",
+    "DrivenSurfaceEpr",
     "EigenmodeSim",
     "ElectrostaticSim",
     "ErrorIndicator",
     "ModeFrequency",
     "PalaceCost",
+    "PalaceDrivenResult",
     "PalaceEprResult",
     "PalaceFailureDiagnosis",
     "PalacePerformance",
@@ -81,6 +91,8 @@ __all__ = [
     "PassCostRecord",
     "PhysicsQuantitiesReport",
     "ResolvedPalaceResult",
+    "SParameterPort",
+    "SParameters",
     "SimulationBenchmarkReport",
     "SimulationDrcError",
     "SimulationDrcReport",

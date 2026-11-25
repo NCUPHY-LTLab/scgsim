@@ -168,7 +168,7 @@ making them public.
 
 ## Palace names {#palace-package-symbols}
 
-`scgsim.palace` exports 37 names, grouped here by defining module:
+`scgsim.palace` exports 42 names, grouped here by defining module:
 
 | Defining module | Responsibility | Names |
 |---|---|---|
@@ -181,6 +181,8 @@ making them public.
 | `scgsim.palace.reports.resolved_result` | The resolved result a user holds, with its views | `ResolvedPalaceResult`, `resolve_palace_result` |
 | `scgsim.palace.results.epr`, `scgsim.palace.results.epr_records` | Detached EPR values and offline reanalysis | `PalaceEprResult`, `epr_result`, `reanalyze_epr`, `resolve_epr_result` |
 | `scgsim.palace.reports.epr` | The plot of a detached EPR result | `show_epr` |
+| `scgsim.palace.results.driven`, `scgsim.palace.results.driven_records` | The detached result of a Driven run: its S-parameters, Surface EPR and adaptive sampling | `PalaceDrivenResult`, `DrivenSurfaceEpr`, `AdaptiveSampling` |
+| `scgsim.semantics.s_parameters` | The S-parameter record every driven solver returns, and its Touchstone writer | `SParameters`, `SParameterPort` |
 | `scgsim.palace.results.inspection_records` | Detached records the reports read | `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PassCostRecord`, `SurfaceMarginEprRecord`, `SurfaceMarginEprSeriesSnapshot` |
 | `scgsim.palace.reports.reports`, `scgsim.palace.reports.trust`, `scgsim.palace.reports.views` | The trust, physics and benchmark views | `inspect_run_trustworthiness`, `PalaceTrustReport`, `PhysicsQuantitiesReport`, `SimulationBenchmarkReport` |
 

@@ -16,6 +16,7 @@ from scgsim.contracts.palace_index_map import (
     TERMINAL_SECTION,
 )
 from scgsim.contracts.palace_run_folder import (
+    DRIVEN,
     EIGENMODE,
     ELECTROSTATIC,
     PalaceProblem,
@@ -28,23 +29,33 @@ from scgsim.palace.results.artifacts import (
     expect_mapping,
     expect_scalar,
 )
+from scgsim.palace.results.driven_tables import validate_driven_table
 from scgsim.palace.results.resolved_records import ParsedTable
+from scgsim.palace.results.table_rows import (
+    require_finite_data,
+    require_ordered_index,
+    require_positive_index,
+    require_surface_q_data,
+    validate_error_indicators,
+)
 from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
 from scgsim.refusal import Declared, found_text, internal
 
-READ_PROBLEMS = (ELECTROSTATIC.name, EIGENMODE.name)
-"""The problems whose returned run folders SCGSim reads.  It prepares Driven runs too, and reads none of them yet."""
+READ_PROBLEMS = (ELECTROSTATIC.name, EIGENMODE.name, DRIVEN.name)
+"""The problems whose returned run folders ``resolve_palace_result`` reads: every problem SCGSim writes."""
+REPORTED_PROBLEMS = (ELECTROSTATIC.name, EIGENMODE.name)
+"""The problems the trust report and the notebook views show.  A Driven run is read, and not shown yet."""
 
 
 def read_problem(name: object, subject: str) -> PalaceProblem:
     """The problem record of the returned run folder ``subject`` names, for a problem SCGSim reads.
 
-    Every reader of a returned run folder starts here, so a Driven run is refused by name before any table
-    of it is read as an Electrostatic or Eigenmode one.
+    Every reader of a returned run folder starts here, so a problem SCGSim prepares before it reads it is
+    refused by name before any table of it is read as another problem's.
 
     Raises:
         ValueError: ``name`` is not a problem SCGSim writes.
-        NotImplementedError: ``name`` is a problem SCGSim writes but does not read, Driven.
+        NotImplementedError: ``name`` is a problem SCGSim writes but does not read.
     """
     problem = palace_problem(name)
     if problem.name not in READ_PROBLEMS:
@@ -55,7 +66,32 @@ def read_problem(name: object, subject: str) -> PalaceProblem:
                 "other tables Palace wrote beside it",
             ).refusal(
                 f"SCGSim prepares {problem.name} runs but does not read them back yet; it reads "
-                f"{' and '.join(READ_PROBLEMS)} runs"
+                f"{', '.join(READ_PROBLEMS)} runs"
+            )
+        )
+    return problem
+
+
+def reported_problem(name: object, subject: str) -> PalaceProblem:
+    """The problem record of ``subject``, for a problem the trust report and the notebook views show.
+
+    The report reads a run's tables as an Electrostatic or Eigenmode run's, so a Driven run is refused by name
+    before any of its tables is read that way.
+
+    Raises:
+        ValueError: ``name`` is not a problem SCGSim writes.
+        NotImplementedError: ``name`` is a problem SCGSim reads but does not show yet, Driven.
+    """
+    problem = read_problem(name, subject)
+    if problem.name not in REPORTED_PROBLEMS:
+        raise NotImplementedError(
+            Declared(
+                f"the {problem.name} run {subject}",
+                "your notebook: read the run with resolve_palace_result(...).driven_result(), whose "
+                "S-parameters, Surface EPR and adaptive sampling are the run's results",
+            ).refusal(
+                f"SCGSim reads {problem.name} runs and does not show a report or view of them yet; it shows "
+                f"{' and '.join(REPORTED_PROBLEMS)} runs"
             )
         )
     return problem
@@ -81,10 +117,18 @@ def validate_table(
             Declared(f"{table.path}", RETURNED_RUN_FOLDER).refusal("has no result rows")
         )
 
-    if palace_problem(problem).solves_modes:
-        _validate_eigenmode_table(table, index_counts, config)
-    else:
+    # What a row is decides which validator reads the table: an excitation, a mode or a frequency.
+    series = palace_problem(problem).series
+    if series == "excitation":
         _validate_electrostatic_table(table, index_counts, config)
+    elif series == "mode":
+        _validate_eigenmode_table(table, index_counts, config)
+    elif series == "frequency":
+        validate_driven_table(table, index_counts, config)
+    else:
+        raise ValueError(
+            internal(f"no table validator reads rows of series {series!r}")
+        )
 
 
 def _validate_matrix_table(
@@ -132,10 +176,10 @@ def _validate_matrix_table(
         )
 
     for row in table.rows:
-        _require_finite_data(row)
+        require_finite_data(row)
         if include_index:
-            _require_positive_index(row.get("i"))
-    _require_ordered_index(table, "i", expected_count)
+            require_positive_index(row.get("i"))
+    require_ordered_index(table, "i", expected_count)
 
 
 def _validate_terminal_voltage_table(table: ParsedTable, terminal_count: int) -> None:
@@ -159,9 +203,9 @@ def _validate_terminal_voltage_table(table: ParsedTable, terminal_count: int) ->
             ).refusal("must be V_inc[i]")
         )
     for row in table.rows:
-        _require_finite_data(row)
-        _require_positive_index(row.get("i"))
-    _require_ordered_index(table, "i", terminal_count)
+        require_finite_data(row)
+        require_positive_index(row.get("i"))
+    require_ordered_index(table, "i", terminal_count)
 
 
 def _validate_eig_table(table: ParsedTable, expected_modes: int) -> None:
@@ -180,7 +224,7 @@ def _validate_eig_table(table: ParsedTable, expected_modes: int) -> None:
             )
         )
     for row in table.rows:
-        _require_finite_data(
+        require_finite_data(
             {
                 key: value
                 for key, value in row.items()
@@ -193,7 +237,7 @@ def _validate_eig_table(table: ParsedTable, expected_modes: int) -> None:
                 f"must contain {expected_modes} eig rows; found {len(table.rows)}"
             )
         )
-    _require_ordered_index(table, "m", expected_modes)
+    require_ordered_index(table, "m", expected_modes)
 
 
 def _validate_port_table(
@@ -251,7 +295,7 @@ def _validate_port_table(
                 f"must contain {expected_modes} mode rows; found {len(table.rows)}"
             )
         )
-    _require_ordered_index(table, "m", expected_modes)
+    require_ordered_index(table, "m", expected_modes)
 
 
 def _validate_domain_table(
@@ -302,8 +346,8 @@ def _validate_domain_table(
             )
         )
     for row in table.rows:
-        _require_finite_data(row)
-    _require_ordered_index(table, index_name, expected_rows)
+        require_finite_data(row)
+    require_ordered_index(table, index_name, expected_rows)
 
 
 def validate_surface_table(
@@ -347,26 +391,8 @@ def validate_surface_table(
             )
         )
     for row in table.rows:
-        _require_surface_q_data(row)
-    _require_ordered_index(table, index_name, expected_rows)
-
-
-def _validate_error_indicators(table: ParsedTable) -> None:
-    """Require the native scalar AMR-indicator table shape and finite values."""
-    if tuple(table.headers) != ("Norm", "Minimum", "Maximum", "Mean"):
-        raise ValueError(
-            Declared(
-                f"{table.path} error-indicators header", RETURNED_RUN_FOLDER
-            ).refusal("is malformed")
-        )
-    for row in table.rows:
-        _require_finite_data(row)
-    if len(table.rows) != 1:
-        raise ValueError(
-            Declared(f"{table.path}", RETURNED_RUN_FOLDER).refusal(
-                "must contain exactly one error indicator row"
-            )
-        )
+        require_surface_q_data(row)
+    require_ordered_index(table, index_name, expected_rows)
 
 
 def read_csv_table(path: Path) -> ParsedTable:
@@ -461,7 +487,7 @@ def read_requested_modes(path: Path, mode_count: int) -> ParsedTable:
     skips, reorders or lacks a requested mode is refused, never read by position.
     """
     table = requested_modes(read_csv_table(path), mode_count)
-    _require_ordered_index(table, "m", mode_count)
+    require_ordered_index(table, "m", mode_count)
     return table
 
 
@@ -504,91 +530,6 @@ def _parse_cell(value: str) -> Any:
         return value
 
 
-def _require_finite_data(
-    row: Mapping[str, Any],
-    *,
-    allow_infinite: bool = False,
-    allow_non_numeric: bool = False,
-) -> None:
-    """Reject missing, boolean or nonfinite numerical row values outside explicit exclusions."""
-    for key, value in row.items():
-        if value is None:
-            raise ValueError(
-                Declared(
-                    f"result row has a missing entry in column {key!r}",
-                    RETURNED_RUN_FOLDER,
-                ).refusal(found_text(dict(row)))
-            )
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            if not allow_non_numeric:
-                raise ValueError(
-                    Declared(
-                        f"result value in column {key!r}", RETURNED_RUN_FOLDER
-                    ).refusal("is not numeric")
-                )
-            continue
-        if math.isnan(value) or (not allow_infinite and not math.isfinite(value)):
-            raise ValueError(
-                Declared(
-                    f"result value in column {key!r}", RETURNED_RUN_FOLDER
-                ).refusal("is non-finite")
-            )
-
-
-def _require_surface_q_data(row: Mapping[str, Any]) -> None:
-    """Permit only native lossless-Q infinities; all participation stays finite."""
-
-    for key, value in row.items():
-        if (
-            value is None
-            or isinstance(value, bool)
-            or not isinstance(value, (int, float))
-        ):
-            raise ValueError(
-                Declared(
-                    f"result value in column {key!r}", RETURNED_RUN_FOLDER
-                ).refusal("is not numeric")
-            )
-        if math.isnan(value):
-            raise ValueError(
-                Declared(
-                    f"result value in column {key!r}", RETURNED_RUN_FOLDER
-                ).refusal("is non-finite")
-            )
-        if math.isinf(value) and (
-            value < 0 or not (key == "Q" or key.startswith("Q_surf["))
-        ):
-            raise ValueError(
-                Declared(
-                    "only a positive solver-native Q", RETURNED_RUN_FOLDER
-                ).refusal(f"may contain infinity; got {key!r}")
-            )
-
-
-def _require_ordered_index(
-    table: ParsedTable, column: str, expected_count: int
-) -> None:
-    """Require the table index to be the complete ordered sequence from 1 through N."""
-    values = [row.get(column) for row in table.rows]
-    expected = list(range(1, expected_count + 1))
-    if values != expected:
-        raise ValueError(
-            Declared(f"{table.path} {column!r} values", RETURNED_RUN_FOLDER).refusal(
-                f"must be ordered 1..{expected_count}"
-            )
-        )
-
-
-def _require_positive_index(value: Any) -> None:
-    """Require a positive integer native mode or excitation index."""
-    if not isinstance(value, (int, float)) or value != int(value) or value <= 0:
-        raise ValueError(
-            Declared(
-                "matrix row index must be a positive integer", RETURNED_RUN_FOLDER
-            ).refusal(found_text(value))
-        )
-
-
 def eigenmode_count(config: dict[str, Any]) -> int:
     """Read the positive requested mode count from the sealed Eigenmode solver config."""
     solver = expect_mapping(config.get("Solver"), "config.Solver")
@@ -623,7 +564,7 @@ def _validate_electrostatic_table(
     elif table.name == "surface-Q":
         validate_surface_table(table, index_counts["surface"], expected_rows)
     elif table.name == "error-indicators":
-        _validate_error_indicators(table)
+        validate_error_indicators(table)
 
 
 def _validate_eigenmode_table(
@@ -650,13 +591,13 @@ def _validate_eigenmode_table(
     elif table.name == "surface-Q":
         validate_surface_table(table, index_counts["surface"], expected_rows)
     elif table.name == "error-indicators":
-        _validate_error_indicators(table)
+        validate_error_indicators(table)
 
 
 def _validate_port_rows(table: ParsedTable, expected: int) -> None:
     """Validate ordered finite native port rows with their declared width."""
     for idx, row in enumerate(table.rows, start=1):
-        _require_finite_data(row)
+        require_finite_data(row)
         if len(row) != expected:
             raise ValueError(
                 Declared(f"{table.path} row {idx}", RETURNED_RUN_FOLDER).refusal(

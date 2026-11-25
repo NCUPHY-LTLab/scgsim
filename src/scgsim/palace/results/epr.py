@@ -19,6 +19,7 @@ from scgsim.contracts.palace_index_map import (
 )
 from scgsim.contracts.palace_run_folder import (
     CONFIG,
+    DRIVEN,
     EIGENMODE,
     EPR_SELECTION_SCHEMA,
     INDEX_MAP,
@@ -190,6 +191,12 @@ def epr_result(
             ).refusal(
                 found_text(
                     getattr(result, "problem", type(result).__name__), EIGENMODE.name
+                )
+                # A Driven run has its own result, with the Surface EPR at each frequency and excited port.
+                + (
+                    "; a Driven run's Surface EPR is in driven_result().surface_epr"
+                    if getattr(result, "problem", None) == DRIVEN.name
+                    else ""
                 )
             )
         )

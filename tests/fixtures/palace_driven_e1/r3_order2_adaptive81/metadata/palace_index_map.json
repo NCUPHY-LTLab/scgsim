@@ -1,0 +1,573 @@
+{
+  "schema_version": 3,
+  "entries": [
+    {
+      "section": "Boundaries.LumpedPort",
+      "index": 1,
+      "entry_name": "P1",
+      "role": "port_surface",
+      "attributes": [
+        11
+      ],
+      "physical_names": [
+        "PORT::PORT_SHEET__chip/o_lumped_left__0000"
+      ],
+      "port_name": "chip/o_lumped_left",
+      "metadata": {
+        "port_sheet_id": "PORT_SHEET__chip/o_lumped_left__0000",
+        "host_entity_ids": [
+          "chip/GROUND",
+          "chip/SIGNAL"
+        ],
+        "adjacent_volumes": [
+          "vol:7454afaf3366b63a",
+          "vol:b19387066ff97314"
+        ],
+        "host_volumes": []
+      }
+    },
+    {
+      "section": "Boundaries.LumpedPort",
+      "index": 2,
+      "entry_name": "P2",
+      "role": "port_surface",
+      "attributes": [
+        12
+      ],
+      "physical_names": [
+        "PORT::PORT_SHEET__chip/o_lumped_right__0000"
+      ],
+      "port_name": "chip/o_lumped_right",
+      "metadata": {
+        "port_sheet_id": "PORT_SHEET__chip/o_lumped_right__0000",
+        "host_entity_ids": [
+          "chip/GROUND",
+          "chip/SIGNAL"
+        ],
+        "adjacent_volumes": [
+          "vol:7454afaf3366b63a",
+          "vol:b19387066ff97314"
+        ],
+        "host_volumes": []
+      }
+    },
+    {
+      "section": "Domains.Postprocessing.Energy",
+      "index": 1,
+      "entry_name": "D0_SUBSTRATE",
+      "role": "domain_energy",
+      "physical_name": "D0_SUBSTRATE",
+      "physical_names": [
+        "D0_SUBSTRATE"
+      ],
+      "attributes": [
+        1
+      ],
+      "metadata": {
+        "material": {
+          "material_id": "Si",
+          "kind": "dielectric"
+        },
+        "entities": [
+          "D0_SUBSTRATE"
+        ]
+      }
+    },
+    {
+      "section": "Domains.Postprocessing.Energy",
+      "index": 2,
+      "entry_name": "VACUUM_REGION",
+      "role": "domain_energy",
+      "physical_name": "VACUUM_REGION",
+      "physical_names": [
+        "VACUUM_REGION"
+      ],
+      "attributes": [
+        2
+      ],
+      "metadata": {
+        "material": {
+          "material_id": "vacuum",
+          "kind": "vacuum"
+        },
+        "entities": [
+          "VACUUM_REGION"
+        ]
+      }
+    },
+    {
+      "section": "Boundaries.Postprocessing.Dielectric",
+      "index": 1,
+      "entry_name": "MA::chip/GROUND__sidewall",
+      "role": "surface_epr",
+      "attributes": [
+        5
+      ],
+      "physical_names": [
+        "MA::chip/GROUND__sidewall"
+      ],
+      "metadata": {
+        "rows": [
+          {
+            "row": "MA::chip/GROUND__sidewall",
+            "group": "MA::chip/GROUND__sidewall",
+            "interface_type": "MA",
+            "face_kind": "sidewall",
+            "band": null,
+            "side": null,
+            "face_sides": null,
+            "shared_face_group": null,
+            "entities": [
+              "chip/GROUND"
+            ],
+            "net": "ground",
+            "attributes": [
+              5
+            ],
+            "lineage": {
+              "membership": {
+                "f:0a4f18fc7a14af6d": {
+                  "chip/GROUND": 1.0
+                },
+                "f:0e3ea7b00cfb7176": {
+                  "chip/GROUND": 1.0
+                },
+                "f:248f4d41e7c900c2": {
+                  "chip/GROUND": 1.0
+                },
+                "f:2c8a789d0e1d0090": {
+                  "chip/GROUND": 1.0
+                },
+                "f:3763aae4ec83f776": {
+                  "PORT_SHEET__chip/o_lumped_right__0000": 1.0,
+                  "chip/GROUND": 1.0
+                },
+                "f:52a7d9d7feca4f10": {
+                  "chip/GROUND": 1.0
+                },
+                "f:54dd26e688d6fa49": {
+                  "chip/GROUND": 1.0
+                },
+                "f:5c111152fb863d6f": {
+                  "chip/GROUND": 1.0
+                },
+                "f:624f53d3712ed4d2": {
+                  "PORT_SHEET__chip/o_lumped_left__0000": 1.0,
+                  "chip/GROUND": 1.0
+                },
+                "f:786c32d7f9f664ae": {
+                  "chip/GROUND": 1.0
+                },
+                "f:7fc770b097cb2424": {
+                  "chip/GROUND": 1.0
+                },
+                "f:ac3967f8968cef42": {
+                  "chip/GROUND": 1.0
+                },
+                "f:d1a86fee014f94b8": {
+                  "chip/GROUND": 1.0
+                },
+                "f:d2872050c30278d4": {
+                  "chip/GROUND": 1.0
+                },
+                "f:dfc7a35603059a07": {
+                  "chip/GROUND": 1.0
+                },
+                "f:e01cad1ed582d4c8": {
+                  "chip/GROUND": 1.0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "epr_spec": {
+        "thickness": 0.002,
+        "permittivity": 10.0,
+        "loss_tangent": 0.0033,
+        "source": "Synthetic literature-central model from public conditional-extraction and model-input rows; Woods et al. 2019, doi:10.1103/PhysRevApplied.12.014012; Melville et al. 2020, doi:10.1063/5.0021950",
+        "preset": null,
+        "required": true,
+        "film_thickness_m": 2e-09,
+        "model_l0_m": 1e-06,
+        "schema_version": "scgsim.palace.surface-film.v2"
+      },
+      "baseline_index": 1
+    },
+    {
+      "section": "Boundaries.Postprocessing.Dielectric",
+      "index": 2,
+      "entry_name": "MA::chip/GROUND__top",
+      "role": "surface_epr",
+      "attributes": [
+        6
+      ],
+      "physical_names": [
+        "MA::chip/GROUND__top"
+      ],
+      "metadata": {
+        "rows": [
+          {
+            "row": "MA::chip/GROUND__top",
+            "group": "MA::chip/GROUND__top",
+            "interface_type": "MA",
+            "face_kind": "top",
+            "band": null,
+            "side": null,
+            "face_sides": null,
+            "shared_face_group": null,
+            "entities": [
+              "chip/GROUND"
+            ],
+            "net": "ground",
+            "attributes": [
+              6
+            ],
+            "lineage": {
+              "membership": {
+                "f:584e4a576cd54cc0": {
+                  "VACUUM_REGION": 1.0,
+                  "chip/GROUND": 1.0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "epr_spec": {
+        "thickness": 0.002,
+        "permittivity": 10.0,
+        "loss_tangent": 0.0033,
+        "source": "Synthetic literature-central model from public conditional-extraction and model-input rows; Woods et al. 2019, doi:10.1103/PhysRevApplied.12.014012; Melville et al. 2020, doi:10.1063/5.0021950",
+        "preset": null,
+        "required": true,
+        "film_thickness_m": 2e-09,
+        "model_l0_m": 1e-06,
+        "schema_version": "scgsim.palace.surface-film.v2"
+      },
+      "baseline_index": 2
+    },
+    {
+      "section": "Boundaries.Postprocessing.Dielectric",
+      "index": 3,
+      "entry_name": "MA::chip/SIGNAL__sidewall",
+      "role": "surface_epr",
+      "attributes": [
+        7
+      ],
+      "physical_names": [
+        "MA::chip/SIGNAL__sidewall"
+      ],
+      "metadata": {
+        "rows": [
+          {
+            "row": "MA::chip/SIGNAL__sidewall",
+            "group": "MA::chip/SIGNAL__sidewall",
+            "interface_type": "MA",
+            "face_kind": "sidewall",
+            "band": null,
+            "side": null,
+            "face_sides": null,
+            "shared_face_group": null,
+            "entities": [
+              "chip/SIGNAL"
+            ],
+            "net": "signal",
+            "attributes": [
+              7
+            ],
+            "lineage": {
+              "membership": {
+                "f:1918175c7ccccf0a": {
+                  "chip/SIGNAL": 1.0
+                },
+                "f:256a0cb5eddec824": {
+                  "chip/SIGNAL": 1.0
+                },
+                "f:2dc8b97a3c8d7582": {
+                  "chip/SIGNAL": 1.0
+                },
+                "f:5722b7835dc64f1f": {
+                  "chip/SIGNAL": 1.0
+                },
+                "f:5881d859fef27dad": {
+                  "PORT_SHEET__chip/o_lumped_right__0000": 1.0,
+                  "chip/SIGNAL": 1.0
+                },
+                "f:70ac0b4943316723": {
+                  "chip/SIGNAL": 1.0
+                },
+                "f:8022f22e378c6bac": {
+                  "chip/SIGNAL": 1.0
+                },
+                "f:9bb4b77751f3018b": {
+                  "chip/SIGNAL": 1.0
+                },
+                "f:9cd0ad5186b8b881": {
+                  "chip/SIGNAL": 1.0
+                },
+                "f:9cde8f982dcb3d4f": {
+                  "chip/SIGNAL": 1.0
+                },
+                "f:b1722e79d5af6e02": {
+                  "chip/SIGNAL": 1.0
+                },
+                "f:d91eeffaf11be484": {
+                  "PORT_SHEET__chip/o_lumped_left__0000": 1.0,
+                  "chip/SIGNAL": 1.0
+                },
+                "f:e60f98362084ca43": {
+                  "chip/SIGNAL": 1.0
+                },
+                "f:f09510233185ff49": {
+                  "chip/SIGNAL": 1.0
+                },
+                "f:f316fad2beb97078": {
+                  "chip/SIGNAL": 1.0
+                },
+                "f:f76cb1bfaa4b0ca2": {
+                  "chip/SIGNAL": 1.0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "epr_spec": {
+        "thickness": 0.002,
+        "permittivity": 10.0,
+        "loss_tangent": 0.0033,
+        "source": "Synthetic literature-central model from public conditional-extraction and model-input rows; Woods et al. 2019, doi:10.1103/PhysRevApplied.12.014012; Melville et al. 2020, doi:10.1063/5.0021950",
+        "preset": null,
+        "required": true,
+        "film_thickness_m": 2e-09,
+        "model_l0_m": 1e-06,
+        "schema_version": "scgsim.palace.surface-film.v2"
+      },
+      "baseline_index": 3
+    },
+    {
+      "section": "Boundaries.Postprocessing.Dielectric",
+      "index": 4,
+      "entry_name": "MA::chip/SIGNAL__top",
+      "role": "surface_epr",
+      "attributes": [
+        8
+      ],
+      "physical_names": [
+        "MA::chip/SIGNAL__top"
+      ],
+      "metadata": {
+        "rows": [
+          {
+            "row": "MA::chip/SIGNAL__top",
+            "group": "MA::chip/SIGNAL__top",
+            "interface_type": "MA",
+            "face_kind": "top",
+            "band": null,
+            "side": null,
+            "face_sides": null,
+            "shared_face_group": null,
+            "entities": [
+              "chip/SIGNAL"
+            ],
+            "net": "signal",
+            "attributes": [
+              8
+            ],
+            "lineage": {
+              "membership": {
+                "f:7688223252871cf6": {
+                  "VACUUM_REGION": 1.0,
+                  "chip/SIGNAL": 1.0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "epr_spec": {
+        "thickness": 0.002,
+        "permittivity": 10.0,
+        "loss_tangent": 0.0033,
+        "source": "Synthetic literature-central model from public conditional-extraction and model-input rows; Woods et al. 2019, doi:10.1103/PhysRevApplied.12.014012; Melville et al. 2020, doi:10.1063/5.0021950",
+        "preset": null,
+        "required": true,
+        "film_thickness_m": 2e-09,
+        "model_l0_m": 1e-06,
+        "schema_version": "scgsim.palace.surface-film.v2"
+      },
+      "baseline_index": 4
+    },
+    {
+      "section": "Boundaries.Postprocessing.Dielectric",
+      "index": 5,
+      "entry_name": "MS::chip/GROUND__bottom",
+      "role": "surface_epr",
+      "attributes": [
+        9
+      ],
+      "physical_names": [
+        "MS::chip/GROUND__bottom"
+      ],
+      "metadata": {
+        "rows": [
+          {
+            "row": "MS::chip/GROUND__bottom",
+            "group": "MS::chip/GROUND__bottom",
+            "interface_type": "MS",
+            "face_kind": "bottom",
+            "band": null,
+            "side": null,
+            "face_sides": null,
+            "shared_face_group": null,
+            "entities": [
+              "chip/GROUND"
+            ],
+            "net": "ground",
+            "attributes": [
+              9
+            ],
+            "lineage": {
+              "membership": {
+                "f:4f79341dd77ee7eb": {
+                  "D0_SUBSTRATE": 1.0,
+                  "VACUUM_REGION": 1.0,
+                  "chip/GROUND": 1.0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "epr_spec": {
+        "thickness": 0.002,
+        "permittivity": 11.4,
+        "loss_tangent": 0.0004698936049788292,
+        "source": "Synthetic literature-central model from public conditional-extraction and model-input rows; Woods et al. 2019, doi:10.1103/PhysRevApplied.12.014012; Melville et al. 2020, doi:10.1063/5.0021950",
+        "preset": null,
+        "required": true,
+        "film_thickness_m": 2e-09,
+        "model_l0_m": 1e-06,
+        "schema_version": "scgsim.palace.surface-film.v2"
+      },
+      "baseline_index": 5
+    },
+    {
+      "section": "Boundaries.Postprocessing.Dielectric",
+      "index": 6,
+      "entry_name": "MS::chip/SIGNAL__bottom",
+      "role": "surface_epr",
+      "attributes": [
+        10
+      ],
+      "physical_names": [
+        "MS::chip/SIGNAL__bottom"
+      ],
+      "metadata": {
+        "rows": [
+          {
+            "row": "MS::chip/SIGNAL__bottom",
+            "group": "MS::chip/SIGNAL__bottom",
+            "interface_type": "MS",
+            "face_kind": "bottom",
+            "band": null,
+            "side": null,
+            "face_sides": null,
+            "shared_face_group": null,
+            "entities": [
+              "chip/SIGNAL"
+            ],
+            "net": "signal",
+            "attributes": [
+              10
+            ],
+            "lineage": {
+              "membership": {
+                "f:cba3fa1292efad1e": {
+                  "D0_SUBSTRATE": 1.0,
+                  "VACUUM_REGION": 1.0,
+                  "chip/SIGNAL": 1.0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "epr_spec": {
+        "thickness": 0.002,
+        "permittivity": 11.4,
+        "loss_tangent": 0.0004698936049788292,
+        "source": "Synthetic literature-central model from public conditional-extraction and model-input rows; Woods et al. 2019, doi:10.1103/PhysRevApplied.12.014012; Melville et al. 2020, doi:10.1063/5.0021950",
+        "preset": null,
+        "required": true,
+        "film_thickness_m": 2e-09,
+        "model_l0_m": 1e-06,
+        "schema_version": "scgsim.palace.surface-film.v2"
+      },
+      "baseline_index": 6
+    },
+    {
+      "section": "Boundaries.Postprocessing.Dielectric",
+      "index": 7,
+      "entry_name": "SA::D0_SUBSTRATE|VACUUM_REGION__interface",
+      "role": "surface_epr",
+      "attributes": [
+        13
+      ],
+      "physical_names": [
+        "SA::D0_SUBSTRATE|VACUUM_REGION__interface"
+      ],
+      "metadata": {
+        "rows": [
+          {
+            "row": "SA::D0_SUBSTRATE|VACUUM_REGION__interface",
+            "group": "SA::D0_SUBSTRATE|VACUUM_REGION__interface",
+            "interface_type": "SA",
+            "face_kind": "interface",
+            "band": null,
+            "side": null,
+            "face_sides": null,
+            "shared_face_group": null,
+            "entities": [
+              "D0_SUBSTRATE",
+              "VACUUM_REGION"
+            ],
+            "net": null,
+            "attributes": [
+              13
+            ],
+            "lineage": {
+              "membership": {
+                "f:0a81ed787e451186": {
+                  "D0_SUBSTRATE": 1.0,
+                  "VACUUM_REGION": 1.0
+                },
+                "f:80fa10fd4bab2baa": {
+                  "D0_SUBSTRATE": 1.0,
+                  "VACUUM_REGION": 1.0
+                },
+                "f:c166d25979d9dac1": {
+                  "D0_SUBSTRATE": 1.0,
+                  "VACUUM_REGION": 1.0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "epr_spec": {
+        "thickness": 0.002,
+        "permittivity": 6.635,
+        "loss_tangent": 0.0017,
+        "source": "Synthetic literature-central model from public conditional-extraction and model-input rows; Woods et al. 2019, doi:10.1103/PhysRevApplied.12.014012; Melville et al. 2020, doi:10.1063/5.0021950; OrPen sapphire_EFG public model input",
+        "preset": null,
+        "required": true,
+        "film_thickness_m": 2e-09,
+        "model_l0_m": 1e-06,
+        "schema_version": "scgsim.palace.surface-film.v2"
+      },
+      "baseline_index": 7
+    }
+  ]
+}

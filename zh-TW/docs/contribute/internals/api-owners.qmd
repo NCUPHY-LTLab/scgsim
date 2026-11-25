@@ -78,7 +78,7 @@ scgsim-id: "docs/contribute/internals/api-owners"
 
 ## Palace 名稱 {#palace-package-symbols}
 
-`scgsim.palace` 匯出 37 個名稱，以下依定義它們的模組分組：
+`scgsim.palace` 匯出 42 個名稱，以下依定義它們的模組分組：
 
 | 定義模組 | 職責 | 名稱 |
 |---|---|---|
@@ -91,6 +91,8 @@ scgsim-id: "docs/contribute/internals/api-owners"
 | `scgsim.palace.reports.resolved_result` | 使用者拿到的解析結果及其檢視 | `ResolvedPalaceResult`、`resolve_palace_result` |
 | `scgsim.palace.results.epr`、`scgsim.palace.results.epr_records` | 分離的 EPR 數值與離線重新分析 | `PalaceEprResult`、`epr_result`、`reanalyze_epr`、`resolve_epr_result` |
 | `scgsim.palace.reports.epr` | 分離 EPR 結果的繪圖 | `show_epr` |
+| `scgsim.palace.results.driven`、`scgsim.palace.results.driven_records` | Driven 執行的分離結果：S 參數、表面 EPR 與自適應取樣 | `PalaceDrivenResult`、`DrivenSurfaceEpr`、`AdaptiveSampling` |
+| `scgsim.semantics.s_parameters` | 每個 Driven 求解器都回傳的 S 參數紀錄，與它的 Touchstone 寫出器 | `SParameters`、`SParameterPort` |
 | `scgsim.palace.results.inspection_records` | 報告讀取的分離記錄 | `PalaceFailureDiagnosis`、`PalaceResultSelection`、`PassCostRecord`、`SurfaceMarginEprRecord`、`SurfaceMarginEprSeriesSnapshot` |
 | `scgsim.palace.reports.reports`、`scgsim.palace.reports.trust`、`scgsim.palace.reports.views` | 可信度、物理與成本檢視 | `inspect_run_trustworthiness`、`PalaceTrustReport`、`PhysicsQuantitiesReport`、`SimulationBenchmarkReport` |
 
