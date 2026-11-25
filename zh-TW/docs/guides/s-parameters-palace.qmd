@@ -132,7 +132,7 @@ import orcapen_sc_pdk
 from orcapen_sc_pdk import get_material_records, validate_interface_preset_records
 from orcapen_sc_pdk.tech import get_single_die_layer_stack
 from scgsim.geometry import GeometryPlan, LumpedPort
-from scgsim.palace import DrivenSim, resolve_palace_result
+from scgsim.palace import DrivenSim, Linear, resolve_palace_result
 
 from launchers import launcher_to_launcher
 
@@ -170,7 +170,7 @@ print("\n".join(DrivenSim.simulation_drc(plan).lumped_elements))
 sim = DrivenSim()
 sim.set_plan(plan.prepare())
 sim.set_output_dir(Path(".artifacts/launchers") / uuid4().hex[:12])
-sim.set_driven(start=2e9, stop=10e9, points=81, adaptive_tolerance=1e-3)
+sim.set_driven([Linear(2e9, 10e9, points=81)], adaptive_tolerance=1e-3)
 
 # 4. Mesh, write Palace's input, run Palace with 8 MPI processes.
 sim.mesh()
@@ -205,7 +205,7 @@ s_params.write_touchstone("launchers.s2p")
 第 1 段建立計畫的方式與[以 Palace 計算共振模態](modes-palace.qmd#the-script)相同，使用相同的真空與薄膜，只是換成這個版圖與它的兩個 Net：`signal` 與 `ground`。新的部分：
 
 - **第 2 段在計畫上宣告埠。** 每個 `LumpedPort` 指名它的薄片、參考導體的 Net（薄片連接的另一個導體是訊號），以及埠阻抗（Ω）。你給的順序就是埠的編號：埠 1 是 S 矩陣的第 1 列與第 1 行。Palace 從訊號金屬往參考金屬驅動每個埠，所以薄片畫的方向不影響結果。`simulation_drc` 在幾秒內、建網格之前，就檢查版圖能否以這些埠建模與建網格，並回報它如何處理每一個埠：也就是輸出中 `P1` 與 `P2` 那兩行（[檢查版圖](check-a-layout.qmd)）。沒有 `LumpedPort` 的計畫會在這裡被拒絕。
-- **第 3 段設定頻率掃描，單位是 Hz。** `start`、`stop` 與 `points` 給出含兩端在內的 81 個頻率。`adaptive_tolerance=1e-3` 開啟 Palace 的自適應掃頻：對每個埠，它先在少數幾個頻率求解電場，由這些解建立一個小模型、在全部 81 個頻率上計算，並持續增加求解，直到模型與這些解的相對誤差在 10⁻³ 以內。這裡每個埠只需要 4 次求解，若逐一求解每個頻率則需要 81 次。輸出中兩行 `Port ... driven` 回報的就是這件事；`error` 是模型最後的誤差估計。
+- **第 3 段設定頻率掃描，單位是 Hz。** `Linear(2e9, 10e9, points=81)` 給出含兩端在內、等間距的 81 個頻率；這個清單還可以放更多範圍（[在需要處密集取樣](#dense-sampling)）。`adaptive_tolerance=1e-3` 開啟 Palace 的自適應掃頻：對每個埠，它先在少數幾個頻率求解電場，由這些解建立一個小模型、在全部 81 個頻率上計算，並持續增加求解，直到模型與這些解的相對誤差在 10⁻³ 以內。這裡每個埠只需要 4 次求解，若逐一求解每個頻率則需要 81 次。輸出中兩行 `Port ... driven` 回報的就是這件事；`error` 是模型最後的誤差估計。
 - **不必指定就是二階元素。** `DrivenSim` 若沒有以 `set_numerical(order=...)` 指定其他階數，就以二階元素求解。若改用一階元素，在 `mesh()` 寫出的網格上，傳輸線造成的相位會多出約 7 %（二階約 1 %），而 |S11| 在 10 GHz 達到 −21.2 dB，而不是 −29.8 dB。二階的未知數是一階的五倍，這裡是 1,433,702 個。
 - **第 4 段**建網格、寫出 Palace 的輸入並執行 Palace，與共振器相同。
 - **第 5 段讀回計算結果。** `driven_result()` 依計畫中埠的順序，回傳掃描中每個頻率的 S 參數。`s(2, 1)` 是 S21，也就是驅動埠 1 時從埠 2 出去的波，在每個頻率上是一個複數；`s(1, 1)` 是 S11。`write_touchstone` 把這份紀錄寫成 Touchstone 1.1 檔：頻率以 GHz、|S| 以 dB、arg S 以度表示，參考阻抗是各埠的 50 Ω；兩埠的檔名必須以 `.s2p` 結尾。
@@ -268,3 +268,21 @@ SA::D0_SUBSTRATE|VACUUM_REGION__interface p = 1.558e-04
 - **外邊界。** 真空區域的外表面不給邊界條件，Palace 把它當成理想磁導體，與共振器相同：模型是一個幾乎沒有損耗的封閉盒子。這樣的盒子有自己的共振，晶片較大時，這些共振可能落在掃描範圍內，在 S 參數中顯現為元件本身沒有的特徵。
 - **把金屬當成薄片。** 在 `mesh()` 之前呼叫 `sim.set_route("A")`，與電容計算相同（[把金屬當成薄片](capacitance-palace.qmd#select-the-geometry-approximation-and-build-inputs)）。
 - **HFSS。** [以 HFSS 計算 S 參數](s-parameters-hfss.qmd)以相同方式為 HFSS Driven Terminal 宣告兩個埠，使用的計畫不帶 Surface EPR。
+
+### 在需要處密集取樣 {#dense-sampling}
+
+`set_driven` 接受一串以 Hz 為單位的頻率範圍，Palace 會把所有範圍的頻率合在一起、依序求解，每個頻率只算一次。要看清楚一個窄的特徵，例如 7.32 GHz 附近的共振，可以讓整個頻段取得疏一些，再在特徵周圍加一段取得密的窄頻段：
+
+```python
+sim.set_driven(
+    [
+        Linear(4e9, 9e9, points=501),  # the band, 10 MHz apart
+        Linear(7.30e9, 7.34e9, points=4001),  # the window, 10 kHz apart
+    ],
+    adaptive_tolerance=1e-3,
+)
+```
+
+這樣共有 4,497 個頻率：頻段在 7.30 到 7.34 GHz 之間的五個點，也是窄頻段的點，各只求解一次。`Log(start, stop, points=...)` 在對數尺度上等間距取點，適合跨好幾個數量級的頻段；`Points([...])` 則列出指定的頻率。三者都從 `scgsim.palace` 匯入，可以混在同一個清單裡。兩個頻率若近到 Palace 印出的位數分不開（1 到 10 GHz 之間是 10 Hz），會被拒絕；自適應掃頻至少需要三個頻率。
+
+這種掃描的成本，就是你列出的頻率。不論範圍怎麼給，自適應掃頻的模型都涵蓋最低到最高的頻率，所以密集的窄頻段不會改變模型的建法。之後 Palace 在每個列出的頻率上都花固定的時間：在本頁的晶片上，以二階元素、8 個行程計算，每個頻率、每個埠約 0.17 秒。窄頻段能把這部分壓低，均勻的網格做不到：若整個頻段都以 10 kHz 為間距，就有 500,001 個頻率。

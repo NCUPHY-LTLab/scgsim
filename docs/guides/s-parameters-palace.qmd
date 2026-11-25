@@ -154,7 +154,7 @@ import orcapen_sc_pdk
 from orcapen_sc_pdk import get_material_records, validate_interface_preset_records
 from orcapen_sc_pdk.tech import get_single_die_layer_stack
 from scgsim.geometry import GeometryPlan, LumpedPort
-from scgsim.palace import DrivenSim, resolve_palace_result
+from scgsim.palace import DrivenSim, Linear, resolve_palace_result
 
 from launchers import launcher_to_launcher
 
@@ -192,7 +192,7 @@ print("\n".join(DrivenSim.simulation_drc(plan).lumped_elements))
 sim = DrivenSim()
 sim.set_plan(plan.prepare())
 sim.set_output_dir(Path(".artifacts/launchers") / uuid4().hex[:12])
-sim.set_driven(start=2e9, stop=10e9, points=81, adaptive_tolerance=1e-3)
+sim.set_driven([Linear(2e9, 10e9, points=81)], adaptive_tolerance=1e-3)
 
 # 4. Mesh, write Palace's input, run Palace with 8 MPI processes.
 sim.mesh()
@@ -238,8 +238,10 @@ does, with the same vacuum and thin films, for this layout and its two Nets,
   and meshed with these ports, and reports what it makes of each: the two
   `P1` and `P2` lines of the output ([Check a layout](check-a-layout.qmd)).
   A plan without a `LumpedPort` is refused here.
-- **Section 3 sets the sweep, in hertz.** `start`, `stop` and `points` give
-  81 frequencies, both ends included. `adaptive_tolerance=1e-3` turns on
+- **Section 3 sets the sweep, in hertz.** `Linear(2e9, 10e9, points=81)`
+  gives 81 evenly spaced frequencies, both ends included; the list can hold
+  more ranges ([Dense sampling where it matters](#dense-sampling)).
+  `adaptive_tolerance=1e-3` turns on
   Palace's adaptive sweep: for each port it solves the field at a few
   frequencies, builds a small model from them that it evaluates at all 81,
   and adds solves until that model agrees with them to a relative error of
@@ -384,3 +386,36 @@ participation, so SCGSim derives no Q or T1 from it. A film's
 - **HFSS.** [S-parameters with HFSS](s-parameters-hfss.qmd) declares two
   ports the same way for HFSS Driven Terminal, on a plan without Surface
   EPR.
+
+### Dense sampling where it matters {#dense-sampling}
+
+`set_driven` takes a list of ranges in hertz, and Palace solves at all of
+their frequencies together, in order, each frequency once. To resolve a
+narrow feature, a resonance near 7.32 GHz say, give the band coarsely and a
+window around the feature densely:
+
+```python
+sim.set_driven(
+    [
+        Linear(4e9, 9e9, points=501),  # the band, 10 MHz apart
+        Linear(7.30e9, 7.34e9, points=4001),  # the window, 10 kHz apart
+    ],
+    adaptive_tolerance=1e-3,
+)
+```
+
+That is 4,497 frequencies: the band's five from 7.30 to 7.34 GHz are also
+the window's, and each is solved once. `Log(start, stop, points=...)`
+spaces its points evenly on a log scale, for a band of several decades, and
+`Points([...])` lists chosen frequencies; all three come from
+`scgsim.palace` and can be mixed in one list. Two frequencies closer than
+Palace can print apart, 10 Hz between 1 and 10 GHz, are refused, and an
+adaptive sweep needs at least three frequencies.
+
+The frequencies you list are what such a sweep costs. The adaptive sweep's
+model covers the lowest to the highest frequency whatever the ranges are,
+so a dense window does not change how it is built. Palace then spends a
+fixed time at every listed frequency, about 0.17 s per frequency and port
+on this guide's chip at second order with 8 processes. A window keeps that
+small where a uniform grid cannot: 10 kHz apart across the whole band
+would be 500,001 frequencies.

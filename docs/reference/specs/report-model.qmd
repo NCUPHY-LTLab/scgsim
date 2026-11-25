@@ -113,9 +113,11 @@ calls. Its trust and physics views are a `DrivenTrustReport` and a
 `show_run_trustworthiness()` shows, in order:
 
 1. **Run Identity**: the same five cards, and the notice of a failed run.
-2. **Convergence**: the sweep (`2–10 GHz, 81 points`), the sampling
-   (`uniform`, or `adaptive, tolerance 0.001` with its cap when one is set),
-   the FEM order, the mesh elements and the declared convergence, which is
+2. **Convergence**: the sweep, each of its ranges and, for more than one,
+   the number of frequencies they merge into (`2–10 GHz, 81 points`;
+   `4–9 GHz, 501 points; 7.3–7.34 GHz, 4,001 points; 4,497 frequencies`),
+   the sampling (`uniform`, or `adaptive, tolerance 0.001` with its cap when
+   one is set), the FEM order, the mesh elements and the declared convergence, which is
    `not declared`: a Driven run declares none yet. For an adaptive sweep, a
    table gives each port's samples (the full solves its reduced model was
    built from), the model's estimated error, headed by the tolerance
