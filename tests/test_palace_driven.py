@@ -31,6 +31,7 @@ from scgsim.palace import (
     inspect_run_trustworthiness,
     resolve_palace_result,
 )
+from scgsim.palace.config.numerical import NumericalControls
 
 NETS = {"pad": ("chip/pad",), "electrode": ("chip/electrode",)}
 # The stand-in PDK's materials with the constants a config reads.
@@ -164,6 +165,18 @@ def test_the_sweep_is_one_linear_range_in_ghz(monkeypatch, tmp_path, sweep, bloc
     """``set_driven`` in Hz is ``Solver.Driven``'s one ``Linear`` range in GHz; a uniform sweep has no ``AdaptiveTol``."""
     sim = meshed(monkeypatch, tmp_path, driven_plan(monkeypatch))
     assert written_config(sim, **sweep)["Solver"]["Driven"] == block
+
+
+def test_the_fem_order_is_two_unless_another_is_given(monkeypatch, tmp_path):
+    """Second-order elements unless another order is given (issue 187), in the config too; Eigenmode keeps first."""
+    sim = meshed(monkeypatch, tmp_path, driven_plan(monkeypatch))
+    assert written_config(sim)["Solver"]["Order"] == 2
+    handed_over = DrivenSim(numerical=NumericalControls(tolerance=1e-8))
+    assert handed_over.numerical.order == 2
+    first_order = DrivenSim()
+    first_order.set_numerical(order=1)
+    assert first_order.numerical.order == 1
+    assert EigenmodeSim().numerical.order == 1
 
 
 @pytest.mark.parametrize("route", ["A", "B"])
@@ -309,8 +322,8 @@ def test_amr_is_off_by_default_and_needs_its_tolerance_when_turned_on():
         sim.numerical.amr_nonconformal,
         sim.numerical.amr_tolerance,
     ) == (0, True, None)
-    sim.set_numerical(order=2)
-    assert (sim.numerical.order, sim.numerical.amr_max_passes) == (2, 0)
+    sim.set_numerical(tolerance=1e-8)
+    assert sim.numerical.amr_max_passes == 0
     sim.set_numerical(amr_max_passes=2)
     with pytest.raises(
         ValueError, match="Enabled Driven AMR requires explicit amr_tolerance"
