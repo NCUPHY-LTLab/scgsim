@@ -265,6 +265,10 @@ class ObservedIdentity(TypedDict):
 # ---- Problems -----------------------------------------------------------------------------------------
 
 
+ProblemName = Literal["Electrostatic", "Eigenmode", "Driven"]
+"""The ``Problem.Type`` of each Palace problem SCGSim writes, the names of ``PROBLEMS``."""
+
+
 @dataclass(frozen=True)
 class PalaceProblem:
     """What differs between the Palace problems SCGSim writes: one record per problem, read by every stage.
@@ -274,25 +278,29 @@ class PalaceProblem:
     ``port_families`` of them are written only when the config has lumped ports, and ``surface-Q`` only when
     it has Surface-EPR rows.  ``excitation`` is the ``Boundaries`` block whose rows drive the problem and
     ``excitation_section`` its index-map section.  ``series`` says what one row of a table is: a ``mode``
-    (rows ``m`` = 1..N of the requested modes) or an ``excitation`` (rows ``i``, one per terminal).
+    (rows ``m`` = 1..N of the requested modes), an ``excitation`` (rows ``i``, one per terminal) or a
+    ``frequency`` (rows ``f (GHz)``, one per frequency of the sweep); ``series_index`` is that first column.
     ``primary_table`` holds the problem's physics, ``snapshot_tables`` the files that make one result
     snapshot complete, and ``fem_space`` the finite-element space of its unknowns.
     """
 
-    name: str
+    name: ProblemName
     output_families: tuple[str, ...]
     port_families: tuple[str, ...]
     excitation: str
     excitation_section: str
-    series: Literal["mode", "excitation"]
-    series_index: Literal["m", "i"]
+    series: Literal["mode", "excitation", "frequency"]
+    series_index: Literal["m", "i", "f (GHz)"]
     primary_table: str
     snapshot_tables: tuple[str, ...]
     fem_space: Literal["ND", "H1"]
 
     @property
     def solves_modes(self) -> bool:
-        """Whether each table row is a mode (Eigenmode) rather than an excitation (Electrostatic)."""
+        """Whether each table row is a mode (Eigenmode) rather than an excitation (Electrostatic).
+
+        Only the readers of Electrostatic and Eigenmode runs ask it; they refuse a Driven run first.
+        """
         return self.series == "mode"
 
     def written_families(
@@ -347,7 +355,28 @@ EIGENMODE = PalaceProblem(
     snapshot_tables=("eig", "port-EPR", "surface-Q", "error-indicators"),
     fem_space="ND",
 )
-PROBLEMS = {problem.name: problem for problem in (ELECTROSTATIC, EIGENMODE)}
+# Driven solves the field at each frequency of the sweep with one lumped port excited at a time; ``port-S``
+# holds the S-matrix, one column pair per (port, excitation).
+DRIVEN = PalaceProblem(
+    name="Driven",
+    output_families=(
+        "port-S",
+        "port-I",
+        "port-V",
+        "domain-E",
+        "surface-Q",
+        "error-indicators",
+    ),
+    port_families=("port-S", "port-I", "port-V"),
+    excitation="LumpedPort",
+    excitation_section="Boundaries.LumpedPort",
+    series="frequency",
+    series_index="f (GHz)",
+    primary_table="port-S",
+    snapshot_tables=("port-S", "surface-Q", "error-indicators"),
+    fem_space="ND",
+)
+PROBLEMS = {problem.name: problem for problem in (ELECTROSTATIC, EIGENMODE, DRIVEN)}
 
 
 def palace_problem(name: Any) -> PalaceProblem:

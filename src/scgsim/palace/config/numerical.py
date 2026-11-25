@@ -17,9 +17,14 @@ import sys
 from dataclasses import dataclass, replace
 from enum import Enum
 from numbers import Real
-from typing import Any, Literal
+from typing import Any
 
-from scgsim.contracts.palace_run_folder import EIGENMODE, ELECTROSTATIC
+from scgsim.contracts.palace_run_folder import (
+    DRIVEN,
+    EIGENMODE,
+    ELECTROSTATIC,
+    ProblemName,
+)
 from scgsim.refusal import Declared, found_text
 
 _WHERE_NUMERICAL = "the call to set_numerical"
@@ -27,6 +32,8 @@ _WHERE_NUMERICAL = "the call to set_numerical"
 _KSP_TYPES = {"Default", "CG", "MINRES", "GMRES", "FGMRES", "BiCGSTAB"}
 _SOLVER_TYPES = {"Default", "SuperLU", "STRUMPACK", "MUMPS"}
 _PRECONDITIONERS = {"Default", "AMS", "BoomerAMG"}
+# The problems whose AMR tolerance and update fraction have no SCGSim default: enabling AMR needs both stated.
+_STATED_AMR_PROBLEMS = (EIGENMODE.name, DRIVEN.name)
 
 DECLARED_CONVERGENCE_TOL = sys.float_info.min
 """``Model.Refinement.Tol`` of a run with a convergence declaration: small enough never to end the run.
@@ -52,7 +59,8 @@ class ProblemDefaults:
     """The defaults of the AMR controls that differ by problem: pass limit, conformity and tolerance.
 
     Eigenmode leaves the pass limit and tolerance to choose (None) and refines nonconformally; Electrostatic
-    disables AMR (0 passes), refines conformally and uses a tolerance of 0.01.
+    disables AMR (0 passes), refines conformally and uses a tolerance of 0.01; Driven disables AMR (0 passes),
+    refines nonconformally when enabled, and leaves the tolerance to choose.
     """
 
     amr_max_passes: int | None
@@ -119,7 +127,7 @@ class NumericalControls:
 
     def check_ready_for(
         self,
-        problem: Literal["Eigenmode", "Electrostatic"],
+        problem: ProblemName,
         *,
         convergence_declared: bool = False,
     ) -> None:
@@ -129,7 +137,7 @@ class NumericalControls:
         AMR then needs only its update fraction.
 
         Raises:
-            ValueError: ``amr_max_passes`` was never chosen, or Eigenmode AMR is enabled without its
+            ValueError: ``amr_max_passes`` was never chosen, or Eigenmode or Driven AMR is enabled without its
                 tolerance (unless convergence is declared) and update fraction.
         """
         _refuse_problem_defaults(self)
@@ -140,7 +148,7 @@ class NumericalControls:
                 )
             )
         if (
-            problem == EIGENMODE.name
+            problem in _STATED_AMR_PROBLEMS
             and isinstance(self.amr_max_passes, int)
             and self.amr_max_passes > 0
             and convergence_declared
@@ -148,13 +156,13 @@ class NumericalControls:
         ):
             raise ValueError(
                 Declared(
-                    "Enabled Eigenmode AMR requires explicit amr_update_fraction: call "
+                    f"Enabled {problem} AMR requires explicit amr_update_fraction: call "
                     "set_numerical(amr_update_fraction=...) before write_config()",
                     _WHERE_NUMERICAL,
                 ).refusal(found_text({"amr_update_fraction": self.amr_update_fraction}))
             )
         if (
-            problem == EIGENMODE.name
+            problem in _STATED_AMR_PROBLEMS
             and isinstance(self.amr_max_passes, int)
             and self.amr_max_passes > 0
             and not convergence_declared
@@ -162,7 +170,7 @@ class NumericalControls:
         ):
             raise ValueError(
                 Declared(
-                    "Enabled Eigenmode AMR requires explicit amr_tolerance and amr_update_fraction: call "
+                    f"Enabled {problem} AMR requires explicit amr_tolerance and amr_update_fraction: call "
                     "set_numerical(amr_tolerance=..., amr_update_fraction=...) before write_config()",
                     _WHERE_NUMERICAL,
                 ).refusal(
@@ -213,7 +221,7 @@ def _refuse_problem_defaults(controls: NumericalControls) -> None:
     if open_names:
         raise ValueError(
             Declared(f"NumericalControls {open_names}", _WHERE_NUMERICAL).refusal(
-                "still wait for the problem's defaults: hand the record to EigenmodeSim(numerical=...) or ElectrostaticSim(numerical=...), which fill them, or set them"
+                "still wait for the problem's defaults: hand the record to EigenmodeSim(numerical=...), ElectrostaticSim(numerical=...) or DrivenSim(numerical=...), which fill them, or set them"
             )
         )
 

@@ -1,8 +1,10 @@
 """Build the Palace ``config.json`` of each problem from the mesh's physical groups and the problem's settings.
 
-``build_eigenmode_config`` and ``build_electrostatic_config`` take a ``ConfigInput`` (the mesh, materials,
-Surface-EPR specs and numerical controls both problems share) and what the problem adds.  Each returns the
-config with its index entries (``config.index``) and the records written beside it.
+``build_electrostatic_config``, ``build_eigenmode_config`` and ``build_driven_config`` take a ``ConfigInput``
+(the mesh, materials, Surface-EPR specs and numerical controls every problem shares) and what the problem
+adds.  Each returns the config with its index entries (``config.index``) and the records written beside it.
+Eigenmode and Driven write the same model, conductors, lumped ports, domains and Surface EPR around their
+own solver block; Driven also excites each port.
 """
 
 from __future__ import annotations
@@ -13,7 +15,12 @@ from dataclasses import dataclass
 from numbers import Real
 from typing import Any, NamedTuple
 
-from scgsim.contracts.palace_run_folder import EIGENMODE, ELECTROSTATIC, OUTPUT_DIR
+from scgsim.contracts.palace_run_folder import (
+    DRIVEN,
+    EIGENMODE,
+    ELECTROSTATIC,
+    OUTPUT_DIR,
+)
 from scgsim.refusal import Declared, found_text, internal
 
 from ..mesh.physical_groups import Groups
@@ -22,10 +29,11 @@ from .boundaries import build_electrostatic_boundaries
 from .config_records import (
     MODEL_L0_M,
     ConfigInput,
-    EigenmodeConfigBuildResult,
+    DrivenSweep,
     EigenmodeSettings,
     ElectrostaticConfigBuildResult,
     ElectrostaticSettings,
+    PortConfigBuildResult,
     TerminalBinding,
     optional_string,
 )
@@ -40,6 +48,7 @@ _WHERE_PORTS_ON_LOSS = (
 _WHERE_STACK_MATERIALS = "the stack file's materials"
 
 __all__ = [
+    "build_driven_config",
     "build_eigenmode_config",
     "build_electrostatic_config",
 ]
@@ -88,13 +97,44 @@ def build_eigenmode_config(
     *,
     ports: Sequence[LayoutPortBinding],
     eigenmode: EigenmodeSettings,
-) -> EigenmodeConfigBuildResult:
+) -> PortConfigBuildResult:
     """Build one non-Floquet Eigenmode config: the PEC conductors, lumped ports, domains, Surface EPR and solver.
 
     Raises:
         ValueError: a port does not match its SGB group, a port is also a Surface-EPR loss group, the mesh has
             no PEC surface, a material is invalid, or a required Surface-EPR spec has no face.
     """
+    return _lumped_port_config(
+        common, ports, solver={EIGENMODE.name: _eigenmode_block(eigenmode)}
+    )
+
+
+def build_driven_config(
+    common: ConfigInput,
+    *,
+    ports: Sequence[LayoutPortBinding],
+    sweep: DrivenSweep,
+) -> PortConfigBuildResult:
+    """Build one Driven config: the Eigenmode model and lumped ports, each excited port its own excitation, and the sweep.
+
+    The exterior is Palace's natural boundary, as in Eigenmode: no boundary row is written for it.
+
+    Raises:
+        ValueError: a port does not match its SGB group, a port is also a Surface-EPR loss group, the mesh has
+            no PEC surface, a material is invalid, or a required Surface-EPR spec has no face.
+    """
+    return _lumped_port_config(
+        common, ports, solver={DRIVEN.name: _driven_block(sweep)}
+    )
+
+
+def _lumped_port_config(
+    common: ConfigInput,
+    ports: Sequence[LayoutPortBinding],
+    *,
+    solver: dict[str, Any],
+) -> PortConfigBuildResult:
+    """The config of a problem with lumped ports around its ``solver`` block, with its index entries and records."""
     groups = common.groups
     domain_volumes = _domains_from_solution_volumes(groups.get("volumes", {}))
     material_rows = _materials_from_solution_volumes(domain_volumes, common.materials)
@@ -102,17 +142,19 @@ def build_eigenmode_config(
     epr = _surface_epr_rows(common)
     ports_rows = _lumped_ports(groups, ports)
     _refuse_ports_on_loss_groups(ports_rows.rows, epr.rows)
-    boundaries: dict[str, Any] = {"PEC": {"Attributes": _pec_attributes(groups)}}
+    boundaries: dict[str, Any] = {
+        "PEC": {"Attributes": _pec_attributes(groups, common.problem)}
+    }
     if ports_rows.rows:
         boundaries["LumpedPort"] = ports_rows.rows
     config = _config(
         common,
-        solver={EIGENMODE.name: _eigenmode_block(eigenmode)},
+        solver=solver,
         boundaries=boundaries,
         domains=_Domains(material_rows, energy),
         epr=epr,
     )
-    return EigenmodeConfigBuildResult(
+    return PortConfigBuildResult(
         config=config,
         port_information=ports_rows.information,
         index_entries=[*ports_rows.entries, *energy.entries, *epr.entries],
@@ -192,8 +234,30 @@ def _eigenmode_block(eigenmode: EigenmodeSettings) -> dict[str, Any]:
     return block
 
 
-def _pec_attributes(groups: Groups) -> list[int]:
-    """The attributes of every SGB-authored PEC surface; an Eigenmode model has at least one."""
+def _driven_block(sweep: DrivenSweep) -> dict[str, Any]:
+    """``Solver.Driven``: one linear range of ``points`` samples in GHz, and the adaptive sweep's settings when it is on.
+
+    A uniform sweep writes no ``AdaptiveTol``, which Palace then takes as 0: a full solve at every sample.
+    """
+    block: dict[str, Any] = {
+        "Samples": [
+            {
+                "Type": "Linear",
+                "MinFreq": sweep.start_hz / 1e9,
+                "MaxFreq": sweep.stop_hz / 1e9,
+                "NSample": sweep.points,
+            }
+        ]
+    }
+    if sweep.adaptive_tolerance is not None:
+        block["AdaptiveTol"] = sweep.adaptive_tolerance
+    if sweep.adaptive_max_samples is not None:
+        block["AdaptiveMaxSamples"] = sweep.adaptive_max_samples
+    return block
+
+
+def _pec_attributes(groups: Groups, problem: str) -> list[int]:
+    """The attributes of every SGB-authored PEC surface; a model with lumped ports has at least one."""
     attributes = sorted(
         {
             int(value)
@@ -204,7 +268,7 @@ def _pec_attributes(groups: Groups) -> list[int]:
     if not attributes:
         raise ValueError(
             Declared(
-                "Eigenmode config requires SGB-authored PEC surfaces; the plan's conductors produced none",
+                f"{problem} config requires SGB-authored PEC surfaces; the plan's conductors produced none",
                 _WHERE_PLAN_CONDUCTORS,
             ).refusal(found_text(sorted(groups.get("pec_surfaces", {}))))
         )
@@ -287,18 +351,26 @@ def _material_resolution(
 def _lumped_ports(groups: Groups, ports: Sequence[LayoutPortBinding]) -> LumpedPortRows:
     """The ``LumpedPort`` rows, port information and index entries of ``ports``, each bound to its SGB group ``P<index>``.
 
-    A row's circuit keys are the port's ``circuit``, written unchanged; no port is excited.
+    A row's circuit keys are the port's ``circuit``, written unchanged.  An excited port is the excitation of
+    its own ``Index``: Palace requires the two to be equal when every excitation is one port, and writes the
+    S-matrix only then.  Its ``Direction`` is the one the port states (``LayoutPortBinding.reverses_direction``).
     """
     rows: list[dict[str, Any]] = []
     information: list[dict[str, Any]] = []
     entries: list[PortEntry] = []
     for port in ports:
         bound = _bound_port_group(groups, port)
+        # 0.0 - value rather than -value, so a zero component is written 0.0, not -0.0.
+        direction = (
+            [0.0 - value for value in bound.direction]
+            if port.reverses_direction
+            else list(bound.direction)
+        )
         rows.append(
             {
                 "Index": port.index,
-                "Direction": list(bound.direction),
-                "Excitation": False,
+                "Direction": direction,
+                "Excitation": port.index if port.excited else False,
                 "Attributes": bound.attributes,
                 **port.circuit,
             }
@@ -308,7 +380,7 @@ def _lumped_ports(groups: Groups, ports: Sequence[LayoutPortBinding]) -> LumpedP
                 "portnumber": port.index,
                 "name": port.name,
                 "type": "lumped_sheet",
-                "direction": list(bound.direction),
+                "direction": direction,
                 "physical_name": bound.group["group"],
                 "attributes": bound.attributes,
                 "source_layer": port.source_layer,

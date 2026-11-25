@@ -21,7 +21,7 @@ from scgsim.contracts.palace_run_folder import (
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
 
 from ..config.config import build_eigenmode_config
-from ..config.config_records import EigenmodeConfigBuildResult, EigenmodeSettings
+from ..config.config_records import EigenmodeSettings, PortConfigBuildResult
 from ..config.convergence_plan import PlanContext
 from ..config.files import MetadataFile
 from ..config.index import EprRequest, IndexEntry, check_epr_request
@@ -211,7 +211,7 @@ class EigenmodeSim(PalaceSimulation):
             save_fields=self.save_fields,
         )
 
-    def _metadata(self, result: EigenmodeConfigBuildResult) -> tuple[MetadataFile, ...]:
+    def _metadata(self, result: PortConfigBuildResult) -> tuple[MetadataFile, ...]:
         """The metadata files written with ``config.json``, by run-folder path, in the order they are written."""
         extra = (
             {}

@@ -70,7 +70,7 @@ from scgsim.palace.results.surface_readers import (
     read_surface_bindings,
     read_surface_margin_bindings,
 )
-from scgsim.palace.results.tables import configured_mode_count
+from scgsim.palace.results.tables import configured_mode_count, read_problem
 from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
 from scgsim.refusal import Declared
 
@@ -337,6 +337,7 @@ class _InspectedRun:
                     RETURNED_RUN_FOLDER,
                 ).refusal(f"is not one SCGSim writes: {sorted(PROBLEMS)}")
             )
+        read_problem(problem, str(root))
         config = read_optional_json(root / CONFIG)
         receipt = read_optional_json(root / RETURNED_RECEIPT)
         receipt_paths = validate_inspection_receipt(root, handoff, receipt)

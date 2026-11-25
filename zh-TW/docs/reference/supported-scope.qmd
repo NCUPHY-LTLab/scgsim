@@ -90,7 +90,7 @@ SCGSim 不修補版圖：它不閉合奈米級間隙、不移除短邊、不磨�
 
 ## 模擬之前先檢查版圖 {#check-a-layout}
 
-`EigenmodeSim.simulation_drc(plan)` 與 `ElectrostaticSim.simulation_drc(plan)` 以你給的路徑與邊距，執行 `mesh()` 會執行的幾何建構與網格階段檢查，幾秒內完成且不產生網格。通過表示該模型被接受；它不保證能產生網格，而且只有 `EigenmodeSim.simulation_drc` 會檢查[埠規則](#rules-ports)。呼叫方式與報告見[檢查版圖](../guides/check-a-layout.qmd)。
+`EigenmodeSim.simulation_drc(plan)`、`ElectrostaticSim.simulation_drc(plan)` 與 `DrivenSim.simulation_drc(plan)` 以你給的路徑與邊距，執行 `mesh()` 會執行的幾何建構與網格階段檢查，幾秒內完成且不產生網格。通過表示該模型被接受；它不保證能產生網格，而且只有 `EigenmodeSim.simulation_drc` 與 `DrivenSim.simulation_drc` 會檢查[埠規則](#rules-ports)。呼叫方式與報告見[檢查版圖](../guides/check-a-layout.qmd)。
 
 ## 完整規則 {#rules-in-full}
 

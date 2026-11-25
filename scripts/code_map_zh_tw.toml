@@ -231,8 +231,8 @@ In.en = "a ``GeometryPlanSnapshot`` and the problem's settings."
 In.zh = "``GeometryPlanSnapshot`` 與問題的設定。"
 Out.en = "a run folder with ``palace.msh``, ``config.json`` and the run script (``HandoffPlan``)."
 Out.zh = "包含 ``palace.msh``、``config.json`` 與執行腳本的執行資料夾（``HandoffPlan``）。"
-Next.en = "the user runs Palace; ``results`` reads the folder it returns. ``core`` holds what both problems share, ``lifecycle`` which call needs which stage, ``eigenmode`` and ``electrostatic`` what each problem adds, and ``drc`` the modeling check."
-Next.zh = "使用者執行 Palace；``results`` 讀取回傳的資料夾。``core`` 放兩種問題共用的部分，``lifecycle`` 說明每個呼叫需要哪個階段，``eigenmode`` 與 ``electrostatic`` 放各問題額外的部分，``drc`` 是建模檢查。"
+Next.en = "the user runs Palace; ``results`` reads the folder it returns (Electrostatic and Eigenmode; not Driven yet). ``core`` holds what every problem shares, ``lifecycle`` which call needs which stage, ``eigenmode``, ``electrostatic`` and ``driven`` what each problem adds, and ``drc`` the modeling check."
+Next.zh = "使用者執行 Palace；``results`` 讀取回傳的資料夾（Electrostatic 與 Eigenmode；Driven 尚未讀取）。``core`` 放每種問題共用的部分，``lifecycle`` 說明每個呼叫需要哪個階段，``eigenmode``、``electrostatic`` 與 ``driven`` 放各問題額外的部分，``drc`` 是建模檢查。"
 
 ["palace/source"]
 summary.en = "From a bound plan to the input of the geometry build."

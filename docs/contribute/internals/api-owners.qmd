@@ -168,11 +168,11 @@ making them public.
 
 ## Palace names {#palace-package-symbols}
 
-`scgsim.palace` exports 36 names, grouped here by defining module:
+`scgsim.palace` exports 37 names, grouped here by defining module:
 
 | Defining module | Responsibility | Names |
 |---|---|---|
-| `scgsim.palace.simulation` | The two simulation classes on one shared core | `ElectrostaticSim`, `EigenmodeSim` |
+| `scgsim.palace.simulation` | The three simulation classes on one shared core | `ElectrostaticSim`, `EigenmodeSim`, `DrivenSim` |
 | `scgsim.palace.simulation.drc` | The two-stage layout check, also run by `mesh()` | `SimulationDrcError`, `SimulationDrcReport`, `StageResult` |
 | `scgsim.palace.config.convergence` | The criteria of a convergence declaration | `Capacitance`, `Criterion`, `CriterionGroup`, `ErrorIndicator`, `ModeFrequency`, `SurfaceEpr` |
 | `scgsim.contracts.palace_convergence` | The plan, check and verdict of a declaration | `ConvergenceCheck`, `ConvergencePlan`, `ConvergenceVerdict` |

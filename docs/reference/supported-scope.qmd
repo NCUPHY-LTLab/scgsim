@@ -151,11 +151,12 @@ edges, round off spikes or resample curves. These are not supported:
 
 ## Check a layout before simulating it {#check-a-layout}
 
-`EigenmodeSim.simulation_drc(plan)` and `ElectrostaticSim.simulation_drc(plan)`
-run the geometry build and the meshing-stage check that `mesh()` runs, on the
+`EigenmodeSim.simulation_drc(plan)`, `ElectrostaticSim.simulation_drc(plan)` and
+`DrivenSim.simulation_drc(plan)` run the geometry build and the meshing-stage check that `mesh()` runs, on the
 route and margins you give, in seconds and without meshing. A check that
 succeeds means that model was accepted; it does not promise that it meshes, and only
-`EigenmodeSim.simulation_drc` checks the [port rules](#rules-ports).
+`EigenmodeSim.simulation_drc` and `DrivenSim.simulation_drc` check the
+[port rules](#rules-ports).
 [Check a layout](../guides/check-a-layout.qmd) shows the call and its report.
 
 ## The rules in full {#rules-in-full}

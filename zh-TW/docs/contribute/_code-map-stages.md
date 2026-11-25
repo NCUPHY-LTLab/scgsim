@@ -50,7 +50,7 @@
 | 資料夾 | 它是什麼 | In | Out | Next |
 | --- | --- | --- | --- | --- |
 | `palace` | 從準備好的計畫執行 Palace 模擬到執行資料夾，並讀取 Palace 回傳的執行結果。 | 這一區本身的資料夾：docstring 描述整個區。 |  |  |
-| `palace/simulation` | 使用者操作的階段：綁定準備好的計畫、設定問題，接著產生網格、寫出設定並交接。 | `GeometryPlanSnapshot` 與問題的設定。 | 包含 `palace.msh`、`config.json` 與執行腳本的執行資料夾（`HandoffPlan`）。 | 使用者執行 Palace；`results` 讀取回傳的資料夾。`core` 放兩種問題共用的部分，`lifecycle` 說明每個呼叫需要哪個階段，`eigenmode` 與 `electrostatic` 放各問題額外的部分，`drc` 是建模檢查。 |
+| `palace/simulation` | 使用者操作的階段：綁定準備好的計畫、設定問題，接著產生網格、寫出設定並交接。 | `GeometryPlanSnapshot` 與問題的設定。 | 包含 `palace.msh`、`config.json` 與執行腳本的執行資料夾（`HandoffPlan`）。 | 使用者執行 Palace；`results` 讀取回傳的資料夾（Electrostatic 與 Eigenmode；Driven 尚未讀取）。`core` 放每種問題共用的部分，`lifecycle` 說明每個呼叫需要哪個階段，`eigenmode`、`electrostatic` 與 `driven` 放各問題額外的部分，`drc` 是建模檢查。 |
 | `palace/source` | 從綁定的計畫到幾何建構的輸入。 | `GeometryPlanSnapshot`（含其真空區域與 Surface-EPR 規格），以及模擬的 route 與埠。 | 準備好的幾何請求。 | `mesh`。 |
 | `palace/mesh` | 從準備好的幾何請求到 Palace 讀取的網格。 | 來自 `source` 的準備好的幾何請求，以及網格控制。 | `palace.msh`、它的物理群組與網格清單。 | `config`。 |
 | `palace/config` | 從網格的物理群組與問題的設定到 Palace 的輸入。 | 群組、埠或端子、材料、Surface-EPR 規格、數值控制與收斂宣告。 | `config.json`、索引對照表，以及宣告收斂時的收斂計畫。 | `run`。 |

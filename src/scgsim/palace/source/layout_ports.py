@@ -1,14 +1,14 @@
 """The geometry request of a Palace simulation: its lumped ports resolved and its geometry input prepared.
 
 ``layout_geometry_request`` is everything before the SGB build.  For a problem whose layout sheets are
-lumped ports (Eigenmode) it binds each of the plan's lumped elements to its authored sheet, then prepares the
+lumped ports (Eigenmode, Driven) it binds each of the plan's lumped elements to its authored sheet, then prepares the
 geometry input with exactly the sheets requested; for a problem with no lumped ports (Electrostatic) it
 prepares the plan's geometry input with its sheets as authored.  The vacuum and the Surface-EPR specs are
 the plan's, read from its snapshot.  The simulation core builds its model from it in ``mesh()`` and in
 ``simulation_drc``, and ``input_summary()`` summarises the same prepared input, so the summary shows the
 vacuum, ports and conductors the model is built from.  The request holds no simulation state: the
-simulation passes its settings in, and ``mesh()`` keeps the materials the preparation returns.  A port's circuit is carried through unread; the geometry reads only the sheet, its
-target layer and its direction.
+simulation passes its settings in, and ``mesh()`` keeps the materials the preparation returns.  A port's circuit and
+excitation are carried through unread; the geometry reads only the sheet, its target layer and its direction.
 """
 
 from __future__ import annotations
@@ -138,6 +138,8 @@ def _resolve_plan_ports(
                 source_layer=f"{record['layer']}/{record['datatype']}",
                 direction=tuple(record["direction"]),
                 circuit=requested.circuit,
+                excited=requested.excited,
+                reverses_direction=requested.reverses_direction,
             )
         )
         source_records.append({**record, "port_index": len(resolved)})
