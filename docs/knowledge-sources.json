@@ -277,6 +277,20 @@
             "resolve_epr_result",
             "show_epr"
           ]
+        },
+        {
+          "title": "S-parameters",
+          "title_zh": "S 參數",
+          "gloss": "Detach a Driven run's S-parameters, with its Surface EPR, and write its Touchstone file.",
+          "gloss_zh": "取出 Driven 計算的 S 參數與表面 EPR，並寫出 Touchstone 檔。",
+          "page": "specs/report-model.qmd",
+          "names": [
+            "AdaptiveSampling",
+            "DrivenSurfaceEpr",
+            "PalaceDrivenResult",
+            "SParameterPort",
+            "SParameters"
+          ]
         }
       ]
     },

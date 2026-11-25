@@ -22,6 +22,8 @@ from scgsim.palace.reports.views import (
     PhysicsQuantitiesReport,
     SimulationBenchmarkReport,
 )
+from scgsim.palace.results.driven import driven_result
+from scgsim.palace.results.driven_records import PalaceDrivenResult
 from scgsim.palace.results.epr import epr_result
 from scgsim.palace.results.epr_records import PalaceEprResult
 from scgsim.palace.results.resolve import read_resolved_run
@@ -40,12 +42,24 @@ def resolve_palace_result(
 
 @dataclass(frozen=True)
 class ResolvedPalaceResult(ResolvedRunData):
-    """One checked Palace run folder, with the EPR it yields and the views a notebook shows of it."""
+    """One checked Palace run folder, with the result it yields and the views a notebook shows of it.
+
+    An Eigenmode run yields ``epr_result()``, a Driven run ``driven_result()``; the views show Electrostatic and
+    Eigenmode runs.
+    """
 
     def epr_result(self) -> PalaceEprResult:
         """Detach the verified final Eigenmode EPR quantities for offline work."""
 
         return epr_result(self)
+
+    def driven_result(self) -> PalaceDrivenResult:
+        """Detach a Driven run's S-parameters, in the plan's port order, with its Surface EPR and adaptive sampling.
+
+        ``driven_result().s(2, 1)`` is S21 at every swept frequency; ``write_touchstone(path)`` writes the
+        ``.s<N>p`` file.  An adaptive sweep whose log says it reached its maximum number of samples is refused.
+        """
+        return driven_result(self)
 
     def show_run_trustworthiness(
         self, *, theme: str = "light", show_details: bool = False

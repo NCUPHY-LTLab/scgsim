@@ -4,19 +4,46 @@ The layout is composed from OrcaPen SC PDK cells (``palace_driven_support``), so
 pdk-tests job.  ``mesh()`` builds the real SGB model on Routes A and B and stands in only for Gmsh; the
 config is written from that model's physical groups.  The same layout, meshed and solved on stock Palace
 0.18.1 through these calls, is the run recorded on issue 187.
+
+The readback tests run the run script ``prepare_handoff()`` writes for each fixture run's config; the
+``palace`` it starts is a stand-in that returns that run's real outputs (``palace_driven_runs_support``), and the
+copied recorder writes the receipt, so ``resolve_palace_result`` checks a run folder with every identity a real
+return has.
 """
 
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
+from dataclasses import fields
+from pathlib import Path
 
 import pytest
+from palace_driven_runs_support import (
+    ADAPTIVE_RUN,
+    FIXTURES,
+    INDUCTOR_RUN,
+    LOG,
+    RESISTOR_ADAPTIVE_RUN,
+    RESISTOR_RUN,
+    UNIFORM_RUN,
+    copied_run,
+    fixture_result,
+    read_touchstone,
+)
 from palace_driven_support import launcher_plan, mesh_without_gmsh
 
 from scgsim.contracts.palace_index_map import LUMPED_PORT_SECTION
-from scgsim.contracts.palace_run_folder import INDEX_MAP
+from scgsim.contracts.palace_run_folder import CONFIG, INDEX_MAP, OUTPUT_DIR, read_json
 from scgsim.geometry import LumpedElement, LumpedPort
-from scgsim.palace import DrivenSim
+from scgsim.palace import (
+    DrivenSim,
+    inspect_run_trustworthiness,
+    resolve_palace_result,
+)
+from scgsim.semantics.s_parameters import SParameters
 
 pytestmark = pytest.mark.pdk
 
@@ -130,3 +157,151 @@ def test_simulation_drc_passes_the_launcher_layout_with_its_bands(route):
         "P1 chip/o_lumped_left",
         "P2 chip/o_lumped_right",
     ]
+
+
+# ---- Reading the run back --------------------------------------------------------------------------------
+
+_UNIFORM_SWEEP = {"start": 2e9, "stop": 10e9, "points": 5}
+_LEFT_PORT = LumpedPort(
+    "chip/o_lumped_left", reference_net="ground", impedance_ohm=50.0
+)
+# Each fixture run as it was prepared: its right sheet (None: the 50 ohm port of launcher_plan), FEM order and
+# sweep, through set_lumped_elements, set_numerical and set_driven.
+_RUN_SETTINGS = {
+    UNIFORM_RUN: (None, 1, _UNIFORM_SWEEP),
+    ADAPTIVE_RUN: (
+        None,
+        2,
+        {"start": 2e9, "stop": 10e9, "points": 81, "adaptive_tolerance": 1e-3},
+    ),
+    RESISTOR_RUN: (
+        LumpedElement("chip/o_lumped_right", resistance_ohm=50.0),
+        1,
+        _UNIFORM_SWEEP,
+    ),
+    INDUCTOR_RUN: (
+        LumpedElement("chip/o_lumped_right", inductance_h=10e-9),
+        1,
+        _UNIFORM_SWEEP,
+    ),
+    RESISTOR_ADAPTIVE_RUN: (
+        LumpedElement("chip/o_lumped_right", resistance_ohm=50.0),
+        1,
+        {"start": 2e9, "stop": 10e9, "points": 11, "adaptive_tolerance": 1e-3},
+    ),
+}
+# Touchstone 1.1's order of the (output, excited) pairs of one frequency, for one and two ports.
+_TOUCHSTONE_ORDER = {1: ((0, 0),), 2: ((0, 0), (1, 0), (0, 1), (1, 1))}
+_STAND_IN_PALACE = """#!/usr/bin/env bash
+# A stand-in for Palace: it reports the supported release, accepts the dry run, and returns a fixture run's outputs.
+if [ "$1" = "--version" ]; then
+  printf 'Palace version: 0.18.1\\nSchema version: 1-7-0\\n'
+  exit 0
+fi
+if [ "$1" = "--dry-run" ]; then
+  exit 0
+fi
+cp "{returned}/{output}"/* {output}/
+cat "{returned}/{log}"
+"""
+
+
+def _returned(monkeypatch, tmp_path: Path, run: str):
+    """The fixture run's folder as DrivenSim prepares it and its run script returns it, with the run's outputs."""
+    right, order, sweep = _RUN_SETTINGS[run]
+    mesh_without_gmsh(monkeypatch)
+    sim = DrivenSim()
+    elements = None if right is None else [_LEFT_PORT, right]
+    plan = launcher_plan(surface_epr=True, bands=False, lumped_elements=elements)
+    sim.set_plan(plan.prepare())
+    sim.set_output_dir(tmp_path / run)
+    sim.set_driven(**sweep)
+    sim.set_numerical(order=order)
+    sim.mesh()
+    sim.write_config()
+    palace = tmp_path / "bin" / "palace"
+    palace.parent.mkdir()
+    palace.write_text(
+        _STAND_IN_PALACE.format(returned=FIXTURES / run, output=OUTPUT_DIR, log=LOG),
+        encoding="utf-8",
+    )
+    palace.chmod(0o755)
+    python = tmp_path / "bin" / "python3"
+    # A python3 that sees only the standard library, as on a solver host.
+    python.write_text(
+        f'#!/bin/sh\nexec "{sys.executable}" -I -S "$@"\n', encoding="utf-8"
+    )
+    python.chmod(0o755)
+    handoff = sim.prepare_handoff(
+        profile="direct-local",
+        executable=str(palace),
+        resources={"processes": 1, "threads": 1},
+    )
+    completed = subprocess.run(
+        ["bash", str(handoff.script_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PATH": f"{python.parent}{os.pathsep}{os.environ['PATH']}"},
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    return handoff
+
+
+@pytest.mark.parametrize("run", list(_RUN_SETTINGS))
+def test_a_returned_driven_run_resolves_to_its_s_parameters(monkeypatch, tmp_path, run):
+    """A1 and A9: ``resolve_palace_result(...).driven_result()`` on each fixture run's config, ports in the plan's order.
+
+    The config and the index map ``DrivenSim`` writes equal the run's, so the returned tables are the ones this
+    config asked for.  The result is the one the fixture's tables give, and its Touchstone file reads back as its
+    record.  With the right sheet an unexcited element, the plan has one port.
+    """
+    handoff = _returned(monkeypatch, tmp_path, run)
+    for relative in (CONFIG, INDEX_MAP):
+        assert read_json(handoff.run_dir / relative) == read_json(
+            FIXTURES / run / relative
+        )
+    result = resolve_palace_result(
+        handoff.run_dir, expected_handoff_id=handoff.handoff_id
+    ).driven_result()
+    expected = fixture_result(copied_run(run, tmp_path / "fixture")).driven_result()
+    for field in fields(result):
+        if field.name != "provenance":
+            assert getattr(result, field.name) == getattr(expected, field.name), (
+                field.name
+            )
+    assert result.provenance["handoff_id"] == handoff.handoff_id
+    ports = ["chip/o_lumped_left"] + (
+        ["chip/o_lumped_right"] if _RUN_SETTINGS[run][0] is None else []
+    )
+    assert [port.name for port in result.ports] == ports
+    option, frequencies, values = read_touchstone(
+        result.write_touchstone(tmp_path / f"{run}.s{len(ports)}p")
+    )
+    assert option == ["#", "GHz", "S", "DB", "R", "50"]
+    assert frequencies == [f / 1e9 for f in result.frequencies_hz]
+    order = _TOUCHSTONE_ORDER[len(ports)]
+    assert values == [
+        [part[o][e] for o, e in order for part in (magnitude, phase)]
+        for magnitude, phase in zip(result.magnitude_db, result.phase_deg, strict=True)
+    ]
+    assert isinstance(result, SParameters)
+
+
+def test_the_report_of_a_resolved_driven_run_is_refused_by_name(monkeypatch, tmp_path):
+    """The resolved run is read; its trust report and views refuse it, naming ``driven_result()``."""
+    handoff = _returned(monkeypatch, tmp_path, UNIFORM_RUN)
+    resolved = resolve_palace_result(
+        handoff.run_dir, expected_handoff_id=handoff.handoff_id
+    )
+    message = "SCGSim reads Driven runs and does not show a report or view of them yet"
+    with pytest.raises(NotImplementedError, match=message):
+        resolved.show_run_trustworthiness()
+    with pytest.raises(NotImplementedError, match=message):
+        resolved.show_physics_quantities()
+    with pytest.raises(NotImplementedError, match=message):
+        resolved.show_simulation_benchmark()
+    with pytest.raises(NotImplementedError, match=message):
+        inspect_run_trustworthiness(handoff.run_dir)
+    with pytest.raises(TypeError, match=r"driven_result\(\)\.surface_epr"):
+        resolved.epr_result()

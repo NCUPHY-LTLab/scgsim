@@ -62,7 +62,9 @@ Palace and AEDT solve models made by the same builder:
 ## Semantic facts {#internal-semantic-facts}
 
 `scgsim.semantics` holds facts that do not depend on a solver: the
-revision-bound snapshot, the Route A projection and the EPR records. It uses
+revision-bound snapshot, the Route A projection, the EPR records and
+`SParameters`, the S-parameter record every driven solver returns, with its one
+Touchstone writer. Each backend reads its own files into that record. It uses
 the standard library only and imports no SGB, Palace, AEDT or native code. A
 fact whose revision does not match is refused rather than rebound. A native
 tag a backend reports stays an observation; it never decides contact or

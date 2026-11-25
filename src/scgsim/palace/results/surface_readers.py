@@ -20,7 +20,7 @@ from scgsim.palace.results.resolved_records import ParsedTable
 from scgsim.palace.results.surface_contract import entry_rows, surface_epr_entries
 from scgsim.palace.results.tables import (
     read_csv_table,
-    read_problem,
+    reported_problem,
     requested_modes,
     validate_surface_table,
 )
@@ -155,7 +155,7 @@ def _read_surface_table(path: Path, mode_count: int | None) -> ParsedTable:
 
 
 def _series_kind(problem: PalaceProblem) -> Literal["mode", "excitation"]:
-    """What one row of a read problem's surface-Q table is; ``read_problem`` refused the problems of any other row."""
+    """What one row of a reported problem's surface-Q table is; ``reported_problem`` refused the problems of any other row."""
     return "mode" if problem.solves_modes else "excitation"
 
 
@@ -181,7 +181,7 @@ class SurfaceEprReader:
             table = _read_surface_table(self.path, self.mode_count)
             validate_surface_table(table, self.surface_count, self.expected_rows)
             snapshots: list[SurfaceEprSeriesSnapshot] = []
-            problem = read_problem(self.problem, str(self.path))
+            problem = reported_problem(self.problem, str(self.path))
             for row in table.rows:
                 series_index = int(row[problem.series_index])
                 records = tuple(
@@ -253,7 +253,7 @@ class SurfaceMarginEprReader:
         try:
             table = _read_surface_table(self.path, self.mode_count)
             validate_surface_table(table, self.surface_count, self.expected_rows)
-            problem = read_problem(self.problem, str(self.path))
+            problem = reported_problem(self.problem, str(self.path))
             return tuple(
                 SurfaceMarginEprSeriesSnapshot(
                     pass_index=self.pass_index,
