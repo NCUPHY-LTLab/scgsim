@@ -1,6 +1,6 @@
 """``DrivenSim`` on the launcher-to-launcher layout of issue 187: two ports in the plan's order, in either drawn sense.
 
-The layout is composed from OrcaPen SC PDK cells (``palace_driven_support``), so these tests run in CI's
+The layout is the roster's, composed from OrcaPen SC PDK cells (``scripts/roster_cases.py``), so these tests run in CI's
 pdk-tests job.  ``mesh()`` builds the real SGB model on Routes A and B and stands in only for Gmsh; the
 config is written from that model's physical groups.  The same layout, meshed and solved on stock Palace
 0.18.1 through these calls, is the run recorded on issue 187.

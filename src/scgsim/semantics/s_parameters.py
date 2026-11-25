@@ -6,6 +6,13 @@ the swept frequencies, and |S| in dB and arg S in degrees as the solver reported
 Palace builds it from ``port-S.csv`` (``scgsim.palace``), HFSS from its own Touchstone file; each solver reads
 its own files, and only this record and its writer are shared.
 
+Every solver's record follows one convention, and each solver's reader converts its own output to it: the time
+dependence is e^{jωt}, so a delay is a phase that falls with frequency; each port's waves are referenced to its
+own ``impedance_ohm``, a real impedance, with the other ports terminated in theirs; a port's polarity runs from
+its signal conductor to its reference conductor (the plan's ``reference_net``), so reversing one port turns each
+S_ij that pairs it with another port by 180 degrees; and the reference plane is the port sheet, with nothing
+de-embedded.
+
 ``write_touchstone`` writes Touchstone 1.1 with one reference impedance, so the ports must share one.
 """
 
@@ -63,8 +70,8 @@ class SParameters:
     """The S-matrix of one driven solve at every swept frequency, with its ports, its sweep and its source.
 
     ``magnitude_db[k][o][e]`` and ``phase_deg[k][o][e]`` are |S| in dB (``20 log10 |S|``) and arg S in degrees
-    at ``frequencies_hz[k]``, at output port ``o + 1`` with port ``e + 1`` excited, as the solver reported
-    them.  ``sweep`` is the sweep the solver was asked for, in its own terms with frequencies in Hz;
+    at ``frequencies_hz[k]``, at output port ``o + 1`` with port ``e + 1`` excited, in the convention the module
+    docstring states.  ``sweep`` is the sweep the solver was asked for, in its own terms with frequencies in Hz;
     ``provenance`` names the run and the files the values were read from.
 
     Raises on build:

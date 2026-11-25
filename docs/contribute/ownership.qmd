@@ -41,8 +41,8 @@ enforce the rows that are about imports; the other rows are kept by review.
 
 ## State boundaries {#state-boundaries}
 
-- Palace Electrostatic and Eigenmode keep separate mutable state and fall back
-  separately when a setting changes, on one shared core
+- Palace Electrostatic, Eigenmode and Driven keep separate mutable state and
+  fall back separately when a setting changes, on one shared core
   (`palace/simulation`, [lifecycle](architecture.qmd#palace-preparation-lifecycle)).
 - Gmsh runs in fresh worker processes: the meshing round
   (`meshing/driver.py`) and Palace's group lowering (`palace/mesh/process.py`).

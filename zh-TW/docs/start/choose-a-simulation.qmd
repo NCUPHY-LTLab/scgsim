@@ -18,12 +18,12 @@ aliases:
 |---|---|---|
 | 焊盤的電容是多少？ | [Palace：端子電容](../guides/capacitance-palace.qmd)・[AEDT：Q3D 擷取](../guides/capacitance-q3d.qmd) | SimplePad：[Palace Electrostatic](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/palace_electrostatic.qmd)・[AEDT Q3D](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_q3d.qmd) |
 | 共振器的頻率與 Q 值是多少？它的能量如何分布在表面、體積與接面？ | [Palace：共振模態](../guides/modes-palace.qmd)・[AEDT：HFSS Eigenmode](../guides/modes-hfss.qmd) | SimplePad：[Palace Eigenmode 與 EPR](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/palace_eigenmode.qmd)・[HFSS Eigenmode 與表面 EPR](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.qmd) |
-| 雙埠元件的 S 參數是多少？ | [AEDT：HFSS Driven Terminal](../guides/s-parameters-hfss.qmd) | [17 座橋的 CPW–meander 試片](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/CpwMeanderAirbridge)（HFSS Driven Terminal） |
+| 雙埠元件的 S 參數是多少？ | [Palace：S 參數](../guides/s-parameters-palace.qmd)・[AEDT：HFSS Driven Terminal](../guides/s-parameters-hfss.qmd) | [17 座橋的 CPW–meander 試片](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/CpwMeanderAirbridge)（HFSS Driven Terminal） |
 | 線路的單位長度 C、G、L、R 是多少？ | [AEDT：Q2D 橫截面擷取](../guides/line-parameters-q2d.qmd) | 有限接地 CPW：[AEDT Q2D](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/CrossSectionSimulation/CpwFiniteGround/aedt_q2d.qmd) |
 
 這些筆記本屬於 PDK 修訂版本 `49e539f`，也就是[首頁](../../index.qmd)安裝的版本；它們是為較早的 SCGSim 撰寫的，正在移植到這個版本，所以筆記本與指南不一致時，請以指南為準。
 
-計算 S 參數時，版圖需要為兩個埠各準備一片集總埠片；此版本尚未提供 Driven Modal 與波埠。
+計算 S 參數時，版圖需要為每個埠準備一片集總埠片；HFSS 只接受正好兩個埠。此版本尚未提供波埠與 HFSS Driven Modal。
 
 ## 較大的完整範例 {#public-inputs}
 

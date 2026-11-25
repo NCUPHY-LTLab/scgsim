@@ -58,7 +58,7 @@ aliases:
 
 `PalaceEprResult`, `epr_result`, `reanalyze_epr`, `resolve_epr_result`, `show_epr`.
 
-**S 參數.** 取出 Driven 計算的 S 參數與表面 EPR，並寫出 Touchstone 檔。 [說明](specs/report-model.qmd)
+**S 參數.** 取出 Driven 計算的 S 參數與表面 EPR，並寫出 Touchstone 檔。 [說明](../guides/s-parameters-palace.qmd)
 
 `AdaptiveSampling`, `DrivenSurfaceEpr`, `PalaceDrivenResult`, `SParameterPort`, `SParameters`.
 
@@ -119,7 +119,7 @@ aliases:
 | 來源 | SHA-256 |
 |---|---|
 | `scripts/generate_knowledge_reference.py` | `a66b84bc16c213b694b20d3ef1c6f8867d3dfb30a7d6f9d5034ac2e292c0eb49` |
-| `docs/knowledge-sources.json` | `692ce9324c3cea91d1e52602d15b26c425ce88921509ef4bbf5b23e9b936ac93` |
+| `docs/knowledge-sources.json` | `14f60114eed39e4ea8c01b7d3130823e15700d343bc9afadb6e995db70ceda92` |
 | `src/scgsim/aedt/epr/workflow.py` | `67e0c56b737aa0b7d7804b8c2836ebe107af0850573c496fe432b8658eebd760` |
 | `docs/reference/api/analyze-epr-usage.md` | `99d31a61922a5b4938bb2b6d5f0bc094037045b51377ee711c1683c78cd7e728` |
 | `zh-TW/docs/reference/api/analyze-epr-usage.md` | `a91990007fa95a2979b3a2d039c4e70f3d4efcdb950835e552bee4c1a6fcf779` |
@@ -172,6 +172,7 @@ README 與英文 `docs/*.qmd` 會收錄於離線 bundle；以下文件僅保留�
 - `zh-TW/docs/guides/preview-the-geometry.qmd`
 - `zh-TW/docs/guides/run-elsewhere.qmd`
 - `zh-TW/docs/guides/s-parameters-hfss.qmd`
+- `zh-TW/docs/guides/s-parameters-palace.qmd`
 - `zh-TW/docs/guides/saved-fields.qmd`
 - `zh-TW/docs/guides/upgrade.qmd`
 - `zh-TW/docs/guides/xmon/aedt.qmd`

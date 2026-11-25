@@ -19,6 +19,7 @@ implements.
 | Capacitance | Palace Electrostatic | A `GeometryPlan`, terminal and ground Nets | The capacitance matrix, in terminal order | [Capacitance with Palace](../guides/capacitance-palace.qmd) |
 | Resonant modes | Palace Eigenmode | A `GeometryPlan`, with its lumped elements if it has any | Mode frequency and Q, energies; EPR when requested | [Modes with Palace](../guides/modes-palace.qmd) |
 | Resonant modes | HFSS Eigenmode | A `GeometryPlan`, with its lumped elements if it has any, `modeling` | Mode frequency and Q; EPR when requested | [Modes with HFSS](../guides/modes-hfss.qmd) |
+| S-parameters | Palace Driven | A `GeometryPlan` with its `LumpedPort`s | Complex S-parameters versus frequency, in the plan's port order, and a Touchstone file; Surface EPR per port and frequency | [S-parameters with Palace](../guides/s-parameters-palace.qmd) |
 | S-parameters | HFSS Driven Terminal | A `GeometryPlan` with two `LumpedPort`s, `modeling` | Complex S-parameters, CSV and Touchstone | [S-parameters with HFSS](../guides/s-parameters-hfss.qmd) |
 | Capacitance and conductance | Q3D | A `GeometryPlan`, `modeling` | The C/G matrix | [Capacitance with Q3D](../guides/capacitance-q3d.qmd) |
 | Line parameters | Q2D | Rectangles of the cross-section and their conductor groups | Per-unit-length C, G, L and R | [Line parameters with Q2D](../guides/line-parameters-q2d.qmd) |
@@ -41,8 +42,9 @@ keeps its own boundaries, units and conductor, port or mode order.
 - **Curves:** straight edges and circular arcs are built exactly; a spline
   must be drawn as a polygon ([Source curves](specs/geometry-plan.qmd#source-curves)).
 - []{#energy-participation-and-loss}**Surface EPR** is declared once on the plan, `plan.set_surface_epr(specs)`.
-  Palace Eigenmode and Electrostatic and HFSS Eigenmode read it and cut its
-  margins as bands; HFSS Driven Terminal and Q3D do not. Both Palace and
+  Palace Eigenmode, Driven and Electrostatic and HFSS Eigenmode read it and
+  cut its margins as bands; Palace Driven reports it for each driven port at
+  each frequency. HFSS Driven Terminal and Q3D do not read it. Both Palace and
   HFSS integrate every row of a declared type over all its faces, side walls
   included, unless the spec's `face_kinds` leaves them out.
   [Surface EPR](../concepts/surface-epr.qmd) explains what is computed.
@@ -55,8 +57,9 @@ keeps its own boundaries, units and conductor, port or mode order.
   | Calculation | A `LumpedElement` (R, L, C) | A `LumpedPort` |
   |---|---|---|
   | Palace Eigenmode | a lumped port with its R, L and C; its energy participation is reported by its name | a resistance of its impedance, so the Q is the loaded Q |
+  | Palace Driven | a lumped port with its R, L and C that is never driven: a load, outside the S-matrix | one excitation: port *i* of the S-matrix, in the plan's order, terminated in its impedance |
   | HFSS Eigenmode | an inductance with no resistance is a junction, named by its sheet in the EPR request; otherwise a Lumped RLC | a Lumped RLC of its impedance, as in Palace |
-  | HFSS Driven Terminal | refused, by name: not available in a Driven design yet | one of the two lumped Terminal ports, in the plan's order |
+  | HFSS Driven Terminal | refused, by name: not available in an HFSS Driven design yet | one of the two lumped Terminal ports, in the plan's order |
   | Palace Electrostatic, Q3D | left open: the capacitance is the conductors' alone | left open |
 
   `simulation_drc` and `input_summary()` say what the simulation makes of each
@@ -71,8 +74,6 @@ keeps its own boundaries, units and conductor, port or mode order.
   refused. Tracked in [issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135).
 - Q3D AC/RL: Q3D extracts C and G only. Tracked in
   [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265).
-- Palace Driven. Tracked in
-  [issue #187](https://github.com/NCUPHY-LTLab/scgsim/issues/187).
 - Palace Magnetostatic and Transient.
 - Spline curves read as curves.
 

@@ -1,0 +1,386 @@
+---
+title: "S-parameters with Palace"
+description: "Compute the S-parameters of two launchers joined by a coplanar waveguide with Palace's Driven solver, read them back and write a Touchstone file."
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/palace-driven"
+---
+
+Palace's Driven solver drives each port of a layout in turn, frequency by
+frequency, and returns the S-parameters: how much of the wave sent into one
+port comes back from it and how much comes out of each other port. On this
+page the layout is a through line: two launchers of the OrcaPen SC PDK,
+each a 150 µm pad that tapers into a coplanar waveguide (CPW), joined by
+900 µm of that CPW. Each launcher is a 50 Ω port, and the sweep runs from 2
+to 10 GHz. The script prints:
+
+```text
+P1 chip/o_lumped_left: LumpedPort, R 50.0 ohm, excitation 1: port 1 of the S-matrix, driven from chip/SIGNAL to chip/GROUND
+P2 chip/o_lumped_right: LumpedPort, R 50.0 ohm, excitation 2: port 2 of the S-matrix, driven from chip/SIGNAL to chip/GROUND
+Status: completed
+Port 1 driven: 4 frequencies solved, error 1.2e-06
+Port 2 driven: 4 frequencies solved, error 4.6e-06
+ 2.0 GHz  |S11| = -41.08 dB  |S21| = -0.0004 dB  arg S21 =  -11.118 deg
+ 4.0 GHz  |S11| = -35.38 dB  |S21| = -0.0015 dB  arg S21 =  -22.235 deg
+ 6.0 GHz  |S11| = -32.39 dB  |S21| = -0.0030 dB  arg S21 =  -33.352 deg
+ 8.0 GHz  |S11| = -30.67 dB  |S21| = -0.0045 dB  arg S21 =  -44.469 deg
+10.0 GHz  |S11| = -29.81 dB  |S21| = -0.0058 dB  arg S21 =  -55.589 deg
+```
+
+Almost all the power goes through: |S21| stays within 0.006 dB of 0 dB, and
+at most 0.1 % of the power comes back (|S11| at most −29.8 dB). The phase
+of S21 falls in proportion to the frequency, as a line's delay makes it.
+[Read the result](#read-the-result) takes the numbers apart. The script also
+writes all 81 frequencies to the Touchstone file `launchers.s2p`, which
+circuit simulators read.
+
+You need the installation of First simulation: SCGSim with its `palace`
+extra, the OrcaPen SC PDK, Palace 0.18.1, and `SCGSIM_PALACE_EXECUTABLE` set
+to the `palace` command ([First simulation](../start/first-simulation.qmd#palace-executable)).
+
+## The layout {#the-layout}
+
+A port sits on a port sheet: a rectangle on a port layer that joins the
+port's signal metal to its reference metal, here a pad to the ground across
+the 85 µm gap behind it. The sheet must reach a little way into both metals,
+so that SCGSim can find the two conductors it joins. The PDK's `launcher`
+draws a sheet that only touches its pad and the ground edge to edge, so this
+layout draws its own two sheets, each reaching 10 nm into the pad and into
+the ground. Save this as `launchers.py` in your study project:
+
+```python
+import gdsfactory as gf
+from orcapen_sc_pdk.ports import add_driven_lumped_port
+from orcapen_sc_pdk.tech import LAYER
+
+LINE_UM = 900.0  # the CPW between the two launchers
+PAD_UM = 150.0  # the launcher's square pad
+TAPER_UM = 150.0  # its taper from the pad to the CPW
+BACK_GAP_UM = 85.0  # the gap behind the pad, which the port sheet spans
+LANDING_UM = 0.01  # how far each sheet reaches into the pad and into the ground
+
+
+def launcher_to_launcher() -> gf.Component:
+    """Two PDK launchers joined by a 900 µm CPW on a 1870 × 900 µm die, a port sheet behind each pad."""
+    chip = gf.Component()
+    # The launcher's own sheet only touches its pad and the ground, so it goes to a layer nothing reads.
+    launcher = gf.get_component(
+        "launcher",
+        cpw_xs="cpw_6_7_6",
+        sim_boundary_layer=(250, 0),
+        curve_sampling="simulation",
+    )
+    left = chip << launcher
+    left.move(origin=left.ports["o_neck"].center, destination=(-LINE_UM / 2, 0.0))
+    right = chip << launcher
+    right.rotate(180)
+    right.move(origin=right.ports["o_neck"].center, destination=(LINE_UM / 2, 0.0))
+    line = chip << gf.components.straight(
+        length=LINE_UM, cross_section=gf.get_cross_section("cpw_6_7_6")
+    )
+    line.move(origin=line.ports["o1"].center, destination=left.ports["o_neck"].center)
+    chip << gf.components.rectangle(
+        size=(1870.0, 900.0), centered=True, layer=LAYER.D0_SUBSTRATE_AREA
+    )
+
+    # A port sheet across the gap behind each pad, from the ground to the pad.
+    pad_back = LINE_UM / 2 + TAPER_UM + PAD_UM
+    for name, side in (("o_lumped_left", -1.0), ("o_lumped_right", 1.0)):
+        x0, x1 = sorted(
+            (side * (pad_back - LANDING_UM), side * (pad_back + BACK_GAP_UM + LANDING_UM))
+        )
+        y = PAD_UM / 2
+        chip.add_polygon(
+            [(x0, -y), (x1, -y), (x1, y), (x0, y)], layer=LAYER.D0_TOP_SIM_BOUNDARY
+        )
+        add_driven_lumped_port(
+            chip,
+            name=name,
+            center=(side * (pad_back + BACK_GAP_UM / 2), 0.0),
+            orientation=0.0 if side < 0 else 180.0,
+            layer=LAYER.D0_TOP_SIM_BOUNDARY,
+        )
+
+    # What the plan reads: the signal metal, the ground metal and the two sheets.
+    chip.info["component_semantics"] = {
+        "schema_version": 2,
+        "conductor_regions": [
+            {
+                "semantic_id": "SIGNAL",
+                "level": "D0_TOP_M1",
+                "gds_layer": tuple(LAYER.D0_TOP_M1_DRAW),
+                "geometry": {
+                    "geometry_source": "gds_polygon",
+                    "selector_point_um": (0.0, 0.0),
+                },
+            },
+            {
+                "semantic_id": "GROUND",
+                "level": "D0_TOP_M1",
+                "gds_layer": tuple(LAYER.D0_TOP_GROUND_MASK),
+            },
+        ],
+        "ports": [
+            {
+                "name": name,
+                "layer": tuple(LAYER.D0_TOP_SIM_BOUNDARY),
+                "target_layer": "D0_TOP_M1",
+            }
+            for name in ("o_lumped_left", "o_lumped_right")
+        ],
+    }
+    return chip
+```
+
+The CPW is the PDK's `cpw_6_7_6`: a 7 µm signal line in 6 µm gaps. The
+launchers and the line form one piece of signal metal, `SIGNAL`; the rest of
+the chip's top face is the ground, `GROUND`. The chip is 1870 × 900 µm of
+silicon, 500 µm thick, with 0.1 µm of aluminium, from the PDK's single-die
+layer stack.
+
+## The script {#the-script}
+
+Save this as `launcher_s_parameters.py` next to `launchers.py`:
+
+```python
+import cmath
+import math
+import os
+import subprocess
+from pathlib import Path
+from uuid import uuid4
+
+import orcapen_sc_pdk
+from orcapen_sc_pdk import get_material_records, validate_interface_preset_records
+from orcapen_sc_pdk.tech import get_single_die_layer_stack
+from scgsim.geometry import GeometryPlan, LumpedPort
+from scgsim.palace import DrivenSim, resolve_palace_result
+
+from launchers import launcher_to_launcher
+
+# 1. The layout and its plan: the signal and ground Nets, the vacuum, and thin lossy films (PDK presets).
+orcapen_sc_pdk.activate()
+plan = GeometryPlan(
+    component=launcher_to_launcher(),
+    root_id="chip",
+    layer_stack=get_single_die_layer_stack(),
+    material_records=get_material_records(),
+    coupon_padding_um=0.0,
+)
+plan.set_nets({"signal": ("chip/SIGNAL",), "ground": ("chip/GROUND",)})
+plan.set_vacuum_region(padding=(0.0, 0.0, 1000.0))
+presets = validate_interface_preset_records()
+plan.set_surface_epr({
+    kind: {
+        "film_thickness_m": presets[f"LiteratureCentral_{kind}"]["thickness"] * 1e-6,
+        "permittivity": presets[f"LiteratureCentral_{kind}"]["permittivity"],
+        "loss_tangent": presets[f"LiteratureCentral_{kind}"]["loss_tangent"],
+        "source": presets[f"LiteratureCentral_{kind}"]["source"],
+        "preset": f"LiteratureCentral_{kind}",
+    }
+    for kind in ("MA", "MS", "SA")
+})
+
+# 2. The ports: each sheet is a 50 Ω port to the ground; the left one, given first, is port 1.
+plan.set_lumped_elements([
+    LumpedPort("chip/o_lumped_left", reference_net="ground", impedance_ohm=50.0),
+    LumpedPort("chip/o_lumped_right", reference_net="ground", impedance_ohm=50.0),
+])
+print("\n".join(DrivenSim.simulation_drc(plan).lumped_elements))
+
+# 3. The sweep, 81 frequencies from 2 to 10 GHz.
+sim = DrivenSim()
+sim.set_plan(plan.prepare())
+sim.set_output_dir(Path(".artifacts/launchers") / uuid4().hex[:12])
+sim.set_driven(start=2e9, stop=10e9, points=81, adaptive_tolerance=1e-3)
+
+# 4. Mesh, write Palace's input, run Palace with 8 MPI processes.
+sim.mesh()
+sim.write_config()
+handoff = sim.prepare_handoff(
+    profile="direct-local",
+    executable=os.environ["SCGSIM_PALACE_EXECUTABLE"],
+    resources={"command_style": "wrapper", "processes": 8, "threads": 1},
+)
+subprocess.run(["bash", "run_palace.sh"], cwd=handoff.run_dir, check=True)
+
+# 5. Read the S-parameters back, print them every 2 GHz and write the Touchstone file.
+result = resolve_palace_result(handoff.run_dir, expected_handoff_id=handoff.handoff_id)
+print("Status:", result.status)
+s_params = result.driven_result()
+for sampling in s_params.adaptive_sampling:
+    print(
+        f"Port {sampling.excited_port} driven: {sampling.samples} frequencies solved, "
+        f"error {sampling.error:.1e}"
+    )
+s11, s21 = s_params.s(1, 1), s_params.s(2, 1)
+for k, frequency in enumerate(s_params.frequencies_hz):
+    if k % 20 == 0:  # every 2 GHz
+        print(
+            f"{frequency / 1e9:4.1f} GHz  |S11| = {20 * math.log10(abs(s11[k])):6.2f} dB"
+            f"  |S21| = {20 * math.log10(abs(s21[k])):7.4f} dB"
+            f"  arg S21 = {math.degrees(cmath.phase(s21[k])):8.3f} deg"
+        )
+s_params.write_touchstone("launchers.s2p")
+```
+
+Section 1 builds the plan as [Resonant modes with Palace](modes-palace.qmd#the-script)
+does, with the same vacuum and thin films, for this layout and its two Nets,
+`signal` and `ground`. What is new:
+
+- **Section 2 declares the ports on the plan.** Each `LumpedPort` names its
+  sheet, the Net of its reference conductor (the other conductor the sheet
+  joins is its signal) and its impedance in ohms. The order you give them is
+  the port numbering: port 1 is row and column 1 of the S-matrix. Palace
+  drives each port from its signal metal to its reference, so the sense in
+  which a sheet is drawn does not change the result. `simulation_drc` checks,
+  in seconds and before anything is meshed, that the layout can be built
+  and meshed with these ports, and reports what it makes of each: the two
+  `P1` and `P2` lines of the output ([Check a layout](check-a-layout.qmd)).
+  A plan without a `LumpedPort` is refused here.
+- **Section 3 sets the sweep, in hertz.** `start`, `stop` and `points` give
+  81 frequencies, both ends included. `adaptive_tolerance=1e-3` turns on
+  Palace's adaptive sweep: for each port it solves the field at a few
+  frequencies, builds a small model from them that it evaluates at all 81,
+  and adds solves until that model agrees with them to a relative error of
+  10⁻³. Here it needed 4 solves per port, where solving every frequency would
+  take 81. The two `Port ... driven` lines report this; `error` is the
+  model's last estimate.
+- **Second-order elements, without asking.** A `DrivenSim` solves with
+  second-order elements unless `set_numerical(order=...)` gives another
+  order. With first-order elements, on the mesh `mesh()` writes, the phase
+  the line adds comes out about 7 % too large (about 1 % at second order),
+  and |S11| reaches −21.2 dB at 10 GHz instead of −29.8 dB. Second order has
+  five times as many unknowns, 1,433,702 here.
+- **Section 4** meshes, writes Palace's input and runs Palace, as for a
+  resonator.
+- **Section 5 reads the run back.** `driven_result()` returns the
+  S-parameters over the plan's ports, in their order, at every frequency
+  of the sweep. `s(2, 1)` is S21, the wave out of port 2 with port 1 driven,
+  as a complex number at each frequency, and `s(1, 1)` is S11.
+  `write_touchstone` writes the record as a Touchstone 1.1 file, in GHz with
+  |S| in dB and arg S in degrees, referenced to the ports' 50 Ω; its suffix
+  must be `.s2p` for two ports.
+
+Run it from the study project, in the shell where you set
+`SCGSIM_PALACE_EXECUTABLE`:
+
+```bash
+uv run launcher_s_parameters.py
+```
+
+With 8 MPI processes it took about six minutes on a workstation, and Palace
+used up to 14 GB of memory.
+
+## Read the result {#read-the-result}
+
+The numbers follow one convention:
+
+- **At the port sheets.** The values are at the sheets behind the pads, with
+  nothing removed, so they include both pads and both tapers: they describe
+  the chip from one launcher's landing to the other's.
+- **Against each port's own impedance.** Each port's waves are measured
+  against its own impedance, 50 Ω here, with the other port terminated in
+  its 50 Ω.
+- **Signed by the reference Net.** Each port runs from its signal metal to
+  the metal of its `reference_net`, here `ground`. Turning one port around
+  would turn S21 and S12 by 180° and leave S11 and S22 as they are.
+- **A delay is a falling phase.** As the frequency rises, the phase of a
+  through line's S21 falls: here by about 5.56° per GHz.
+
+**Transmission.** |S21| is −0.0004 dB at 2 GHz and −0.0058 dB at
+10 GHz: nearly all the power goes through. The only lossy material is the
+silicon, with a loss tangent of 2.6 × 10⁻⁷, so the power that neither comes
+back nor goes through, 1 − |S11|² − |S21|², should be close to zero; it is
+at most 2.9 × 10⁻⁴ over the band.
+
+**The reflection.** The CPW's characteristic impedance, from conformal
+mapping, is about 54.4 Ω, not 50 Ω, so each end reflects a little:
+Γ = (54.37 − 50)/(54.37 + 50) = 0.042. The two reflections of a 900 µm line
+alone would give |S11| ≈ 2Γ|sin βL|, −42.0 dB at 2 GHz and −28.3 dB at
+10 GHz. Palace gives −41.1 and −29.8 dB, the same size: the launchers
+reflect too, and part of their reflection cancels the line's, so the
+estimate gives the size of |S11|, not its value.
+
+**The delay.** The fall of 5.559° per GHz is a delay of 15.44 ps. The
+line accounts for 7.57 ps (900 µm at an effective index of 2.5212); the two
+launchers, with their pads and tapers, for the other 7.87 ps.
+
+**Reciprocity and symmetry.** S12 equals S21 to 7.7 × 10⁻¹⁵, as it must for
+a reciprocal device, and the layout is mirror-symmetric, so S11 and S22
+should be equal: they differ by at most 1.6 × 10⁻⁴.
+
+## Surface participation {#surface-participation}
+
+A driven run also computes, at each frequency and with each port driven,
+the share of the electric energy that sits in each thin film of
+`set_surface_epr`: its participation p. `s_params.surface_epr` holds one
+record per driven port and frequency, 162 here, in port order and then sweep
+order:
+
+```python
+epr = s_params.surface_epr[0]  # port 1 driven, at 2 GHz
+for row in epr.surfaces:
+    print(row.name, f"p = {row.participation:.3e}")
+```
+
+This prints, for port 1 driven at 2 GHz:
+
+```text
+MA::chip/GROUND__sidewall p = 5.399e-08
+MA::chip/GROUND__top p = 3.887e-07
+MA::chip/SIGNAL__sidewall p = 1.280e-07
+MA::chip/SIGNAL__top p = 1.085e-06
+MS::chip/GROUND__bottom p = 4.615e-05
+MS::chip/SIGNAL__bottom p = 1.314e-04
+SA::D0_SUBSTRATE|VACUUM_REGION__interface p = 1.558e-04
+```
+
+The metal–substrate (MS) and substrate–air (SA) films hold the most, and the
+metal–air (MA) films about a hundred times less. These rows are the ones a resonator study of the same plan reports
+([Surface EPR](../concepts/surface-epr.qmd#rows)), but a driven
+participation is the energy stored at one frequency with one port driven,
+not a mode's. Only near an isolated resonance does it approach the mode's
+participation, so SCGSim derives no Q or T1 from it. A film's
+`inset_margins_um` adds margin rows in `epr.margins`, as for a resonator
+([Surface EPR near the gaps](modes-palace.qmd#surface-epr-margin-rows)).
+
+## Settings you may change {#settings-you-may-change}
+
+- **A full solve at every frequency.** Leave out `adaptive_tolerance` and
+  Palace solves every frequency once per port. That is 162 solves for this
+  sweep, about 37 s each at second order on this chip; choose it for a few
+  frequencies, or to check the adaptive sweep at some of them. On this chip
+  at first order, the adaptive sweep agreed with the full solves at 2, 4, 6,
+  8 and 10 GHz to 3 × 10⁻⁵° in arg S21 and 2 × 10⁻⁴ dB in |S11|.
+- **The adaptive sweep's limit.** `adaptive_max_samples` caps the solves per
+  port; without it Palace's own cap of 20 applies. When a port reaches the
+  cap before the model agrees to the tolerance, Palace's log says so and
+  `driven_result()` refuses the run, naming the port: run again with a
+  larger cap.
+- **More ports, or other elements.** Give as many `LumpedPort`s as the
+  layout has sheets; port i is the i-th you give, and every port is driven
+  in turn. `write_touchstone` needs one impedance for all ports, as
+  Touchstone 1.1 references every port to one. A `LumpedElement` on the
+  plan beside the ports, a junction's inductance say, is solved as a load
+  with its R, L and C and is never driven; the S-matrix has rows only for
+  the ports, so one port and one element give a one-port result and an
+  `.s1p` file ([Lumped elements](../reference/specs/geometry-plan.qmd#lumped-elements)).
+- **Mesh refinement.** Palace runs on the mesh `mesh()` writes unless you
+  turn on refinement, `set_numerical(amr_max_passes=..., amr_tolerance=...,
+  amr_update_fraction=...)`. Each refinement pass solves the whole sweep
+  again, every port at every frequency, so refine on a short sweep of a few
+  points. A driven run does not yet take a convergence declaration:
+  `set_convergence` refuses one, and the passes stop at `amr_max_passes` or
+  at Palace's `amr_tolerance`.
+- **The outer boundary.** The faces of the vacuum region get no boundary
+  condition, which Palace treats as a perfect magnetic conductor, as for a
+  resonator: the model is a closed box with almost no loss. Such a box has
+  resonances of its own, and on a large chip they can fall inside the
+  sweep, where they show in the S-parameters as features the device does
+  not have.
+- **Metal as sheets.** `sim.set_route("A")` before `mesh()`, as for
+  capacitance ([Metal as sheets](capacitance-palace.qmd#select-the-geometry-approximation-and-build-inputs)).
+- **HFSS.** [S-parameters with HFSS](s-parameters-hfss.qmd) declares two
+  ports the same way for HFSS Driven Terminal, on a plan without Surface
+  EPR.

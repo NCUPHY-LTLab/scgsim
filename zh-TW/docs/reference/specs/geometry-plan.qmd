@@ -87,7 +87,7 @@ plan.set_lumped_elements([
 
 埠依你給的順序先編號：埠 1 是第一個 `LumpedPort`，也就是 S 矩陣的第 1 列與第 1 行。其他元件依序接在後面，所以在沒有埠的計算中，第一個元件就是 Palace 的埠 `P1`。`prepare()` 會拒絕以下情況，並指出元件、其埠片的圖層與以 µm 表示的範圍：版圖沒有畫出的名稱；落在不只或少於兩個導體上的埠片；同一個 Net 的兩個導體；`reference_net` 不是任一導體之 Net 的埠。結果放在 `snapshot.lumped_elements`，每個元件一筆 `LumpedElementRecord`，含埠片、依埠片方向排列的兩個導體（`start`、`end`）及其 Net。
 
-每種模擬如何處理每個元件，見[支援的計算](../supported-calculations.qmd#lumped-elements)；簡言之，Palace Eigenmode 與 HFSS Eigenmode 會實現每個元件，並把埠當成其阻抗的負載；Palace Electrostatic 與 Q3D 讓它們保持開路；HFSS Driven Terminal 取用那兩個埠。每個被實現元件的埠片，都會切成其兩個導體之間的矩形，Palace 與 AEDT 相同。規劃沒有宣告任何元件的埠片，不屬於 Palace 或 HFSS 的模型。對在規劃之下建立、已正規化的 `GeometryBuildInput`，`with_rectangular_junctions(build_input, specs)` 以 `RectangularJunctionSpec` 與 `JunctionTerminalBinding` 把埠片綁定到它的兩個端點。
+每種模擬如何處理每個元件，見[支援的計算](../supported-calculations.qmd#lumped-elements)；簡言之，Palace Eigenmode 與 HFSS Eigenmode 會實現每個元件，並把埠當成其阻抗的負載；Palace Electrostatic 與 Q3D 讓它們保持開路；Palace Driven 輪流驅動每個埠，並把其他元件實現為負載；HFSS Driven Terminal 取用那兩個埠。每個被實現元件的埠片，都會切成其兩個導體之間的矩形，Palace 與 AEDT 相同。規劃沒有宣告任何元件的埠片，不屬於 Palace 或 HFSS 的模型。對在規劃之下建立、已正規化的 `GeometryBuildInput`，`with_rectangular_junctions(build_input, specs)` 以 `RectangularJunctionSpec` 與 `JunctionTerminalBinding` 把埠片綁定到它的兩個端點。
 
 ## 來源曲線 {#source-curves}
 

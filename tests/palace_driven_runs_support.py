@@ -4,7 +4,7 @@
 reads, at their run-folder paths: the sealed ``config.json`` and ``metadata/palace_index_map.json``; the six
 tables and the ``palace.json`` stock Palace 0.18.1 wrote into ``results/palace``; and its log
 ``logs/palace-manual.log``, whose launch line is scrubbed of the local install paths.  Nothing else is changed.
-The layout is the launcher-to-launcher composition of ``palace_driven_support`` (MA, MS and SA Surface EPR without
+The layout is the roster's launcher-to-launcher composition (``scripts/roster_cases.py``; MA, MS and SA Surface EPR without
 bands, 7 ``Dielectric`` rows; Route B; the left sheet a 50 ohm port, port 1), prepared with ``DrivenSim`` and
 solved on 8 MPI ranks, the same mesh in each.  E1's two runs have the right sheet as port 2, 50 ohm:
 

@@ -145,7 +145,8 @@ What each simulation does with each element is on
 [Supported calculations](../supported-calculations.qmd#lumped-elements);
 in short, Palace Eigenmode and HFSS Eigenmode realize every element and treat
 a port as a load of its impedance, Palace Electrostatic and Q3D leave them
-open, and HFSS Driven Terminal takes the two ports. Every realized element's
+open, Palace Driven drives each port in turn and realizes the other elements
+as loads, and HFSS Driven Terminal takes the two ports. Every realized element's
 sheet is cut to the rectangle between its two conductors, the same in Palace
 and AEDT. A sheet the plan declares nothing on is not part of a Palace or HFSS
 model. For a normalized `GeometryBuildInput` built below the plan,

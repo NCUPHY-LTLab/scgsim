@@ -37,7 +37,7 @@ aliases:
 
 ## 狀態界線 {#state-boundaries}
 
-- Palace 的 Electrostatic 與 Eigenmode 共用一個核心（`palace/simulation`），但各自保有可變狀態，設定改變時也各自退回（[生命週期](architecture.qmd#palace-preparation-lifecycle)）。
+- Palace 的 Electrostatic、Eigenmode 與 Driven 共用一個核心（`palace/simulation`），但各自保有可變狀態，設定改變時也各自退回（[生命週期](architecture.qmd#palace-preparation-lifecycle)）。
 - Gmsh 在全新的工作程序中執行：一輪網格化（`meshing/driver.py`），以及 Palace 的群組降階（`palace/mesh/process.py`）。
 - AEDT 的 `EigenmodeSim` 保有可變設定；收據的每次變更與 Desktop 的生命週期，由單一交易（`aedt/runtime/transaction.py`）負責（[AEDT 生命週期](architecture.qmd#aedt-execution-lifecycle)）。
 - 幾何快照與產生它的物件脫離；後端標記是觀察資料，從來不是識別資訊的來源。

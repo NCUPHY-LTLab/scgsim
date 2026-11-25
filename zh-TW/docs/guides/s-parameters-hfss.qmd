@@ -55,6 +55,6 @@ print(handoff.spec_path, handoff.archive_path)
 - 計畫上的每個 `LumpedPort` 是一個埠：它所在的薄片、參考導體的 Net（薄片連接的另一個導體是訊號），以及埠阻抗（Ω）。埠 1 是你給的第一個，埠 2 是第二個；兩個埠共用同一個參考。埠屬於計畫，所以同一個計畫的 Palace 或 HFSS 本徵模態研究也會看到它們，作為負載。
 - `plan.prepare()` 會拒絕版圖沒有畫出的薄片、沒有連接兩個導體的薄片，以及不是任一導體之 Net 的 `reference_net`，並指出薄片的圖層與位置。`prepare_hfss_driven_from_geometry` 由計畫建立模型，並拒絕埠數不是兩個、或帶有不是埠之集總元件的計畫。
 - `HfssRunControl` 設定求解與掃描：這裡是 4 GHz 到 8 GHz 共 201 點。請依你需要的響應選擇範圍與點數（[掃描參考](../reference/specs/aedt-runtime.qmd#hfss-driven-sweep-count)）。
-- Driven 模型不帶接面、集總 RLC 負載或表面 EPR；這些屬於 [HFSS 本徵模態](modes-hfss.qmd)。
+- HFSS 的 Driven 模型不帶接面、集總 RLC 負載或表面 EPR；這些屬於 [HFSS 本徵模態](modes-hfss.qmd)。Palace Driven 則接受它們（[以 Palace 計算 S 參數](s-parameters-palace.qmd)）。
 
 在 AEDT 中，這次計算會把模型匯入空白的 Driven Terminal 設計，並在每片薄片上放一個集總埠，其端子位在薄片與訊號金屬相接的邊上（[參考](../reference/specs/aedt-runtime.qmd#hfss-driven-terminal-sgb)）。在有 AEDT 的電腦上執行這個資料夾（[執行已準備的模型](run-elsewhere.qmd#aedt-execute-the-prepared-package-locally)），再讀取它（[收斂與報告](convergence-and-reports.qmd#aedt-read-the-sealed-family-evidence)）：讀取時會確認每個埠都是從儲存的設計中、在指定的薄片上讀回的，並依埠的順序回傳 S 參數與 Touchstone 檔。

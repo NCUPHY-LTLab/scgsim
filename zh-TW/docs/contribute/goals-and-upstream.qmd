@@ -13,7 +13,7 @@ SCGSim 為超導晶片版圖準備 Palace 與 Ansys AEDT 模擬，並讀回它�
 
 ## 範圍 {#scope}
 
-SCGSim 以 Palace 的 Electrostatic 與 Eigenmode，以及 AEDT 的 HFSS Eigenmode、HFSS Driven Terminal、Q3D 與 Q2D 進行計算；每種計算的輸入與回傳的量列在[支援的計算](../reference/supported-calculations.qmd)。Palace 的 Driven、Magnetostatic 與 Transient 尚未實作，Meep 不在範圍內。公開的元件 Notebook 屬於 OrcaPen SC PDK。
+SCGSim 以 Palace 的 Electrostatic、Eigenmode 與 Driven，以及 AEDT 的 HFSS Eigenmode、HFSS Driven Terminal、Q3D 與 Q2D 進行計算；每種計算的輸入與回傳的量列在[支援的計算](../reference/supported-calculations.qmd)。Palace 的 Magnetostatic 與 Transient 尚未實作，Meep 不在範圍內。公開的元件 Notebook 屬於 OrcaPen SC PDK。
 
 SCGSim 不會安裝原生求解器，不會自行執行準備好的交接，也不會因為計算完成就把結果當成準確的：物理假設由研究的作者選擇，物理量也由作者解讀。
 
