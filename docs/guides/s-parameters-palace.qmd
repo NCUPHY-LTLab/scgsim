@@ -274,9 +274,19 @@ used up to 14 GB of memory.
 
 ## Read the result {#read-the-result}
 
-**The reference planes are the port sheets.** Each port sits on the sheet
-behind its pad, so the S-parameters include both pads and both tapers: they
-describe the chip from one launcher's landing to the other's.
+The numbers follow one convention:
+
+- **At the port sheets.** The values are at the sheets behind the pads, with
+  nothing removed, so they include both pads and both tapers: they describe
+  the chip from one launcher's landing to the other's.
+- **Against each port's own impedance.** Each port's waves are measured
+  against its own impedance, 50 Ω here, with the other port terminated in
+  its 50 Ω.
+- **Signed by the reference Net.** Each port runs from its signal metal to
+  the metal of its `reference_net`, here `ground`. Turning one port around
+  would turn S21 and S12 by 180° and leave S11 and S22 as they are.
+- **A delay is a falling phase.** As the frequency rises, the phase of a
+  through line's S21 falls: here by about 5.56° per GHz.
 
 **Transmission.** |S21| is −0.0004 dB at 2 GHz and −0.0058 dB at
 10 GHz: nearly all the power goes through. The only lossy material is the
@@ -292,7 +302,7 @@ alone would give |S11| ≈ 2Γ|sin βL|, −42.0 dB at 2 GHz and −28.3 dB at
 reflect too, and part of their reflection cancels the line's, so the
 estimate gives the size of |S11|, not its value.
 
-**The delay.** arg S21 falls by 5.559° per GHz, a delay of 15.44 ps. The
+**The delay.** The fall of 5.559° per GHz is a delay of 15.44 ps. The
 line accounts for 7.57 ps (900 µm at an effective index of 2.5212); the two
 launchers, with their pads and tapers, for the other 7.87 ps.
 
