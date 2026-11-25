@@ -56,7 +56,7 @@
 | `palace/config` | 從網格的物理群組與問題的設定到 Palace 的輸入。 | 群組、埠或端子、材料、Surface-EPR 規格、數值控制與收斂宣告。 | `config.json`、索引對照表，以及宣告收斂時的收斂計畫。 | `run`。 |
 | `palace/run` | 交給 Palace 的執行資料夾，以及回傳的內容。 | 包含網格與設定的資料夾。 | 執行腳本、收據記錄器、宣告收斂時的收斂執行器與封存檔；Palace 執行後則是執行器的決定紀錄與回傳的收據。 | `results`。 |
 | `palace/results` | 從回傳的執行資料夾到這次執行經過檢查的紀錄。 | 資料夾，以及它必須相符的交接紀錄；可信度報告也接受未完成的執行所回傳的資料夾。 | 含表格與收斂檢查的 `ResolvedRunData`、它產生的獨立結果（Eigenmode 執行的 EPR、Driven 執行的 S 參數），以及檢視所得的 AMR 快照、結果選擇、失敗診斷與收斂檢查。 | `reports`。 |
-| `palace/reports` | 使用者拿到的結果，以及它的筆記本視圖。 | 來自 `results` 經過檢查的紀錄。 | `ResolvedPalaceResult`（`resolve_palace_result` 的回傳值）、可信度報告，以及給人閱讀的表格與圖，適用於 Electrostatic 與 Eigenmode 執行；Driven 執行的視圖會被指名拒絕。 | 沒有；由筆記本顯示它們。 |
+| `palace/reports` | 使用者拿到的結果，以及它的筆記本視圖。 | 來自 `results` 經過檢查的紀錄。 | `ResolvedPalaceResult`（`resolve_palace_result` 的回傳值）、可信度報告，以及給人閱讀的表格與圖，適用於 Electrostatic、Eigenmode 與 Driven 執行（`driven`）。 | 沒有；由筆記本顯示它們。 |
 
 ### `aedt`
 

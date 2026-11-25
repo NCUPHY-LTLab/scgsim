@@ -39,7 +39,9 @@ from scgsim.contracts.palace_index_map import LUMPED_PORT_SECTION
 from scgsim.contracts.palace_run_folder import CONFIG, INDEX_MAP, OUTPUT_DIR, read_json
 from scgsim.geometry import LumpedElement, LumpedPort
 from scgsim.palace import (
+    DrivenPhysicsReport,
     DrivenSim,
+    DrivenTrustReport,
     inspect_run_trustworthiness,
     resolve_palace_result,
 )
@@ -288,20 +290,32 @@ def test_a_returned_driven_run_resolves_to_its_s_parameters(monkeypatch, tmp_pat
     assert isinstance(result, SParameters)
 
 
-def test_the_report_of_a_resolved_driven_run_is_refused_by_name(monkeypatch, tmp_path):
-    """The resolved run is read; its trust report and views refuse it, naming ``driven_result()``."""
+def test_the_views_of_a_resolved_driven_run_are_its_own(monkeypatch, tmp_path):
+    """The really resolved run's views: its trust report, its S-parameters and its benchmark, complete.
+
+    ``inspect_run_trustworthiness`` reads the same folder as it came back: complete, with the same sweep and
+    full solves, and no S-parameters.  ``epr_result()`` still points to ``driven_result().surface_epr``.
+    """
     handoff = _returned(monkeypatch, tmp_path, UNIFORM_RUN)
     resolved = resolve_palace_result(
         handoff.run_dir, expected_handoff_id=handoff.handoff_id
     )
-    message = "SCGSim reads Driven runs and does not show a report or view of them yet"
-    with pytest.raises(NotImplementedError, match=message):
-        resolved.show_run_trustworthiness()
-    with pytest.raises(NotImplementedError, match=message):
-        resolved.show_physics_quantities()
-    with pytest.raises(NotImplementedError, match=message):
-        resolved.show_simulation_benchmark()
-    with pytest.raises(NotImplementedError, match=message):
-        inspect_run_trustworthiness(handoff.run_dir)
+    trust = resolved.show_run_trustworthiness()
+    assert isinstance(trust, DrivenTrustReport)
+    assert (trust.completeness, trust.profile, trust.full_solves) == (
+        "complete",
+        "direct-local",
+        10,
+    )
+    assert trust.result == resolved.driven_result()
+    assert isinstance(resolved.show_physics_quantities(), DrivenPhysicsReport)
+    assert resolved.show_simulation_benchmark().data["full_solves"] == 10
+    inspected = inspect_run_trustworthiness(handoff.run_dir)
+    assert (inspected.completeness, inspected.sweep, inspected.full_solves) == (
+        "complete",
+        trust.sweep,
+        10,
+    )
+    assert inspected.result is None
     with pytest.raises(TypeError, match=r"driven_result\(\)\.surface_epr"):
         resolved.epr_result()

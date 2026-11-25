@@ -1,4 +1,4 @@
-"""Shared Palace figure styling, themes and notebook display adapters."""
+"""Shared Palace figure styling, themes, cards, tables and notebook display adapters."""
 
 from __future__ import annotations
 
@@ -344,6 +344,108 @@ def html_cell(tag: str, text: str) -> str:
         f"<{tag} style='border:1px solid var(--border,#d0d7de);"
         f"padding:0.35rem 0.65rem;text-align:left'>{html.escape(text)}</{tag}>"
     )
+
+
+def card_html(label: str, value: Any) -> str:
+    """Escape and render one identity or cost label/value card."""
+    return (
+        "<div style='min-width:11rem;flex:1 1 11rem;border:1px solid var(--border,#d0d7de);"
+        "border-radius:8px;padding:0.6rem 0.75rem;margin:0.25rem;'>"
+        f"<div style='font-size:0.75rem;opacity:0.7'>{html.escape(str(label))}</div>"
+        "<div style='font-size:0.95rem;font-weight:600;overflow-wrap:anywhere'>"
+        f"{html.escape(str(value))}</div></div>"
+    )
+
+
+def cards_html(cards: Sequence[Card]) -> str:
+    """One wrapping row of cards, leaving out a card whose value was not recorded (None or empty)."""
+    items = "".join(
+        card_html(str(label), value)
+        for label, value in cards
+        if value not in {None, ""}
+    )
+    return f"<div style='display:flex;flex-wrap:wrap'>{items}</div>"
+
+
+def table_html(headers: Sequence[str], rows: Sequence[Sequence[str]]) -> str:
+    """A bordered table of escaped text: ``headers`` over one row of cells each."""
+    head = "".join(html_cell("th", name) for name in headers)
+    body = "".join(
+        "<tr>" + "".join(html_cell("td", cell) for cell in row) + "</tr>"
+        for row in rows
+    )
+    return (
+        "<table style='border-collapse:collapse;font-size:0.9rem'>"
+        f"<thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
+    )
+
+
+# The Palace timers the benchmark draws, in Palace's order; a timer Palace did not run (zero) is left out.
+# ``PROMConstruction`` and ``PROMSolve`` are the adaptive fast sweep's reduced model of a Driven run.
+_DURATION_BARS = (
+    "MeshPreprocessing",
+    "Setup",
+    "Construction",
+    "OperatorConstruction",
+    "Preconditioner",
+    "LinearSolve",
+    "EigenvalueSolve",
+    "Div.-FreeProjection",
+    "Solve",
+    "PROMConstruction",
+    "PROMSolve",
+    "Adaptation",
+    "Rebalancing",
+    "Postprocessing",
+    "Paraview",
+    "DiskIO",
+)
+
+
+def elapsed_time_figure(durations: Mapping[str, float], theme: ReportTheme) -> Any:
+    """Palace's recorded elapsed time by timer as bars, or a line saying the folder records none."""
+    labels: list[str] = []
+    values: list[float] = []
+    for name in _DURATION_BARS:
+        duration = durations.get(name)
+        if duration is None or duration <= 0:
+            continue
+        labels.append(name)
+        values.append(duration)
+    if not labels:
+        return (
+            "<p style='opacity:0.75'>Palace elapsed-time timers are unavailable "
+            "in this run folder.</p>"
+        )
+    tokens = theme_tokens(theme)
+    go = plotly()
+    fig = go.Figure(
+        data=[
+            go.Bar(
+                x=values,
+                y=labels,
+                orientation="h",
+                marker={"color": COLORWAY[0], "opacity": 0.88},
+                text=[fmt_seconds(value) for value in values],
+                textposition="outside",
+                textfont={"color": tokens.muted, "size": PLOT_TICK_FONT},
+                # The longest bar's label ("2.42 min") lies past the axis, in the right margin.
+                cliponaxis=False,
+                hovertemplate="%{x:.3g} s<extra>%{y}</extra>",
+            )
+        ]
+    )
+    FigureStyle(
+        title="Elapsed time by Palace timer",
+        height=max(320, 42 * len(labels) + 110),
+        margin={"l": 196, "r": 96, "t": 56, "b": 52},
+        hovermode="closest",
+        showlegend=False,
+        theme=theme,
+    ).apply(fig)
+    fig.update_xaxes(title=axis_title("seconds", tokens), rangemode="tozero")
+    fig.update_yaxes(categoryorder="total ascending")
+    return fig
 
 
 def checked_theme(theme: str) -> ReportTheme:

@@ -95,6 +95,7 @@ scgsim-id: "docs/contribute/internals/api-owners"
 | `scgsim.semantics.s_parameters` | 每個 Driven 求解器都回傳的 S 參數紀錄，與它的 Touchstone 寫出器 | `SParameters`、`SParameterPort` |
 | `scgsim.palace.results.inspection_records` | 報告讀取的分離記錄 | `PalaceFailureDiagnosis`、`PalaceResultSelection`、`PassCostRecord`、`SurfaceMarginEprRecord`、`SurfaceMarginEprSeriesSnapshot` |
 | `scgsim.palace.reports.reports`、`scgsim.palace.reports.trust`、`scgsim.palace.reports.views` | 可信度、物理與成本檢視 | `inspect_run_trustworthiness`、`PalaceTrustReport`、`PhysicsQuantitiesReport`、`SimulationBenchmarkReport` |
+| `scgsim.palace.reports.driven` | Driven 計算的可信度與物理檢視 | `DrivenTrustReport`、`DrivenPhysicsReport` |
 
 `scgsim.palace.results.inspection_records` 也定義了 `AmrPassSnapshot`、`SurfaceEprRecord` 與 `SurfaceEprSeriesSnapshot`，但套件不匯出它們。
 
