@@ -193,6 +193,19 @@ A model without any lossy material has no loss at all, and Palace then
 reports an infinite Q; the report shows it as "native-reported infinite Q"
 ([Eigenmode reference](../reference/specs/palace-eigenmode.qmd#native-eigenmode-q)).
 
+::: {.callout-important title="A high-Q mode needs a tighter linear tolerance"}
+At the default `set_numerical(tolerance=1e-6)`, the mode frequency, the Surface
+EPR and the bulk electric participation are accurate. The Q that Palace
+reports, which it computes from the complex eigenfrequency as
+Re f / (2 Im f), is not when the mode's Q is high: Im f is tiny next to Re f,
+so the solver's approximate linear solves move it far more than they move
+Re f or the field. For a hanger resonator near 7.36 GHz the default reported
+Q = 13,948, 25 % above the 11,142 that `set_numerical(tolerance=1e-9)` gave,
+which agrees with an independent driven S21 notch fit (11,141). If you rely on
+that Q, set `tolerance=1e-9`; it costs about 45 % more Eigenmode time. The
+surface-loss Q built from the participations does not need it.
+:::
+
 **Surface loss.** The surface films are not part of the solve. After it,
 Palace computes each surface's participation p from the field at that surface
 and the film's thickness and permittivity, and its loss as 1/Q = p tan δ. The
