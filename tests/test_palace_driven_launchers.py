@@ -42,6 +42,7 @@ from scgsim.palace import (
     DrivenPhysicsReport,
     DrivenSim,
     DrivenTrustReport,
+    Linear,
     inspect_run_trustworthiness,
     resolve_palace_result,
 )
@@ -70,7 +71,7 @@ def configured(monkeypatch, tmp_path, plan, *, route):
     sim.set_plan(plan.prepare())
     sim.set_output_dir(tmp_path / f"run-{route}")
     sim.set_route(route)
-    sim.set_driven(start=2e9, stop=10e9, points=5)
+    sim.set_driven([Linear(2e9, 10e9, points=5)])
     sim.mesh()
     config = json.loads(sim.write_config().read_text(encoding="utf-8"))
     return config, sim.output_dir
@@ -163,7 +164,7 @@ def test_simulation_drc_passes_the_launcher_layout_with_its_bands(route):
 
 # ---- Reading the run back --------------------------------------------------------------------------------
 
-_UNIFORM_SWEEP = {"start": 2e9, "stop": 10e9, "points": 5}
+_UNIFORM_SWEEP = {"frequencies": [Linear(2e9, 10e9, points=5)]}
 _LEFT_PORT = LumpedPort(
     "chip/o_lumped_left", reference_net="ground", impedance_ohm=50.0
 )
@@ -174,7 +175,7 @@ _RUN_SETTINGS = {
     ADAPTIVE_RUN: (
         None,
         2,
-        {"start": 2e9, "stop": 10e9, "points": 81, "adaptive_tolerance": 1e-3},
+        {"frequencies": [Linear(2e9, 10e9, points=81)], "adaptive_tolerance": 1e-3},
     ),
     RESISTOR_RUN: (
         LumpedElement("chip/o_lumped_right", resistance_ohm=50.0),
@@ -189,7 +190,7 @@ _RUN_SETTINGS = {
     RESISTOR_ADAPTIVE_RUN: (
         LumpedElement("chip/o_lumped_right", resistance_ohm=50.0),
         1,
-        {"start": 2e9, "stop": 10e9, "points": 11, "adaptive_tolerance": 1e-3},
+        {"frequencies": [Linear(2e9, 10e9, points=11)], "adaptive_tolerance": 1e-3},
     ),
 }
 # Touchstone 1.1's order of the (output, excited) pairs of one frequency, for one and two ports.

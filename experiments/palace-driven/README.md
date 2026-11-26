@@ -42,7 +42,8 @@ python run_case.py readback OUT
 `prepare` runs `simulation_drc`, `mesh()`, `write_config()` and
 `prepare_handoff(profile="direct-local")` into `OUT/run` with 8 MPI processes (`--processes`), and
 writes `OUT/prepare.json`. The sweep is 2 to 10 GHz: `--points` frequencies, solved in full at each
-one unless `--adaptive-tolerance` asks for Palace's adaptive fast sweep. `--order` is the FEM order,
+one unless `--adaptive-tolerance` asks for Palace's adaptive fast sweep; `--full-solve-hz F` adds `F` Hz,
+solved in full before the adaptive sweep's own solves (`full_solve=True`). `--order` is the FEM order,
 `--bands` cuts the Surface-EPR bands, `--route A` meshes metal as sheets. The handoff script puts
 `PALACE_MPI_BIN` on `PATH`, because the Palace wrapper finds `mpirun` there. `execute` runs that
 script and writes `OUT/execute.json`. `readback` writes `OUT/launcher_to_launcher.s2p` and

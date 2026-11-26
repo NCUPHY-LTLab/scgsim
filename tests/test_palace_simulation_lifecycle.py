@@ -12,7 +12,7 @@ import inspect
 import pytest
 from test_palace_mesh_controls import two_pad_snapshot
 
-from scgsim.palace import DrivenSim, EigenmodeSim, ElectrostaticSim
+from scgsim.palace import DrivenSim, EigenmodeSim, ElectrostaticSim, Linear
 from scgsim.palace.simulation.core import PalaceSimulation
 from scgsim.palace.simulation.lifecycle import CALLS, Stage
 
@@ -101,7 +101,7 @@ def test_a_geometry_setter_falls_back_to_bound(sim_type, monkeypatch, tmp_path):
         (ElectrostaticSim, lambda sim: sim.set_electrostatic(save_fields=1)),
         (EigenmodeSim, lambda sim: sim.set_numerical(amr_max_passes=0)),
         (ElectrostaticSim, lambda sim: sim.set_numerical()),
-        (DrivenSim, lambda sim: sim.set_driven(start=2e9, stop=10e9, points=5)),
+        (DrivenSim, lambda sim: sim.set_driven([Linear(2e9, 10e9, points=5)])),
         (DrivenSim, lambda sim: sim.set_numerical(order=2)),
     ],
 )

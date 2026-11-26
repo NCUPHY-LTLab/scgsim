@@ -213,6 +213,18 @@
           ]
         },
         {
+          "title": "Frequency sweep",
+          "title_zh": "頻率掃描",
+          "gloss": "The frequency ranges of an S-parameter sweep: evenly spaced, log-spaced or chosen frequencies.",
+          "gloss_zh": "S 參數掃描的頻率範圍：等間距、對數等間距，或指定的頻率。",
+          "page": "../guides/s-parameters-palace.qmd#dense-sampling",
+          "names": [
+            "Linear",
+            "Log",
+            "Points"
+          ]
+        },
+        {
           "title": "Convergence",
           "title_zh": "收斂",
           "gloss": "Declare when adaptive refinement has converged.",

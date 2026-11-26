@@ -29,7 +29,6 @@ from .boundaries import build_electrostatic_boundaries
 from .config_records import (
     MODEL_L0_M,
     ConfigInput,
-    DrivenSweep,
     EigenmodeSettings,
     ElectrostaticConfigBuildResult,
     ElectrostaticSettings,
@@ -37,6 +36,7 @@ from .config_records import (
     TerminalBinding,
     optional_string,
 )
+from .driven_sweep import DrivenSweep
 from .index import EnergyEntry, IndexedRows, LumpedPortRows, PortEntry, SurfaceEprEntry
 from .numerical import build_output_formats, build_refinement, linear_solver
 from .surface_epr import build_surface_epr_postprocessing
@@ -235,20 +235,11 @@ def _eigenmode_block(eigenmode: EigenmodeSettings) -> dict[str, Any]:
 
 
 def _driven_block(sweep: DrivenSweep) -> dict[str, Any]:
-    """``Solver.Driven``: one linear range of ``points`` samples in GHz, and the adaptive sweep's settings when it is on.
+    """``Solver.Driven``: one ``Samples`` entry per range in GHz, and the adaptive sweep's settings when it is on.
 
     A uniform sweep writes no ``AdaptiveTol``, which Palace then takes as 0: a full solve at every sample.
     """
-    block: dict[str, Any] = {
-        "Samples": [
-            {
-                "Type": "Linear",
-                "MinFreq": sweep.start_hz / 1e9,
-                "MaxFreq": sweep.stop_hz / 1e9,
-                "NSample": sweep.points,
-            }
-        ]
-    }
+    block: dict[str, Any] = {"Samples": sweep.samples()}
     if sweep.adaptive_tolerance is not None:
         block["AdaptiveTol"] = sweep.adaptive_tolerance
     if sweep.adaptive_max_samples is not None:
