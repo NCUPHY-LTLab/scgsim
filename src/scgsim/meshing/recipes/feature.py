@@ -166,7 +166,7 @@ def _film_edge_size(
     """Elements at the edge of a thin film: a multiple of its thickness, on the ladder; nothing for a thick one.
 
     The edge is a film wall (``film_sidewall``) or, on Route A, the outline of the sheet the film became
-    (``sheet_outline``), so a film gets the same edge size on both routes: 2.5 um for 100 nm.
+    (``sheet_outline``), so a film gets the same edge size on both routes: at most 2.5 um for 100 nm.
     The rule binds only when the thickness multiple is finer than the ceiling (a fraction of the coarse
     size).  A wall at or above the ceiling, such as a 10 um substrate in a 1 mm model, is already resolved
     relative to the coarse size, so sizing it would only add elements; the repair loop still catches
