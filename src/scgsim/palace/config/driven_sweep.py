@@ -278,8 +278,8 @@ def _merged(entries: Iterable[Mapping[str, Any]]) -> _Merge:
 
     Palace sorts every frequency and keeps each that is 1 Hz or more above the last one kept: its ``std::unique``
     compares with the last kept, not with the one just before.  The same walk measures each frequency from that
-    last kept one.  Within ``_ROUNDING_ULPS`` units in the last place and below the 1 Hz it is the same frequency,
-    and every build drops it.  Above about 10 PHz one unit in the last place exceeds 1 Hz, so a pair within rounding
+    last kept one.  Within ``_ROUNDING_ULPS`` units in the last place, and below the 1 Hz by that rounding too, it is
+    the same frequency, and every build drops it.  Above about 10 PHz one unit in the last place exceeds 1 Hz, so a pair within rounding
     there is not the same: Palace keeps both, and they print alike.  Farther than both the 1 Hz and one printed unit
     (``printed_unit_ghz``), with that rounding on top, every build keeps it and prints it apart from the last kept.
     Between the two, a build may keep it or not: that is ``unsure``, which ``DrivenSweep`` refuses.  So for every
@@ -295,7 +295,10 @@ def _merged(entries: Iterable[Mapping[str, Any]]) -> _Merge:
             distance = frequency - merged[-1]
             rounding = _ROUNDING_ULPS * math.ulp(frequency)
             spacing = max(_SAME_FREQUENCY_GHZ, printed_unit_ghz(frequency)) + rounding
-            same = distance <= rounding and distance < _SAME_FREQUENCY_GHZ
+            # The same value cannot round apart; any other pair keeps the rounding below the 1 Hz merge.
+            same = distance == 0.0 or (
+                distance <= rounding and distance + rounding < _SAME_FREQUENCY_GHZ
+            )
             if unsure is None and not same and distance <= spacing:
                 unsure = _UnsurePair(merged[-1], frequency, spacing)
             if distance < _SAME_FREQUENCY_GHZ:

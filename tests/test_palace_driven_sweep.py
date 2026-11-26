@@ -97,6 +97,9 @@ def hanger_sweep():
         pytest.param(
             {"ranges": [Points([0.5e9, 0.5e9 + 1.5])]}, 2, id="1.5 Hz apart below 1 GHz"
         ),
+        pytest.param(
+            {"ranges": [Points([1.2e15, 1.2e15])]}, 1, id="the same value at 1.2 PHz"
+        ),
     ],
 )
 def test_two_frequencies_one_to_rounding_or_apart_in_every_palace_build_are_accepted(
@@ -148,6 +151,14 @@ def test_two_frequencies_one_to_rounding_or_apart_in_every_palace_build_are_acce
             r"are 1\.86 Hz apart, and two frequencies must be the same or more than",
             id="one unit in the last place, 1.86 Hz at 10 PHz",
         ),
+        pytest.param(
+            [
+                Linear(1034284499358023.0, 1039650221385084.5, points=7),
+                Points([1038755934380573.2]),
+            ],
+            r"are 0\.931 Hz apart, and two frequencies must be the same or more than",
+            id="within rounding but within rounding of 1 Hz too, at 1 PHz",
+        ),
     ],
 )
 def test_two_frequencies_a_palace_build_may_merge_or_not_are_refused(ranges, match):
@@ -160,7 +171,8 @@ def test_two_frequencies_a_palace_build_may_merge_or_not_are_refused(ranges, mat
     one it kept, so a chain whose neighbours are each within rounding is refused once it leaves the rounding of
     the first: 3,001 points 4 units in the last place apart at 1 THz span 1.46 Hz, and Palace would keep two of
     them that print the same.  At 10 PHz one unit in the last place is 1.86 Hz: Palace keeps both, and they print
-    alike.
+    alike.  Near 1 PHz eight units in the last place reach 1 Hz: a pair 0.93 Hz apart there is within rounding, but
+    a build that rounds the other way puts it 1.05 Hz apart and keeps both.
     """
     for adaptive_tolerance in (None, 1e-3):
         if adaptive_tolerance is None and any(item.full_solve for item in ranges):
