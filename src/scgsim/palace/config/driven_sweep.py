@@ -29,6 +29,10 @@ _SAME_FREQUENCY_GHZ = 1e-9
 _MODEL_ENDS = 2
 # Palace 0.18.1's cap on the full solves per port without ``AdaptiveMaxSamples`` (``Solver.Driven`` in its schema).
 _PALACE_MAX_SAMPLES = 20
+# Palace builds round a range's frequencies differently, by a unit or two in the last place: a stock 0.18.1 build
+# fuses the multiply and the add of ``ConstructLinearRange``, so its 4.44 GHz of 4-9 GHz in 501 points is 4.44, not
+# 4.4399999999999995.  Within this many units SCGSim cannot tell which of two frequencies a build keeps.
+_ROUNDING_ULPS = 8
 
 PRINTED_DIGITS = 9
 """The significant digits Palace 0.18.1 prints a frequency with, in GHz (``2.10000000e+00``)."""
@@ -264,7 +268,10 @@ def printed_unit_ghz(frequency_ghz: float) -> float:
 
 
 def _entry_frequencies(entry: Mapping[str, Any]) -> list[float]:
-    """The frequencies of one ``Samples`` entry, in GHz, computed as ``ConstructLinearRange`` and ``ConstructLogRange`` do."""
+    """The frequencies of one ``Samples`` entry, in GHz, computed as ``ConstructLinearRange`` and ``ConstructLogRange`` do.
+
+    To the last place only as unfused arithmetic rounds them; a Palace build may differ there (``_ROUNDING_ULPS``).
+    """
     kind = entry["Type"]
     if kind == "Point":
         return [float(value) for value in entry["Freq"]]
@@ -398,8 +405,9 @@ def _full_solves_ghz(
 
     As ``DrivenSolverData`` reads ``AddToPROM``: every marked range's frequencies, merged as all of them are
     (``palace_frequencies_ghz``), less the lowest and the highest of the sweep.  Palace then looks for each one
-    among the frequencies it keeps by its exact value, and stops when one is not there: a ``full_solve`` frequency
-    less than 1 Hz above another, which Palace keeps in its place, is refused.
+    among the frequencies it keeps, by its exact value, and stops when one is not there.  So a ``full_solve``
+    frequency less than 1 Hz above another, which Palace keeps in its place, is refused.  One within rounding of
+    another is left to Palace's own check: which of the two a build keeps depends on how it rounds.
     """
     marked = palace_frequencies_ghz(
         item.samples_entry() for item in sweep.ranges if item.full_solve
@@ -408,15 +416,17 @@ def _full_solves_ghz(
     kept = set(frequencies_ghz)
     full_solves = tuple(frequency for frequency in marked if frequency not in ends)
     for frequency in full_solves:
-        if frequency not in kept:
-            below = frequencies_ghz[bisect_right(frequencies_ghz, frequency) - 1]
+        if frequency in kept:
+            continue
+        below = frequencies_ghz[bisect_right(frequencies_ghz, frequency) - 1]
+        if frequency - below > _ROUNDING_ULPS * math.ulp(frequency):
             unit = printed_unit_ghz(frequency) * 1e9
             raise ValueError(
                 where.refusal(
-                    f"the full_solve frequency {frequency!r} GHz is {(frequency - below) * 1e9:.2g} Hz above "
-                    f"{below!r} GHz, another frequency of the sweep as Palace computes it. Palace solves the "
-                    f"two as {below!r} GHz, then looks for the full solve at exactly {frequency!r} GHz and "
-                    f"stops: move the full_solve frequency more than {unit:.3g} Hz away from {below!r} GHz"
+                    f"the full_solve frequency {frequency:.15g} GHz is {(frequency - below) * 1e9:.2g} Hz "
+                    f"above {below:.15g} GHz, another frequency of the sweep. Palace solves the two as "
+                    f"{below:.15g} GHz, then looks for the full solve at {frequency:.15g} GHz and stops: move "
+                    f"the full_solve frequency more than {unit:.3g} Hz away from {below:.15g} GHz"
                 )
             )
     return full_solves

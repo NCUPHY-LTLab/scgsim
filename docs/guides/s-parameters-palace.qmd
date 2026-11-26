@@ -450,10 +450,13 @@ sim.set_driven(
 sweep: without `adaptive_tolerance` every frequency is solved in full
 already, and `set_driven` refuses it. The full solves count toward
 `adaptive_max_samples`, or Palace's cap of 20, together with the two at the
-lowest and the highest frequency, so a cap below them is refused. A
-full-solve frequency less than 1 Hz above a frequency of another range is
-refused too, because Palace keeps the lower of the two and then cannot find
-the full solve: move it more than 10 Hz away. On a hanger resonator with
+lowest and the highest frequency, so a cap below them is refused. Of two
+frequencies less than 1 Hz apart Palace keeps the lower and then cannot find
+a full solve it dropped, so a full-solve frequency less than 1 Hz above a
+frequency of another range is refused. One that falls on such a frequency
+is accepted, but Palace may compute that frequency lower by a rounding
+error and stop as it starts, naming the full-solve frequency: move it more
+than 10 Hz away then. On a hanger resonator with
 Q ≈ 11,000, one full solve at its resonance cut the time Palace spent
 building the model from 1,190 s to 921 s, and S21 agreed with the sweep
 without it to 1.4 × 10⁻⁵.

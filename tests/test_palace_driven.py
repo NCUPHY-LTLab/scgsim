@@ -316,9 +316,12 @@ def test_full_solve_frequencies_merge_with_their_neighbours_as_palace_reads_them
 
     Palace merges every frequency and, apart, the full-solve ones, then looks for each full solve among the
     merged by its exact value.  Of two within 1 Hz it keeps the lower, so a full solve just below a frequency
-    of the band replaces it, and one just above is lost and Palace stops; the band's own arithmetic puts
-    4.44 GHz at 4.4399999999999995 GHz, 8.9e-7 Hz below.  The lowest and the highest frequency are solved in
-    full anyway, so a full solve there adds none: the cap counts it only inside the band.
+    of the band replaces it, and one 0.5 Hz above is lost and Palace stops (a stock Palace 0.18.1 dry run said
+    so: "PROM sample frequency 6.0000000005000000e+00 not found in sample frequencies!").  Within rounding it
+    depends on the build: unfused arithmetic puts the band's 4.44 GHz at 4.4399999999999995, and the stock
+    build, which fuses it, at 4.44 and accepts a full solve there, so that is left to Palace.  The lowest and
+    the highest frequency are solved in full anyway, so a full solve there adds none: the cap counts it only
+    inside the band.
     """
     band = Linear(4e9, 9e9, points=501)
     grid = palace_frequencies_ghz([band.samples_entry()])
@@ -336,12 +339,13 @@ def test_full_solve_frequencies_merge_with_their_neighbours_as_palace_reads_them
     # At the band's ends it is one of the two solves every adaptive sweep starts from.
     assert sweep(4e9, adaptive_max_samples=2).frequency_count == 501
     assert sweep(9e9, adaptive_max_samples=2).frequency_count == 501
-    for above, below in ((4.45e9 + 0.5, "4.45"), (4.44e9, "4.4399999999999995")):
-        with pytest.raises(
-            ValueError,
-            match=rf"Palace solves the two as {below} GHz, then looks for the full solve",
-        ):
-            sweep(above)
+    assert sweep(4.44e9).frequency_count == 501
+    with pytest.raises(
+        ValueError,
+        match=r"4\.4500000005 GHz is 0\.5 Hz above 4\.45 GHz, another frequency of the sweep\. "
+        r"Palace solves the two as 4\.45 GHz, then looks for the full solve",
+    ):
+        sweep(4.45e9 + 0.5)
 
 
 def test_frequencies_within_1_hz_of_the_last_kept_are_one():
