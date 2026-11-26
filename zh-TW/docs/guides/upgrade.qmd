@@ -30,7 +30,7 @@ SCGSim 3.0 的每個預發行版都改了一些呼叫，而且沒有相容層：
 程式碼不需要改。從 3.0.0rc6 起，沒有 `aedt` extra 的安裝也能匯入 `scgsim.aedt` 與 `scgsim.visualization`。有兩項改變會影響你準備或執行過的東西：
 
 - **重新準備。** SGB 模型現在標示為 `scgsim.sgb.sidecar.v7`。用 3.0.0rc6 或更早版本準備的模型、Palace 執行資料夾或 AEDT 交接資料夾，在 SCGSim 讀取其模型時都會被拒絕，錯誤訊息會請你重建。較舊的 Route A 模型沒有列出各層膜的邊緣，而網格現在依這些邊緣決定元素大小。請呼叫 `plan.prepare()`，重新準備模擬。
-- **重新執行 Palace Route A。** 在 Route A（`set_route("A")`）上，3.0.0rc6 及更早版本用模型的粗網格尺寸切分每層膜的邊緣，一條 CPW 縫可能只有一個元素寬。結果因此偏差很大，卻不會報錯：在一個 CPW 測試版圖上，加密邊緣後，第一個本徵頻率從 2.04 GHz 變成 4.12 GHz，電容從 1.19 pF 變成 0.29 pF。現在每層膜的邊緣得到與 Route B 相同的元素大小，100 nm 的膜是 2.5 µm，所以 Route A 網格的未知數也與 Route B 相近。Route B 與 AEDT 不受影響。
+- **重新執行 Palace Route A。** 在 Route A（`set_route("A")`）上，3.0.0rc6 及更早版本用模型的粗網格尺寸切分每層膜的邊緣，一條 CPW 縫可能只有一個元素寬。結果因此偏差很大，卻不會報錯：在一個 CPW 測試版圖上，加密邊緣後，第一個本徵頻率從 2.04 GHz 變成 4.12 GHz，電容從 1.19 pF 變成 0.29 pF。現在每層膜的邊緣與 Route B 用同樣的方式切分，所以 Route A 網格的未知數也與 Route B 相近。Route B 與 AEDT 不受影響。
 
 ## 從 3.0.0rc4 升級 {#from-3-0-0rc4}
 
