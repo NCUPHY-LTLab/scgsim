@@ -28,7 +28,6 @@ import csv
 import json
 import math
 import os
-import re
 import shlex
 import subprocess
 import sys
@@ -52,6 +51,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from hanger_layout import hanger_plan  # noqa: E402
 from notch_fit import band_delay, fit_notch  # noqa: E402
+from palace_log import log_timing  # noqa: E402
 
 BAND_HZ = (4e9, 9e9)
 BAND_POINTS = 501  # 10 MHz apart
@@ -68,6 +68,8 @@ PROCESSES = 8
 DELAY_EXCLUSION_LINEWIDTHS = 100.0
 # Only the meander is above this y (um): the feedline, the launchers and the coupling straight are below it.
 MEANDER_Y_UM = 200.0
+# The runs every run's S21 is compared with, where both hold a frequency.
+REFERENCES = ("full-solves", "full-solves-linear-1e-9", "adaptive")
 # Palace prints a frequency to 9 significant digits, 10 Hz between 1 and 10 GHz: two read-back frequencies
 # this close are the same one.
 SAME_FREQUENCY_HZ = 10.0
@@ -85,6 +87,7 @@ class Run:
     adaptive_max_samples: int | None = None
     surface_epr: bool = True
     add_to_prom_at_f0: bool = False
+    linear_tolerance: float | None = None  # Solver.Linear.Tol; None keeps SCGSim's 1e-6
 
 
 RUNS: dict[str, Run] = {
@@ -102,6 +105,8 @@ RUNS: dict[str, Run] = {
         "Driven", "band+window", adaptive_tolerance=1e-3, surface_epr=False
     ),
     "full-solves": Run("Driven", "full-solves"),
+    # The adaptive runs differ from the full solves near f0: the same full solves with a tighter linear solve.
+    "full-solves-linear-1e-9": Run("Driven", "full-solves", linear_tolerance=1e-9),
     "uniform-25000": Run(
         "Driven", "uniform", uniform_points=25000, adaptive_tolerance=1e-3
     ),
@@ -177,6 +182,8 @@ def prepare(study: Path, name: str, palace: str | None, mpi_bin: str | None) -> 
             adaptive_tolerance=run.adaptive_tolerance,
             adaptive_max_samples=run.adaptive_max_samples,
         )
+        if run.linear_tolerance is not None:
+            sim.set_numerical(tolerance=run.linear_tolerance)
     started = time.perf_counter()
     sim.mesh()
     summary = sim.mesh_summary()
@@ -314,7 +321,7 @@ def readback(folder: Path) -> None:
         "run": prepared["run"],
         "tetrahedra": prepared["mesh"]["tetrahedra"]["tetrahedra"],
         "palace": _palace_facts(run_dir),
-        "log": _log_timing(
+        "log": log_timing(
             (run_dir / receipt["log"]["path"]).read_text(encoding="utf-8")
         ),
     }
@@ -474,60 +481,6 @@ def _palace_facts(run_dir: Path) -> dict[str, Any]:
     }
 
 
-_NUMBER = r"([-+0-9.eE]+)"
-_OFFLINE = re.compile(rf"Total offline phase elapsed time: {_NUMBER} s")
-_ITERATION = re.compile(
-    rf"^It (\d+)/(\d+): .* = {_NUMBER} GHz \(total elapsed time = {_NUMBER} s\)"
-)
-_TIMER_ROW = re.compile(
-    rf"^(\s*[A-Za-z][A-Za-z ]*?)\s+{_NUMBER}\s+{_NUMBER}\s+{_NUMBER}$"
-)
-
-
-def _log_timing(log: str) -> dict[str, Any]:
-    """The offline time, each excitation's time per frequency, and the elapsed-time report, from Palace's log.
-
-    Palace prints the elapsed time at the start of each frequency to 3 significant digits.  An excitation's time
-    runs from its first frequency to the next excitation's first, the last one's to the run's total.
-    """
-    offline = _OFFLINE.search(log)
-    sweeps: list[dict[str, Any]] = []
-    timers: dict[str, float] = {}
-    in_report = False
-    parent = ""
-    for line in log.splitlines():
-        iteration = _ITERATION.match(line)
-        if iteration and int(iteration.group(1)) == 1:
-            sweeps.append(
-                {
-                    "frequencies": int(iteration.group(2)),
-                    "start_s": float(iteration.group(4)),
-                }
-            )
-        if line.startswith("Elapsed Time Report"):
-            in_report = True
-        elif in_report and (row := _TIMER_ROW.match(line)):
-            # An indented row is part of the row above it.  Columns: minimum, maximum and average over the
-            # ranks; the maximum is kept.
-            name = row.group(1).strip()
-            if row.group(1).startswith(" "):
-                name = f"{parent} / {name}"
-            else:
-                parent = name
-            timers[name] = float(row.group(3))
-            in_report = name != "Total"
-    # An Eigenmode run sweeps nothing: no ends either.
-    ends = [sweep["start_s"] for sweep in sweeps[1:]] + [timers.get("Total", math.nan)]
-    for sweep, end in zip(sweeps, ends[: len(sweeps)], strict=True):
-        sweep["seconds"] = end - sweep["start_s"]
-        sweep["seconds_per_frequency"] = sweep["seconds"] / sweep["frequencies"]
-    return {
-        "offline_seconds": float(offline.group(1)) if offline else None,
-        "excitations": sweeps,
-        "elapsed_time_report_max_s": timers,
-    }
-
-
 def _csv_rows(path: Path) -> list[dict[str, float]]:
     with path.open(encoding="utf-8") as handle:
         rows = list(csv.reader(handle))
@@ -548,11 +501,10 @@ def fit(study: Path) -> None:
     delay = {}
     runs: dict[str, dict[str, Any]] = {}
     for name in RUNS:
-        if name == "eigenmode" or not (study / name / "s21.json").is_file():
+        read = _run_s21(study / name) if name != "eigenmode" else None
+        if read is None:
             continue
-        data = _read(study / name / "s21.json")
-        frequencies = np.asarray(data["frequencies_hz"])
-        s21 = np.asarray([complex(*pair) for pair in data["s21"]])
+        frequencies, s21 = read
         near = np.abs(frequencies - f0_hz) <= DELAY_EXCLUSION_LINEWIDTHS * linewidth_hz
         delay[name] = band_delay(frequencies, s21, near)
         runs[name] = {"frequencies": frequencies, "s21": s21}
@@ -564,16 +516,45 @@ def fit(study: Path) -> None:
             data["frequencies"], data["s21"], f0_hz, linewidth_hz, tau
         )
         fits[name]["delay_from"] = name if delay[name] is not None else "adaptive"
+        fits[name]["s21_from"] = (
+            "driven_result()"
+            if (study / name / "s21.json").is_file()
+            else "port-S.csv; driven_result() refused the run"
+        )
     record = {
         "eigenmode": {**eigen["resonator_mode"], **_external_q(eigen)},
         "fits": fits,
-        "against_full_solves": _against(runs, "full-solves", keep_rows=True),
-        "against_adaptive": _against(runs, "adaptive", keep_rows=False),
+        "against": {
+            reference: _against(runs, reference, keep_rows=reference != "adaptive")
+            for reference in REFERENCES
+        },
     }
     _write(study / "study.json", record)
     print(json.dumps(record, indent=1, default=str))
     print(_runs_table(study))
     print(_results_table(record))
+
+
+def _run_s21(folder: Path) -> tuple[np.ndarray, np.ndarray] | None:
+    """A Driven run's frequencies (Hz) and S21: as ``driven_result()`` gave them, or else from Palace's own table.
+
+    A run ``driven_result()`` refused, an adaptive sweep that reached its cap, is read from ``port-S.csv`` so its
+    S21 can be compared; ``fit`` labels it.  None for a run not yet returned.
+    """
+    if (folder / "s21.json").is_file():
+        data = _read(folder / "s21.json")
+        return np.asarray(data["frequencies_hz"]), np.asarray(
+            [complex(*pair) for pair in data["s21"]]
+        )
+    table = folder / "run" / "results" / "palace" / "port-S.csv"
+    if not (folder / "report.json").is_file() or not table.is_file():
+        return None
+    rows = _csv_rows(table)
+    magnitude = np.asarray([row["|S[2][1]| (dB)"] for row in rows])
+    phase = np.radians([row["arg(S[2][1]) (deg.)"] for row in rows])
+    return np.asarray([row["f (GHz)"] * 1e9 for row in rows]), 10.0 ** (
+        magnitude / 20.0
+    ) * np.exp(1j * phase)
 
 
 def _external_q(eigen: dict[str, Any]) -> dict[str, Any]:
@@ -668,7 +649,7 @@ def _runs_table(study: Path) -> str:
         if not path.is_file():
             continue
         report = _read(path)
-        sampling = report.get("driven_result", {}).get("adaptive_sampling", [])
+        sampling = report["log"]["adaptive_sampling"]
         timing = report["log"]
         per_frequency = ", ".join(
             f"{sweep['seconds_per_frequency']:.3g}" for sweep in timing["excitations"]
@@ -676,12 +657,19 @@ def _runs_table(study: Path) -> str:
         lines.append(
             f"| {name} | {_settings_text(run)} | {report['tetrahedra']:,} | "
             f"{report['palace']['degrees_of_freedom']:,} | "
-            f"{', '.join(str(s['samples']) for s in sampling) or '-'} | "
+            f"{', '.join(_samples_text(s) for s in sampling) or '-'} | "
             f"{timing['offline_seconds'] if timing['offline_seconds'] is not None else '-'} | "
             f"{per_frequency or '-'} | {report['palace']['total_seconds']:.1f} | "
             f"{report['palace']['peak_node_memory_mb']:,.0f} |"
         )
     return "\n".join(lines)
+
+
+def _samples_text(sampling: dict[str, Any]) -> str:
+    """A port's sample count, with its last error when the sweep reached its cap before it converged."""
+    if sampling["converged"]:
+        return str(sampling["samples"])
+    return f"{sampling['samples']} (cap; error {sampling['error']:.3g})"
 
 
 def _settings_text(run: Run) -> str:
@@ -699,6 +687,8 @@ def _settings_text(run: Run) -> str:
         parts.append(f"max samples {run.adaptive_max_samples}")
     if run.add_to_prom_at_f0:
         parts.append("AddToPROM at f0")
+    if run.linear_tolerance is not None:
+        parts.append(f"linear tol {run.linear_tolerance:g}")
     if not run.surface_epr:
         parts.append("no Surface EPR")
     return ", ".join(parts)
@@ -712,24 +702,33 @@ def _results_table(record: dict[str, Any]) -> str:
         f"port-Q: Q_ext = {eigen['q_external'][0]:.6g} and {eigen['q_external'][1]:.6g}, together "
         f"{eigen['q_external_together']:.6g}",
         "",
-        "| Run | Points fitted | f0 (GHz) | Q_l | abs(Q_c) | Q_i | f0 - f0_eig (Hz) | Q_l / Q_eig - 1 | "
-        "max abs(S21 - S21_full) | max abs(S21 - S21_adaptive) |",
-        "|---|---|---|---|---|---|---|---|---|---|",
+        "| Run | Points fitted | rms residual | f0 (GHz) | Q_l | abs(Q_c) | Q_i | f0 - f0_eig (Hz) | "
+        "Q_l / Q_eig - 1 | "
+        + " | ".join(f"max abs(S21 - S21 of {reference})" for reference in REFERENCES)
+        + " |",
+        "|---|---|---|---|---|---|---|---|---|" + "---|" * len(REFERENCES),
     ]
-    for name, fitted in record["fits"].items():
-        full = record["against_full_solves"].get(name, {}).get("max_abs_difference")
-        adaptive = record["against_adaptive"].get(name, {}).get("max_abs_difference")
+    for run, fitted in record["fits"].items():
+        # A run driven_result() refused is read from Palace's table: the table says so.
+        name = run if fitted["s21_from"] == "driven_result()" else f"{run} (port-S.csv)"
+        differences = [
+            record["against"][reference].get(run, {}).get("max_abs_difference")
+            for reference in REFERENCES
+        ]
         compared = (
-            f"{'-' if full is None else f'{full:.3e}'} | "
-            f"{'-' if adaptive is None else f'{adaptive:.3e}'} |"
+            " | ".join(
+                "-" if value is None else f"{value:.3e}" for value in differences
+            )
+            + " |"
         )
         if not fitted.get("fitted"):
             lines.append(
-                f"| {name} | {fitted.get('reason', 'not fitted')} | | | | | | | {compared}"
+                f"| {name} | {fitted.get('reason', 'not fitted')} | | | | | | | | {compared}"
             )
             continue
         lines.append(
-            f"| {name} | {fitted['points']} | {fitted['f0_hz'] / 1e9:.9f} | {fitted['q_loaded']:.6g} | "
+            f"| {name} | {fitted['points']} | {fitted['rms_residual']:.2e} | "
+            f"{fitted['f0_hz'] / 1e9:.9f} | {fitted['q_loaded']:.6g} | "
             f"{fitted['q_coupling_abs']:.6g} | {fitted['q_internal']:.4g} | "
             f"{fitted['f0_hz'] - eigen['frequency_hz']:.4g} | "
             f"{fitted['q_loaded'] / eigen['q'] - 1:.3e} | {compared}"

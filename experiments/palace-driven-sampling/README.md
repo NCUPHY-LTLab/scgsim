@@ -34,7 +34,8 @@ export PALACE_MPI_BIN=/path/to/mpi/bin          # the folder holding the mpirun 
 python run_study.py prepare  STUDY eigenmode
 python run_study.py execute  STUDY eigenmode
 python run_study.py readback STUDY eigenmode
-# ... the same three stages for adaptive, add-to-prom, tolerance-1e-5, no-surface-epr, full-solves, uniform-25000
+# ... the same three stages for adaptive, add-to-prom, tolerance-1e-5, tolerance-1e-5-max-40,
+# no-surface-epr, full-solves and uniform-2500 (uniform-25000 is defined too)
 python run_study.py fit STUDY
 ```
 
@@ -48,8 +49,9 @@ from the first core, so two jobs started side by side share the same cores.
 
 ## The runs
 
-Each Driven run varies one setting of `adaptive`. f0 and Q below are the Eigenmode run's, which places the
-dense window and the full solves.
+Each Driven run varies one setting of `adaptive`. f0 and Q are the Eigenmode run's resonator mode,
+f0 = 7.356647804 GHz and Q = 13,947.6, so f0/Q = 527.4 kHz: the dense window runs from 7.346098839 to
+7.367196768 GHz, 10.55 kHz apart, and the full solves from 7.35506546 to 7.35823015 GHz, about 395 kHz apart.
 
 | Run | What it solves |
 |---|---|
@@ -57,9 +59,73 @@ dense window and the full solves.
 | `adaptive` | `[Linear(4e9, 9e9, points=501), Linear(f0 − 20·f0/Q, f0 + 20·f0/Q, points=2001)]`, `adaptive_tolerance=1e-3`: 2,502 frequencies |
 | `add-to-prom` | `adaptive`, with `{"Type": "Point", "Freq": [f0], "AddToPROM": true}` added to the written `config.json`'s `Solver.Driven.Samples` before the handoff: a full solve at f0 that SCGSim does not expose |
 | `tolerance-1e-5` | `adaptive` with `adaptive_tolerance=1e-5` |
+| `tolerance-1e-5-max-40` | `tolerance-1e-5` with `adaptive_max_samples=40`: `tolerance-1e-5` reached Palace's default cap of 20 |
 | `no-surface-epr` | `adaptive` on a plan without `set_surface_epr` |
 | `full-solves` | `[Points([...])]`, 9 frequencies of the window's own grid 0.75·f0/Q apart (±3 f0/Q), solved in full |
-| `uniform-2500` | `[Linear(4e9, 9e9, points=2500)]`, `adaptive_tolerance=1e-3` (2 MHz apart) |
+| `uniform-2500` | `[Linear(4e9, 9e9, points=2500)]`, `adaptive_tolerance=1e-3`, 2.0 MHz apart |
+
+The issue's uniform 25,000-point sweep was not run. `adaptive`'s measured cost predicts 1,190 s to build the
+model plus 25,000 × (0.548 + 0.555) s online, 28,765 s (8.0 h), past the study's limit of about 7 h; so
+`uniform-2500` was run and its online cost scaled to 25,000 frequencies below.
 
 The resonator mode is the Eigenmode mode with the largest share of its electric energy above y = 200 µm, where
 only the meander is: the energy density `U_e` of each mode's ParaView field, integrated cell by cell.
+
+## Results
+
+All runs are on stock Palace 0.18.1 (git tag `0dc74cd`) with 8 MPI processes, one job at a time, on one mesh:
+`mesh()` wrote the same `palace.msh`, byte for byte, in every run folder (521,337 tetrahedra; 3,677,860
+unknowns at order 2). Every run's `Solver.Linear` is GMRES to a relative tolerance of 1e-6 with at most 400
+iterations, SCGSim's default, unless the run says otherwise. Times and memory are Palace's own: the offline time
+and each excitation's elapsed times from its log (printed to 3 significant digits), the total and the peak memory
+per node (`PeakNodeMemoryMegabytes`) from `palace.json`.
+
+### Runs
+
+| Run | Settings | Tetrahedra | Unknowns | Samples per port | Offline (s) | Online per frequency per port (s) | Total (s) | Peak memory (MB) |
+|---|---|---|---|---|---|---|---|---|
+| eigenmode | Eigenmode, 4 modes from 6.5 GHz | 521,337 | 3,677,860 | - | - | - | 1431.3 | 29,475 |
+| adaptive | 501 band + 2001 window, adaptive 0.001 | 521,337 | 3,677,860 | 9, 4 | 1190.0 | 0.548, 0.555 | 3947.6 | 35,738 |
+| add-to-prom | 501 band + 2001 window, adaptive 0.001, AddToPROM at f0 | 521,337 | 3,677,860 | 5, 5 | 921.0 | 0.527, 0.539 | 3587.8 | 34,996 |
+| tolerance-1e-5 | 501 band + 2001 window, adaptive 1e-05 | 521,337 | 3,677,860 | 20 (cap; error 0.000198), 20 (cap; error 0.000371) | 3710.0 | 0.739, 0.747 | 7428.4 | 40,512 |
+| no-surface-epr | 501 band + 2001 window, adaptive 0.001, no Surface EPR | 521,337 | 3,677,860 | 9, 4 | 1190.0 | 0.528, 0.532 | 3842.0 | 35,739 |
+| full-solves | 9 full solves | 521,337 | 3,677,860 | - | - | 86.7, 88 | 1586.0 | 33,325 |
+
+Where the adaptive sweeps placed their full solves, in GHz as Palace's log prints them (4 digits):
+
+| Run | Port 1 | Port 2 |
+|---|---|---|
+| `adaptive`, `no-surface-epr` | 4, 9, 6.555, 8.044, 7.355, 4.883, 7.357, 4.337, 8.654 | 4, 9, 6.555, 8.045 |
+| `add-to-prom` | 4, 9, 7.357 (f0), 6.554, 5.077 | 4, 9, 7.357 (f0), 6.554, 5.077 |
+| `tolerance-1e-5` | 4, 9, 6.555, 8.044, 7.355, 4.883, 7.357, 4.337, 8.654, 7.458, 8.391, 6.053, 7.162, 5.220, 7.693, 5.837, 7.403, 7.630, 7.325, 7.379 | 4, 9, 6.555, 8.045, 7.355, 4.883, 7.357, 4.337, 8.654, 7.158, 7.606, 7.322, 7.236, 5.807, 5.623, 7.359, 8.863, 7.807, 7.339, 7.345 |
+
+The two ports share one reduced model, so port 2 starts from port 1's solves.
+
+### The notch
+
+| Run | Points fitted | rms residual | f0 (GHz) | Q_l | abs(Q_c) | Q_i | f0 - f0_eig (Hz) | Q_l / Q_eig - 1 | max abs(S21 - S21 of full-solves) | max abs(S21 - S21 of full-solves-linear-1e-9) | max abs(S21 - S21 of adaptive) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| adaptive | 2003 | 1.75e-06 | 7.356663911 | 11140.8 | 11261.8 | 1.036e+06 | 1.611e+04 | -2.012e-01 | 4.537e-03 | - | - |
+| add-to-prom | 2003 | 1.75e-06 | 7.356663907 | 11140.7 | 11261.8 | 1.035e+06 | 1.61e+04 | -2.012e-01 | 4.535e-03 | - | 1.430e-05 |
+| tolerance-1e-5 (port-S.csv) | 2003 | 1.75e-06 | 7.356663911 | 11140.8 | 11261.8 | 1.036e+06 | 1.611e+04 | -2.012e-01 | 4.540e-03 | - | 3.076e-06 |
+| no-surface-epr | 2003 | 1.75e-06 | 7.356663911 | 11140.8 | 11261.8 | 1.036e+06 | 1.611e+04 | -2.012e-01 | 4.537e-03 | - | 1.604e-09 |
+| full-solves | 9 | 1.12e-03 | 7.356663554 | 11056.4 | 11228.2 | 7.219e+05 | 1.575e+04 | -2.073e-01 | - | - | 4.537e-03 |
+
+`f0`, `Q_l`, `abs(Q_c)` and `Q_i` are the hanger fit (`notch_fit.py`) of S21 on the dense window's points
+(the 9 points of a full-solve run), with the line's delay taken from the band's phase away from the resonance,
+14.64 ps (the full-solve runs use `adaptive`'s). `rms residual` is the fit's, in units of S21. The last columns
+are the largest `abs(S21 − S21_reference)` over the frequencies a run shares with the reference. The Eigenmode
+mode's Q from its complex frequency, 13,947.6, and the two ports' `Q_ext` from `port-Q.csv`, 22,548.5 and
+22,484.5 (11,258.2 together), are both Palace's numbers for the same mode.
+
+## What failed
+
+- **The Eigenmode run is refused by `resolve_palace_result`.** Palace ended with exit code 0 and wrote
+  `eig.csv`, `port-Q.csv`, `port-I.csv`, `port-V.csv`, `domain-E.csv` and `surface-Q.csv`, but the run's receipt
+  says `failed`, because SCGSim's Eigenmode run-folder contract expects `port-EPR.csv` whenever the config has
+  lumped ports, and Palace writes it only for ports with an inductance. `readback` records the refusal and reads
+  the modes from `eig.csv`, `port-Q.csv` and the ParaView fields; the issue is
+  [#311](https://github.com/NCUPHY-LTLab/scgsim/issues/311).
+- **`tolerance-1e-5` reached Palace's default cap of 20 full solves on both ports**, with last errors of
+  1.98e-4 and 3.71e-4, and `driven_result()` refuses it as unconverged. `fit` reads its S21 from Palace's
+  `port-S.csv` to compare it, and the table marks it so.
