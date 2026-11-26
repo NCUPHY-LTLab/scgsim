@@ -113,6 +113,36 @@ def test_the_port_of_a_real_input_is_a_face_between_volumes_in_every_route(
     assert views.embedded_faces(a) == [] and len(a_port["adjacent_volumes"]) == 2
 
 
+def test_a_route_a_sheet_carries_the_normal_thickness_its_film_declares(
+    tmp_path, films
+):
+    """The two 0.25 um films become sheets; each sheet's outline states the declared 0.25 um, not a z extent of 0.
+
+    Each outline is the sheet's whole 4 x 4 um square, 16 um long: the port's landing 0.5 um into each sheet
+    cuts the sheet into faces, and those cuts lie inside the metal.
+    """
+    sidecar = read_sidecar(build(films, "A", tmp_path).sidecar)
+    outlines = {
+        f["source"]: f
+        for f in sidecar["mesh_feature"].values()
+        if f["kind"] == "sheet_outline"
+    }
+    assert {name: f["facts"] for name, f in outlines.items()} == {
+        "chip/left": {"thickness_um": 0.25},
+        "chip/right": {"thickness_um": 0.25},
+    }
+    for name, (x0, x1) in (("chip/left", (0.0, 4.0)), ("chip/right", (6.0, 10.0))):
+        edges = [sidecar["edge"][e] for e in outlines[name]["edges"]]
+        assert sum(e["length_um"] for e in edges) == pytest.approx(16.0), name
+        for edge in edges:
+            (ax, ay, _), (bx, by, _) = (
+                sidecar["vertex"][v]["position_um"] for v in edge["vertices"]
+            )
+            on_side = {ax, bx} <= {x0} or {ax, bx} <= {x1}
+            on_end = {ay, by} <= {0.0} or {ay, by} <= {4.0}
+            assert on_side or on_end, (name, edge)
+
+
 def test_a_junction_input_builds_under_route_a(tmp_path):
     """A junction input builds under route a."""
     effective = rectangular_junction_pair()

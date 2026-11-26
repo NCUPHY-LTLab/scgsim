@@ -67,7 +67,7 @@ SCGSim 在兩個地方建立這種排列，決定歸屬的方式不同：
 
 ## 寫出模型 {#writer}
 
-`output.emission` 把驗證過的模型直接寫成 OpenCASCADE 的文字格式（BREP）與 XAO 外包，不呼叫 Gmsh 或 OCC，沒有布林運算，也不修補；輸出的位元組是確定的。它依 `TopExp::MapShapes` 前序為形狀編號，也就是 Gmsh 開啟檔案時給的 tag 順序。**sidecar**（`scgsim.sgb.sidecar.v6`，JSON）把每個原生 tag 綁定到它的規劃 ID，再經由規劃 ID 連到 Entity、Net、介面、條帶與實體群組。原生 tag 只在一次載入的模型中有效；規劃 ID 才是身分。
+`output.emission` 把驗證過的模型直接寫成 OpenCASCADE 的文字格式（BREP）與 XAO 外包，不呼叫 Gmsh 或 OCC，沒有布林運算，也不修補；輸出的位元組是確定的。它依 `TopExp::MapShapes` 前序為形狀編號，也就是 Gmsh 開啟檔案時給的 tag 順序。**sidecar**（`scgsim.sgb.sidecar.v7`，JSON）把每個原生 tag 綁定到它的規劃 ID，再經由規劃 ID 連到 Entity、Net、介面、條帶與實體群組。原生 tag 只在一次載入的模型中有效；規劃 ID 才是身分。
 
 給 AEDT 的部分，`output.exchange.step` 把輸出的實體寫成 STEP 組合件，每個實體一個具名元件，不含真空（AEDT 自己建立 Region）。沒有實體承載的薄片與埠面，在這個尺度下無法用 STEP 傳遞，所以由一個 guard 檔記錄它們的環，匯入端再據以重建。Route B 模型沒有導體實體，不會匯出；AEDT 改用同一輸入的 Route C 模型。
 

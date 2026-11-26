@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://scgsim.invalid/schemas/scgsim.sgb.sidecar.v6.json",
-  "title": "scgsim.sgb.sidecar.v6",
+  "$id": "https://scgsim.invalid/schemas/scgsim.sgb.sidecar.v7.json",
+  "title": "scgsim.sgb.sidecar.v7",
   "description": "Sidecar of the SGB XAO/BREP: the model, the binding of planned ids to native tags, a summary, and the tables of sources, derived curves and emitted shapes, linked by typed ids.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "model", "binding", "summary", "entity", "source_curve", "inset_request", "port", "cut_family", "band_family", "support_ring", "support_primitive", "carrier", "vertex", "edge", "face", "volume", "group", "surface_epr_row", "mesh_feature"],
   "properties": {
-    "schema": {"const": "scgsim.sgb.sidecar.v6"},
+    "schema": {"const": "scgsim.sgb.sidecar.v7"},
     "model": {"$ref": "#/$defs/Model"},
     "binding": {"$ref": "#/$defs/Binding"},
     "summary": {"$ref": "#/$defs/Summary"},
@@ -99,11 +99,12 @@
       "additionalProperties": {"$ref": "#/$defs/SurfaceEprRow"}
     },
     "mesh_feature": {
-      "description": "Emitted: facts about the geometry for the mesher (no sizes): film sidewalls, band boundaries, arcs, port edges.  Their order is computed (by kind, source and facts).",
+      "description": "Emitted: facts about the geometry for the mesher (no sizes): film sidewalls, sheet outlines, band boundaries, arcs, port edges.  Their order is computed (by kind, source and facts).",
       "type": "object",
       "additionalProperties": {
         "oneOf": [
           {"$ref": "#/$defs/FilmSidewall"},
+          {"$ref": "#/$defs/SheetOutline"},
           {"$ref": "#/$defs/BandBoundary"},
           {"$ref": "#/$defs/ArcFeature"},
           {"$ref": "#/$defs/PortEdge"}
@@ -720,6 +721,31 @@
       "properties": {
         "conductor_volumes": {"enum": ["excluded", "retained"]},
         "conductor_sheets": {"type": "boolean"}
+      }
+    },
+    "SheetOutline": {
+      "description": "The outline edges of a Route A conductor sheet: the edges of its faces inside no metal and on no wall of the model boundary; thickness_um is the declared normal thickness of the film the sheet stands for.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["edges", "kind", "source", "facts"],
+      "properties": {
+        "edges": {
+          "type": "array",
+          "items": {"type": "string", "x-references": "edge"},
+          "minItems": 1
+        },
+        "kind": {"const": "sheet_outline"},
+        "source": {"description": "The conductor.", "type": "string", "x-references": "entity"},
+        "facts": {"$ref": "#/$defs/SheetOutlineFacts"}
+      }
+    },
+    "SheetOutlineFacts": {
+      "description": "The facts of a sheet outline.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["thickness_um"],
+      "properties": {
+        "thickness_um": {"type": "number", "exclusiveMinimum": 0}
       }
     },
     "SkippedFace": {

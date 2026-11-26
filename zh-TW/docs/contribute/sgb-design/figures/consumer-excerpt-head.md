@@ -18,7 +18,7 @@
   },
   "tolerance_um": 1e-07
  },
- "schema": "scgsim.sgb.sidecar.v6",
+ "schema": "scgsim.sgb.sidecar.v7",
  "summary": {
   "arc_edges": 0,
   "counts": {

@@ -86,7 +86,7 @@ handoff = sim.prepare_handoff(
 ::: {.askr-table-compact}
 | 配方 | 尺寸 | 參數（預設值） |
 |---|---|---|
-| `FeatureRecipe` | 粗尺寸為邊界框對角線除以 `max_size_divisor`；薄膜側壁較細（薄膜厚度的倍數，當它比粗尺寸的一半更細時），每條 Surface-EPR 條帶邊界也較細（見[下方](#palace-mesh-band-edges)）。可選的規則會為導體輪廓定尺寸。 | `max_size_divisor=20`、`gradation=1`、`film_sidewall_thickness_multiple=25`、`film_sidewall_ceiling_fraction=0.5`、`conductor_outline=False`、`conductor_edge_size_um=5`、`conductor_edge_grow_um=300`、`band_mesh_size_multiple=4` |
+| `FeatureRecipe` | 粗尺寸為邊界框對角線除以 `max_size_divisor`；薄膜邊緣較細（薄膜厚度的倍數，當它比粗尺寸的一半更細時：Route B 與 C 在薄膜側壁，Route A 沿 sheet 的輪廓），每條 Surface-EPR 條帶邊界也較細（見[下方](#palace-mesh-band-edges)）。可選的規則會為導體輪廓定尺寸。 | `max_size_divisor=20`、`gradation=1`、`film_sidewall_thickness_multiple=25`、`film_sidewall_ceiling_fraction=0.5`、`conductor_outline=False`、`conductor_edge_size_um=5`、`conductor_edge_grow_um=300`、`band_mesh_size_multiple=4` |
 | `GlobalSizeRecipe` | 只有粗尺寸。便宜的參考，會在薄金屬側壁留下扁平四面體，因此依賴修補輪次。 | `max_size_divisor=20`、`gradation=1` |
 | `UniformBoundaryRecipe` | 模型的每條曲線都是 `near_um`，在 `far_um` 微米內增長到 `far_um`，不論曲線是什麼。 | `near_um=5`、`far_um=300` |
 | `GmshDefaultRecipe` | Gmsh 自己的預設值，只做一次，沒有尺寸上限也不修補。不論 minSICN 為何都交付網格，報告記錄其值；四面體數與時間預算仍適用。以 `set_mesh(recipe=GmshDefaultRecipe())` 選用。 | 無 |
@@ -112,7 +112,7 @@ handoff = sim.prepare_handoff(
 | 條帶邊界不定尺寸，作為對照 | 修補一輪後無不良元素；407,093 個四面體；83 s | 停滯於 minSICN 0.003 至 0.004 | 無不良元素；9,600 至 13,500 個四面體；0.7 至 0.8 s |
 :::
 
-覆晶量子位元是置於共用接地平面下的 OrcaPen SC PDK `disk_flip_chip_qubit`，Route B；焊墊是 `square_pad_capacitor`（200 µm 焊墊、1 mm 晶粒）。每個金屬-空氣、金屬-基板與基板-空氣面都有 0.5 與 1 µm 的條帶。各案例與每次計算見[條帶邊量測](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/experiments/meshing-benchmark/band_edge.md)。
+覆晶量子位元是置於共用接地平面下的 OrcaPen SC PDK `disk_flip_chip_qubit`，Route B；焊墊是 `square_pad_capacitor`（200 µm 焊墊、1 mm 晶粒）。每個金屬-空氣、金屬-基板與基板-空氣面都有 0.5 與 1 µm 的條帶。各案例與每次計算見[條帶邊量測](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/experiments/meshing-benchmark/band_edge.md)。Route A 的焊墊是在 Route A sheet 的輪廓還沒有尺寸時量的（`scgsim.meshing.features/2`）；現在 Route A 的網格沿 sheet 邊緣的元素較細。
 :::
 
 ### 網格產生器選項 {#palace-mesh-mesher}

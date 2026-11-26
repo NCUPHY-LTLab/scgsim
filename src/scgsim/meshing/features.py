@@ -28,6 +28,7 @@ from .errors import SidecarError
 
 FEATURE_KINDS = (
     "film_sidewall",
+    "sheet_outline",
     "band_boundary",
     "arc",
     "port_edge",

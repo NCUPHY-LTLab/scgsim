@@ -34,6 +34,13 @@ from scgsim.geometry.sgb.records.prisms import (
 
 GRID = Grid(0.001)
 Um = tuple[float, float]
+# The film a Route A conductor sheet of these scenes stands for: the 0.2 um metal of their Route B form.
+SHEET_FILM_UM = 0.2
+
+
+def film_of(z0: Fraction, z1: Fraction) -> float | None:
+    """The film thickness a conductor prism over ``[z0, z1]`` carries: ``SHEET_FILM_UM`` for a sheet, else none."""
+    return SHEET_FILM_UM if z0 == z1 else None
 
 
 def units(value_um: float, grid: Grid = GRID) -> int:
@@ -88,6 +95,7 @@ def conductor(  # noqa: PLR0913 - a test builder
         "conductor",
         net_id=net,
         priority=priority,
+        film_thickness_um=film_of(exact_z(z0), exact_z(z1)),
     )
 
 
@@ -125,6 +133,7 @@ def disc_model(
             "conductor",
             net_id="N",
             arcs=carried,
+            film_thickness_um=SHEET_FILM_UM,
         )
     )
     if extra_rect:
@@ -140,6 +149,7 @@ def disc_model(
                 "conductor",
                 net_id="N",
                 priority=1,
+                film_thickness_um=SHEET_FILM_UM,
             )
         )
     return PrismCatalogue(GRID, tuple(prisms), name="disc")
@@ -214,7 +224,16 @@ def pad_in_ground(
     prisms = chip_prisms(GRID, half)
     ground = footprint(rect_um(-half, -half, half, half), [rect_um(-80, -60, 80, 60)])
     prisms.append(
-        PrismRecord("ground", ground, z0, z1, "Al", "conductor", net_id="Ground")
+        PrismRecord(
+            "ground",
+            ground,
+            z0,
+            z1,
+            "Al",
+            "conductor",
+            net_id="Ground",
+            film_thickness_um=film_of(z0, z1),
+        )
     )
     hole: list[LineEdge | ArcCarrier] = (
         _polygon_hole(hole_sides)
@@ -232,7 +251,15 @@ def pad_in_ground(
     pad_footprint, arcs = Footprint.from_primitives(_pad_ring(rounded_corner), [hole])
     prisms.append(
         PrismRecord(
-            "pad", pad_footprint, z0, z1, "Al", "conductor", net_id="pad", arcs=arcs
+            "pad",
+            pad_footprint,
+            z0,
+            z1,
+            "Al",
+            "conductor",
+            net_id="pad",
+            arcs=arcs,
+            film_thickness_um=film_of(z0, z1),
         )
     )
     if with_port:
@@ -350,6 +377,7 @@ def random_layout(
             "Al",
             "conductor",
             net_id="Ground",
+            film_thickness_um=film_of(exact_z(0), exact_z(z1)),
         )
     )
     prisms.extend(features)

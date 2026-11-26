@@ -35,7 +35,7 @@ preview.show_mesh()
 
 | 項目 | 值 |
 |---|---|
-| 尺寸配方 | features（`scgsim.meshing.features/2`） |
+| 尺寸配方 | features（`scgsim.meshing.features/3`） |
 | 幾何階數／FEM 階數 | 1 / 2 |
 | 品質門檻 | 0.01（minSICN） |
 | 最小 SICN／低於門檻的元素數 | 0.0471318 / 0 |

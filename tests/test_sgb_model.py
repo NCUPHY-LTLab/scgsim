@@ -10,6 +10,7 @@ import pytest
 import shapely
 from sgb_scenes import (
     GRID,
+    SHEET_FILM_UM,
     airbridge,
     footprint,
     lumped_port,
@@ -189,6 +190,7 @@ def test_sheet_conductor_overlap_of_different_nets_fails_closed():
         "Al",
         "conductor",
         net_id="other",
+        film_thickness_um=SHEET_FILM_UM,
     )
     bad = PrismCatalogue(GRID, (*base.prisms, extra))
     with pytest.raises(OverlapError, match="overlap"):

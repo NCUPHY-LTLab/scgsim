@@ -9,7 +9,16 @@ import jsonschema
 import pytest
 from sgb_emit_cases import CASES
 from sgb_extreme_cases import catalogue_of, chip, disk
-from sgb_scenes import GRID, chip_prisms, conductor, footprint, pad_in_ground, rect_um
+from sgb_scenes import (
+    GRID,
+    SHEET_FILM_UM,
+    chip_prisms,
+    conductor,
+    footprint,
+    pad_in_ground,
+    rect_um,
+    slab_model,
+)
 
 from scgsim.contracts.sgb_sidecar import sidecar_schema, views
 from scgsim.geometry.exact.grid import exact_z
@@ -20,9 +29,13 @@ from scgsim.geometry.sgb.output.emission.plan import plan_brep
 from scgsim.geometry.sgb.output.sidecar.build import SidecarContext, build_sidecar
 from scgsim.geometry.sgb.output.sidecar.features import FEATURE_KINDS
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue, PrismRecord
+from scgsim.meshing import FeatureRecipe
+from scgsim.meshing.features import read_features
+from scgsim.meshing.sizing import BoundingBox
 
 FACTS_OF_KIND = {
     "film_sidewall": {"thickness_um"},
+    "sheet_outline": {"thickness_um"},
     "band_boundary": {"margins_um", "narrowest_band_um"},
     "arc": {"radius_um"},
     "port_edge": set(),
@@ -151,16 +164,24 @@ def test_the_schema_accepts_every_kind_and_rejects_an_unknown_kind_a_size_and_a_
 ):
     """A kind outside the list, a stowaway size, a missing fact and a wrong source type are schema errors."""
     validator = jsonschema.Draft202012Validator(sidecar_schema())
-    good = sidecars["pad_b_bands"]
-    assert {f["kind"] for f in good["mesh_feature"].values()} == set(FEATURE_KINDS)
+    good, sheets = sidecars["pad_b_bands"], sidecars["pad_a_bands"]
+    by_kind = {
+        f["kind"]: f for side in (good, sheets) for f in side["mesh_feature"].values()
+    }
+    assert set(by_kind) == set(
+        FEATURE_KINDS
+    )  # Route B states no sheet, Route A no wall
     assert not list(validator.iter_errors(good))
-    by_kind = {f["kind"]: f for f in good["mesh_feature"].values()}
+    assert not list(validator.iter_errors(sheets))
     broken_features = [
         {**by_kind["arc"], "kind": "gap"},
         {**by_kind["arc"], "size": 1.0},
         {**by_kind["arc"], "facts": {"radius_um": 1.0, "size_um": 0.2}},
         {**by_kind["film_sidewall"], "facts": {}},
         {**by_kind["film_sidewall"], "facts": {"thickness_um": 0.0}},
+        {**by_kind["sheet_outline"], "facts": {}},
+        {**by_kind["sheet_outline"], "facts": {"thickness_um": 0.0}},
+        {**by_kind["sheet_outline"], "source": None},
         {**by_kind["band_boundary"], "facts": {"margins_um": [0.1]}},
         {**by_kind["band_boundary"], "source": None},
         {**by_kind["port_edge"], "facts": {"thickness_um": 0.2}},
@@ -339,6 +360,93 @@ def test_narrowest_band_is_the_smallest_difference_between_margins_with_zero_pre
     assert (
         json.dumps(feature["facts"]).count("0000") == 0
     )  # no float noise such as 0.09999999999999998
+
+
+# --------------------------------------------------------------------------- sheet outlines
+
+
+def outline_lengths(side: dict) -> dict[str, float]:
+    """The total length of each sheet's outline edges, by sheet."""
+    return {
+        f["source"]: sum(side["edge"][e]["length_um"] for e in f["edges"])
+        for f in features_of(side, "sheet_outline")
+    }
+
+
+def extent(side: dict) -> BoundingBox:
+    """The bounding box of every vertex of the sidecar."""
+    points = [v["position_um"] for v in side["vertex"].values()]
+    low = tuple(min(p[k] for p in points) for k in range(3))
+    high = tuple(max(p[k] for p in points) for k in range(3))
+    return BoundingBox(low, high)
+
+
+def test_a_route_a_sheet_states_its_outline_with_the_thickness_of_its_film(sidecars):
+    """pad_a: pad and ground are sheets of the scene's 0.2 um film, and each outline is where that film ends.
+
+    The ground ends at its 160 x 120 um cutout: its edges on the die boundary are not film edges, as Route B
+    emits no wall there.  The pad's outline is all of its drawn outline, outer ring and hole.
+    """
+    side = sidecars["pad_a"]
+    outlines = features_of(side, "sheet_outline")
+    assert {f["source"]: f["facts"] for f in outlines} == {
+        "pad": {"thickness_um": SHEET_FILM_UM},
+        "ground": {"thickness_um": SHEET_FILM_UM},
+    }
+    pad_drawn = sum(
+        c["length_um"] for c in side["source_curve"].values() if c["entity"] == "pad"
+    )
+    lengths = outline_lengths(side)
+    assert lengths["ground"] == pytest.approx(2 * 160 + 2 * 120)
+    assert lengths["pad"] == pytest.approx(pad_drawn)
+
+
+@pytest.mark.parametrize("name", sorted(CASES))
+def test_only_a_route_a_model_has_sheet_outlines(sidecars, name):
+    """Routes B and C keep every film's volume, so their films have walls and no sheet outline."""
+    side = sidecars[name]
+    assert bool(features_of(side, "sheet_outline")) == (side["model"]["route"] == "A")
+
+
+def test_bands_cut_inside_a_sheet_are_not_its_outline(sidecars):
+    """pad_a_bands: the band curves split the sheet into faces, and the outline is still the film's edge alone."""
+    banded = sidecars["pad_a_bands"]
+    assert outline_lengths(banded) == pytest.approx(outline_lengths(sidecars["pad_a"]))
+    band_edges = {e for f in features_of(banded, "band_boundary") for e in f["edges"]}
+    assert not band_edges & {
+        e for f in features_of(banded, "sheet_outline") for e in f["edges"]
+    }
+
+
+def test_the_edge_between_two_touching_sheets_of_one_net_is_inside_the_metal():
+    """Two 10 um squares of one Net side by side: each outline is three sides, not the shared one."""
+    rects = [("a", "N", (-10.0, -5.0, 0.0, 5.0)), ("b", "N", (0.0, -5.0, 10.0, 5.0))]
+    side = sidecar_of(build_model_from_catalogue(slab_model("A", rects), "A"))
+    assert outline_lengths(side) == pytest.approx({"a": 30.0, "b": 30.0})
+
+
+def test_the_recipe_sizes_a_sheet_outline_as_route_b_sizes_the_walls_of_the_same_film(
+    sidecars,
+):
+    """pad_a and pad_b have one extent and one 0.2 um film: every sheet-outline curve gets the film-wall size (#309)."""
+    route_a, route_b = sidecars["pad_a"], sidecars["pad_b"]
+    box = extent(route_a)
+    assert box == extent(route_b)
+    recipe = FeatureRecipe()
+    wall_sizes = recipe.size_requests(read_features(route_b), box).curve_sizes
+    walls = {
+        wall_sizes[t]
+        for f in read_features(route_b).features
+        if f.kind == "film_sidewall"
+        for t in f.native_tags
+    }
+    sheets = read_features(route_a)
+    outline_sizes = recipe.size_requests(sheets, box).curve_sizes
+    outlines = [
+        t for f in sheets.features if f.kind == "sheet_outline" for t in f.native_tags
+    ]
+    assert outlines and len(walls) == 1
+    assert {outline_sizes[t] for t in outlines} == walls
 
 
 # --------------------------------------------------------------------------- arcs

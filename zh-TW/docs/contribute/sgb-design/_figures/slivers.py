@@ -47,7 +47,7 @@ from labels_common import (
 )
 from matplotlib.patches import Patch, PathPatch
 from plotly.subplots import make_subplots  # noqa: F401 -- kept for parity with the other figure scripts
-from sgb_scenes import GRID, chip_prisms, conductor, footprint, rect_um
+from sgb_scenes import GRID, SHEET_FILM_UM, chip_prisms, conductor, footprint, rect_um
 from shapely.geometry import Polygon, box
 
 from scgsim.geometry.exact.carriers import Lineage, LineCarrier
@@ -491,7 +491,6 @@ def coarse_grid_stand_in(numbers: dict) -> None:
             [rect_um(-50 - gap, -30 - gap, 50 + gap, 30 + gap)],
             grid=grid,
         )
-        pad = footprint(rect_um(-50, -30, 50, 30), grid=grid)
         prisms += [
             PrismRecord(
                 "ground",
@@ -501,10 +500,9 @@ def coarse_grid_stand_in(numbers: dict) -> None:
                 "Al",
                 "conductor",
                 net_id="Ground",
+                film_thickness_um=SHEET_FILM_UM,
             ),
-            PrismRecord(
-                "pad", pad, exact_z(0), exact_z(0), "Al", "conductor", net_id="pad"
-            ),
+            conductor("pad", rect_um(-50, -30, 50, 30), 0, 0, "pad", grid),
         ]
         try:
             m = build_model_from_catalogue(

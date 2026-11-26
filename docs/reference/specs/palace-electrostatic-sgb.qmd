@@ -122,7 +122,7 @@ a flip-chip qubit and on Route A sheets.
 ::: {.askr-table-compact}
 | Recipe | Sizes | Parameters (defaults) |
 |---|---|---|
-| `FeatureRecipe` | A coarse size, the bounding-box diagonal over `max_size_divisor`, with finer elements at thin film side walls (a multiple of the film thickness, when that is finer than half the coarse size) and on every Surface-EPR band boundary ([below](#palace-mesh-band-edges)). An optional rule sizes the conductor outlines. | `max_size_divisor=20`, `gradation=1`, `film_sidewall_thickness_multiple=25`, `film_sidewall_ceiling_fraction=0.5`, `conductor_outline=False`, `conductor_edge_size_um=5`, `conductor_edge_grow_um=300`, `band_mesh_size_multiple=4` |
+| `FeatureRecipe` | A coarse size, the bounding-box diagonal over `max_size_divisor`, with finer elements at the edges of thin films (a multiple of the film thickness, when that is finer than half the coarse size: at the film's side walls on Route B and C, along the sheet's outline on Route A) and on every Surface-EPR band boundary ([below](#palace-mesh-band-edges)). An optional rule sizes the conductor outlines. | `max_size_divisor=20`, `gradation=1`, `film_sidewall_thickness_multiple=25`, `film_sidewall_ceiling_fraction=0.5`, `conductor_outline=False`, `conductor_edge_size_um=5`, `conductor_edge_grow_um=300`, `band_mesh_size_multiple=4` |
 | `GlobalSizeRecipe` | Only the coarse size. A cheap reference that leaves flat tetrahedra at thin metal side walls, so it relies on repair rounds. | `max_size_divisor=20`, `gradation=1` |
 | `UniformBoundaryRecipe` | Every curve of the model at `near_um`, growing to `far_um` over `far_um` micrometres, whatever the curve is. | `near_um=5`, `far_um=300` |
 | `GmshDefaultRecipe` | Gmsh's own defaults, once, with no size limit and no repair. The mesh is delivered whatever its minSICN, which the report records; the tetrahedron and time budgets still apply. Choose it with `set_mesh(recipe=GmshDefaultRecipe())`. | None |
@@ -171,6 +171,9 @@ ground planes, Route B; the pad is `square_pad_capacitor` (200 µm pad, 1 mm
 die). Bands are 0.5 and 1 µm on every metal-air, metal-substrate and
 substrate-air face. The cases and every run are in the
 [band-edge measurement](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/experiments/meshing-benchmark/band_edge.md).
+The pad on Route A was measured before the outline of a Route A sheet was
+sized (`scgsim.meshing.features/2`); a Route A mesh now has finer elements
+along the sheet edges.
 :::
 
 ### Mesher options {#palace-mesh-mesher}

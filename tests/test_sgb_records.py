@@ -133,7 +133,14 @@ def test_an_entity_id_with_a_hash_keeps_its_whole_id():
     """A ``#`` in an entity id is part of the id: a straight carrier is a whole curve whatever its id holds."""
     footprint = Footprint.from_rings(((0, 0), (10, 0), (10, 10), (0, 10)))
     prism = PrismRecord(
-        "pad#1", footprint, Fraction(0), Fraction(0), "PEC", "conductor", net_id="n"
+        "pad#1",
+        footprint,
+        Fraction(0),
+        Fraction(0),
+        "PEC",
+        "conductor",
+        net_id="n",
+        film_thickness_um=0.2,
     )
     first = prism.carriers()[0]
     assert first.edge_carrier().curve_id == first.id == "pad#1/polygon0/ring0/edge0"

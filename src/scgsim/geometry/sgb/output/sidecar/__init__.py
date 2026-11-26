@@ -1,4 +1,4 @@
-"""The production sidecar ``scgsim.sgb.sidecar.v6`` (design brief sections 7 and 12, decision D8).
+"""The production sidecar ``scgsim.sgb.sidecar.v7`` (design brief sections 7 and 12, decision D8).
 
 The sidecar is the JSON companion of the XAO/BREP and SGB's complete record of the model: everything the build
 used, and everything the mesher, the meshing-stage check and the solver adapters need, so a reader reads and
@@ -107,7 +107,8 @@ Emitted -- the shapes that entered the model
     for the three.
 ``mesh_feature``
     facts about the geometry for the mesher, never a size: ``film_sidewall`` (the sidewall outline of a
-    finite body, with its ``thickness_um``), ``band_boundary`` (a band family's edges, with the request's
+    finite body, with its ``thickness_um``), ``sheet_outline`` (the outline of a Route A conductor sheet, with
+    the ``thickness_um`` its film declares), ``band_boundary`` (a band family's edges, with the request's
     ``margins_um`` and ``narrowest_band_um``), ``arc`` (the circular-arc edges of one ``radius_um``),
     and ``port_edge``; each lists edge ids and the Entity, family or port it comes from.  The mesher decides every size (see ``features``).
 

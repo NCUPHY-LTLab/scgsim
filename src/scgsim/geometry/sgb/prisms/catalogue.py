@@ -24,6 +24,7 @@ from scgsim.geometry.sgb.prisms.entities import (
     entity_interval,
     entity_prisms,
     physical_feature_kind,
+    sheet_film_thickness,
 )
 from scgsim.geometry.sgb.prisms.ports import port_prisms
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue, PrismRecord
@@ -52,6 +53,7 @@ def build_prism_catalogue(
                 interval,
                 ring_primitives,
                 physical_feature_kind(entity, build_input, representation),
+                sheet_film_thickness(entity, build_input, representation),
             )
         )
     prisms.extend(port_prisms(build_input, grid, representation))
