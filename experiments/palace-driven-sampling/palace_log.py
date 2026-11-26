@@ -21,13 +21,15 @@ _SAMPLING = re.compile(
     r"^Adaptive sampling (converged with|reached maximum) (\d+) frequency samples:"
 )
 _SAMPLING_ERROR = re.compile(rf"error = {_NUMBER},")
+_LINEAR_SOLVE = re.compile(r"^GMRES solver converged in (\d+) iterations")
 _TIMER_ROW = re.compile(
     rf"^(\s*[A-Za-z][A-Za-z ]*?)\s+{_NUMBER}\s+{_NUMBER}\s+{_NUMBER}$"
 )
 
 
 def log_timing(log: str) -> dict[str, Any]:
-    """The offline time, each excitation's time per frequency, and the elapsed-time report, from Palace's log.
+    """The adaptive sampling, the linear solves, the offline time, each excitation's time per frequency, and the
+    elapsed-time report, from Palace's log.
 
     Palace prints the elapsed time at the start of each frequency to 3 significant digits.  An excitation's time
     runs from its first frequency to the next excitation's first, the last one's to the run's total.
@@ -36,6 +38,7 @@ def log_timing(log: str) -> dict[str, Any]:
     sweeps: list[dict[str, Any]] = []
     timers: dict[str, float] = {}
     sampling: list[dict[str, Any]] = []
+    gmres_iterations: list[int] = []
     in_report = False
     parent = ""
     lines = log.splitlines()
@@ -50,6 +53,8 @@ def log_timing(log: str) -> dict[str, Any]:
                     "error": float(error.group(1)) if error else None,
                 }
             )
+        if solve := _LINEAR_SOLVE.match(line):
+            gmres_iterations.append(int(solve.group(1)))
         iteration = _ITERATION.match(line)
         if iteration and int(iteration.group(1)) == 1:
             sweeps.append(
@@ -78,6 +83,11 @@ def log_timing(log: str) -> dict[str, Any]:
     return {
         "offline_seconds": float(offline.group(1)) if offline else None,
         "adaptive_sampling": sampling,
+        "gmres_solves": len(gmres_iterations),
+        "gmres_iterations": sum(gmres_iterations),
+        "gmres_iterations_range": [min(gmres_iterations), max(gmres_iterations)]
+        if gmres_iterations
+        else None,
         "excitations": sweeps,
         "elapsed_time_report_max_s": timers,
     }

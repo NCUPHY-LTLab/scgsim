@@ -88,10 +88,19 @@ class Run:
     surface_epr: bool = True
     add_to_prom_at_f0: bool = False
     linear_tolerance: float | None = None  # Solver.Linear.Tol; None keeps SCGSim's 1e-6
+    eigen_tolerance: float | None = (
+        None  # Solver.Eigenmode.Tol; None keeps SCGSim's 1e-6
+    )
 
 
 RUNS: dict[str, Run] = {
     "eigenmode": Run("Eigenmode"),
+    # The Eigenmode Q is 20 % above the notch's Q_l: the same with a tighter linear solve, then also a tighter
+    # eigensolve.
+    "eigenmode-linear-1e-9": Run("Eigenmode", linear_tolerance=1e-9),
+    "eigenmode-linear-1e-9-eigen-1e-9": Run(
+        "Eigenmode", linear_tolerance=1e-9, eigen_tolerance=1e-9
+    ),
     "adaptive": Run("Driven", "band+window", adaptive_tolerance=1e-3),
     "add-to-prom": Run(
         "Driven", "band+window", adaptive_tolerance=1e-3, add_to_prom_at_f0=True
@@ -173,9 +182,17 @@ def prepare(study: Path, name: str, palace: str | None, mpi_bin: str | None) -> 
     if isinstance(sim, EigenmodeSim):
         # Every mode is saved as a ParaView field, so readback can tell where its energy is.
         sim.set_eigenmode(
-            num_modes=EIGEN_MODES, target=EIGEN_TARGET_HZ, save=EIGEN_MODES
+            num_modes=EIGEN_MODES,
+            target=EIGEN_TARGET_HZ,
+            tolerance=1e-6 if run.eigen_tolerance is None else run.eigen_tolerance,
+            save=EIGEN_MODES,
         )
-        sim.set_numerical(order=2, amr_max_passes=0, output_paraview=True)
+        sim.set_numerical(
+            order=2,
+            amr_max_passes=0,
+            output_paraview=True,
+            tolerance=1e-6 if run.linear_tolerance is None else run.linear_tolerance,
+        )
     else:
         sim.set_driven(
             _frequencies(run, study),
@@ -501,7 +518,7 @@ def fit(study: Path) -> None:
     delay = {}
     runs: dict[str, dict[str, Any]] = {}
     for name in RUNS:
-        read = _run_s21(study / name) if name != "eigenmode" else None
+        read = _run_s21(study / name) if RUNS[name].problem == "Driven" else None
         if read is None:
             continue
         frequencies, s21 = read
@@ -531,8 +548,9 @@ def fit(study: Path) -> None:
     }
     _write(study / "study.json", record)
     print(json.dumps(record, indent=1, default=str))
-    print(_runs_table(study))
-    print(_results_table(record))
+    print(
+        _runs_table(study), _eigenmode_table(study), _results_table(record), sep="\n\n"
+    )
 
 
 def _run_s21(folder: Path) -> tuple[np.ndarray, np.ndarray] | None:
@@ -674,7 +692,12 @@ def _samples_text(sampling: dict[str, Any]) -> str:
 
 def _settings_text(run: Run) -> str:
     if run.problem == "Eigenmode":
-        return f"Eigenmode, {EIGEN_MODES} modes from {EIGEN_TARGET_HZ / 1e9:g} GHz"
+        parts = [f"Eigenmode, {EIGEN_MODES} modes from {EIGEN_TARGET_HZ / 1e9:g} GHz"]
+        if run.linear_tolerance is not None:
+            parts.append(f"linear tol {run.linear_tolerance:g}")
+        if run.eigen_tolerance is not None:
+            parts.append(f"eigen tol {run.eigen_tolerance:g}")
+        return ", ".join(parts)
     sweep = {
         "band+window": f"{BAND_POINTS} band + {WINDOW_POINTS} window",
         "full-solves": f"{FULL_SOLVE_COUNT} full solves",
@@ -692,6 +715,33 @@ def _settings_text(run: Run) -> str:
     if not run.surface_epr:
         parts.append("no Surface EPR")
     return ", ".join(parts)
+
+
+def _eigenmode_table(study: Path) -> str:
+    """Each Eigenmode run's resonator mode: f0, Q, the ports' Q_ext and kappa_ext, and its linear solves."""
+    lines = [
+        "| Run | f0 (GHz) | Q = Re f / (2 Im f) | Q_ext[1] | Q_ext[2] | Q_ext together | kappa_ext[1], [2] (GHz) "
+        "| Linear solves | GMRES iterations (per solve) | Total (s) | Peak memory (MB) |",
+        "|---|---|---|---|---|---|---|---|---|---|---|",
+    ]
+    for name, run in RUNS.items():
+        path = study / name / "report.json"
+        if run.problem != "Eigenmode" or not path.is_file():
+            continue
+        report = _read(path)
+        mode = report["resonator_mode"]
+        external = _external_q(report)
+        row = report["port_q"][mode["mode"] - 1]
+        log = report["log"]
+        lines.append(
+            f"| {name} | {mode['frequency_hz'] / 1e9:.9f} | {mode['q']:.6g} | "
+            f"{external['q_external'][0]:.6g} | {external['q_external'][1]:.6g} | "
+            f"{external['q_external_together']:.6g} | "
+            f"{row['κ_ext[1] (GHz)']:+.4e}, {row['κ_ext[2] (GHz)']:+.4e} | {log.get('gmres_solves')} | "
+            f"{log.get('gmres_iterations')} ({log.get('gmres_iterations_range')}) | "
+            f"{report['palace']['total_seconds']:.1f} | {report['palace']['peak_node_memory_mb']:,.0f} |"
+        )
+    return "\n".join(lines)
 
 
 def _results_table(record: dict[str, Any]) -> str:
