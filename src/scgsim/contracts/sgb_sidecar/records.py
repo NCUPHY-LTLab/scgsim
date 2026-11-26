@@ -1,4 +1,4 @@
-"""The definition of the SGB sidecar ``scgsim.sgb.sidecar.v6``: every table and record, as a ``TypedDict``.
+"""The definition of the SGB sidecar ``scgsim.sgb.sidecar.v7``: every table and record, as a ``TypedDict``.
 
 Owns the shape of the file: its tables, the fields of each record, their types, enums and bounds, the table
 each id names, and which records accept more keys.  The value types and the ids of each table are in :mod:`.values`, and the
@@ -153,8 +153,8 @@ class Sidecar(TypedDict):
     mesh_feature: Annotated[
         dict[str, MeshFeature],
         Doc(
-            "Emitted: facts about the geometry for the mesher (no sizes): film sidewalls, band boundaries, arcs,"
-            " port edges.  Their order is computed (by kind, source and facts)."
+            "Emitted: facts about the geometry for the mesher (no sizes): film sidewalls, sheet outlines, band"
+            " boundaries, arcs, port edges.  Their order is computed (by kind, source and facts)."
         ),
     ]
 

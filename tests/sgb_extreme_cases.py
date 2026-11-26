@@ -15,7 +15,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from fractions import Fraction
 
-from sgb_scenes import GRID, rect_um, to_grid
+from sgb_scenes import GRID, film_of, rect_um, to_grid
 
 from scgsim.geometry.exact.carriers import Lineage, LineCarrier, circle_arcs
 from scgsim.geometry.exact.grid import exact_z
@@ -65,7 +65,15 @@ def metal(  # noqa: PLR0913 - a fixture builder
     z0, z1 = z or metal_z(route, base)
     footprint = Footprint.from_rings(to_grid(outer), [to_grid(h) for h in holes])
     return PrismRecord(
-        name, footprint, z0, z1, "Al", "conductor", net_id=net, priority=priority
+        name,
+        footprint,
+        z0,
+        z1,
+        "Al",
+        "conductor",
+        net_id=net,
+        priority=priority,
+        film_thickness_um=film_of(z0, z1),
     )
 
 
@@ -75,7 +83,14 @@ def grid_metal(
     """A conductor whose outline is given in grid units (to place vertices 1, 2, 3 g apart)."""
     z0, z1 = metal_z(route)
     return PrismRecord(
-        name, Footprint.from_rings(outline), z0, z1, "Al", "conductor", net_id=net
+        name,
+        Footprint.from_rings(outline),
+        z0,
+        z1,
+        "Al",
+        "conductor",
+        net_id=net,
+        film_thickness_um=film_of(z0, z1),
     )
 
 
@@ -104,6 +119,7 @@ def disk(  # noqa: PLR0913 - a fixture builder
         net_id=net,
         priority=priority,
         arcs=carried,
+        film_thickness_um=film_of(z0, z1),
     )
 
 

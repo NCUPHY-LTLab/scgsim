@@ -50,7 +50,7 @@ For that run's first mesh it read:
 
 | Item | Value |
 |---|---|
-| Sizing recipe | features (`scgsim.meshing.features/2`) |
+| Sizing recipe | features (`scgsim.meshing.features/3`) |
 | Geometry / FEM order | 1 / 2 |
 | Quality threshold | 0.01 (minSICN) |
 | Min SICN / elements below threshold | 0.0471318 / 0 |

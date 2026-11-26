@@ -21,6 +21,7 @@ FACE_LOOPS = {
 # The table a mesh feature's source names, by kind.
 SOURCE_TABLE = {
     "film_sidewall": "entity",
+    "sheet_outline": "entity",
     "arc": "entity",
     "band_boundary": "band_family",
     "port_edge": "port",
@@ -271,6 +272,11 @@ def feature(
 def film(tags: list[int], thickness_um: float = 0.2) -> dict[str, Any]:
     """A ``film_sidewall`` entry."""
     return feature("film_sidewall", tags, {"thickness_um": thickness_um})
+
+
+def sheet_outline(tags: list[int], thickness_um: float = 0.1) -> dict[str, Any]:
+    """A ``sheet_outline`` entry: the outline of a Route A sheet whose film is ``thickness_um`` thick."""
+    return feature("sheet_outline", tags, {"thickness_um": thickness_um})
 
 
 def features_of(*entries: dict[str, Any]) -> SidecarFeatures:

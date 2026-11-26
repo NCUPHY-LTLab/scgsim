@@ -10,6 +10,7 @@ from sgb_scenes import (
     airbridge,
     chip_prisms,
     conductor,
+    film_of,
     footprint,
     pad_in_ground,
     rect_um,
@@ -239,7 +240,14 @@ def test_a_hole_touching_its_outer_boundary_is_a_nonmanifold_pinch_for_finite_me
         )
         prisms = chip_prisms(GRID, 40.0) + [
             PrismRecord(
-                "ring", ring, exact_z(0), exact_z(z1), "Al", "conductor", net_id="N"
+                "ring",
+                ring,
+                exact_z(0),
+                exact_z(z1),
+                "Al",
+                "conductor",
+                net_id="N",
+                film_thickness_um=film_of(exact_z(0), exact_z(z1)),
             )
         ]
         return PrismCatalogue(GRID, tuple(prisms))

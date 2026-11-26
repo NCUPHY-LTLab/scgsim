@@ -6,7 +6,7 @@ import dataclasses
 import math
 
 import pytest
-from meshing_support import feature, features_of, film
+from meshing_support import feature, features_of, film, sheet_outline
 
 from scgsim.meshing import (
     FeatureRecipe,
@@ -27,7 +27,7 @@ def test_the_default_feature_recipe_is_the_measured_one():
     """The default feature recipe is the measured one."""
     recipe = FeatureRecipe()
     assert recipe.name == "features"
-    assert recipe.version == "scgsim.meshing.features/2"
+    assert recipe.version == "scgsim.meshing.features/3"
     assert (recipe.max_size_divisor, recipe.gradation) == (20.0, 1.0)
     assert recipe.film_sidewall_thickness_multiple == 25.0
     assert recipe.band_mesh_size_multiple == 4.0
@@ -38,7 +38,7 @@ def test_the_default_feature_recipe_is_the_measured_one():
 @pytest.mark.parametrize(
     ("recipe", "name", "version"),
     [
-        (FeatureRecipe(), "features", "scgsim.meshing.features/2"),
+        (FeatureRecipe(), "features", "scgsim.meshing.features/3"),
         (GlobalSizeRecipe(), "global-size", "scgsim.meshing.global-size/1"),
         (
             UniformBoundaryRecipe(),
@@ -138,6 +138,24 @@ def test_a_curve_covered_by_two_films_takes_the_finer_size():
         box_with_diagonal(2000.0),
     )
     assert requests.curve_sizes[2] == requests.curve_sizes[3] < requests.curve_sizes[1]
+
+
+def test_a_route_a_sheet_outline_gets_the_size_of_its_film_wall_on_route_b():
+    """The outline of a sheet of a 100 nm film gets 25 x 0.1 = 2.5 um, the size Route B gives that film's walls."""
+    box = box_with_diagonal(1600.0)  # coarse size 80: 2.5 um is the rung 80 / 32
+    route_a = FeatureRecipe().size_requests(features_of(sheet_outline([1, 2, 3])), box)
+    route_b = FeatureRecipe().size_requests(features_of(film([1, 2, 3], 0.1)), box)
+    assert route_a.curve_sizes == {tag: pytest.approx(2.5) for tag in (1, 2, 3)}
+    assert route_a.curve_sizes == route_b.curve_sizes
+
+
+def test_a_sheet_outline_takes_the_film_ceiling_too():
+    """A sheet of a film too thick to bind under the ceiling gets no size, as its walls would not."""
+    box = box_with_diagonal(400.0)  # coarse size 20, ceiling 10
+    thick = features_of(
+        sheet_outline([1], thickness_um=0.4)
+    )  # 25 x 0.4 = 10: not binding
+    assert FeatureRecipe().size_requests(thick, box).curve_sizes == {}
 
 
 def test_kinds_without_an_a_priori_rule_ask_for_no_size():
@@ -252,7 +270,7 @@ def test_ladder_size_is_the_largest_rung_not_above_the_target():
 
 
 def outline_features():
-    """Features with owners: pad film 1-2, pad arc 3, substrate film 4-5, band 6, unowned arc 7, port 8."""
+    """Features with owners: pad film 1-2, pad arc 3, substrate film 4-5, band 6, unowned arc 7, port 8, pad sheet 9."""
     pad_film = film([1, 2])
     pad_film["source"] = "pad"
     substrate_film = film([4, 5], 100.0)
@@ -263,7 +281,11 @@ def outline_features():
         "band_boundary", [6], {"margins_um": [0.5], "narrowest_band_um": 0.5}
     )
     port = feature("port_edge", [8], source="port")
-    return features_of(pad_film, pad_arc, substrate_film, band, shared_arc, port)
+    pad_sheet = sheet_outline([9])
+    pad_sheet["source"] = "pad"
+    return features_of(
+        pad_film, pad_arc, substrate_film, band, shared_arc, port, pad_sheet
+    )
 
 
 def test_the_conductor_outline_rule_is_off_by_default():
@@ -276,9 +298,9 @@ def test_the_conductor_outline_rule_is_off_by_default():
     )
 
 
-def test_the_conductor_outline_is_film_walls_and_arcs_of_conductors_and_the_port_edges():
-    """The conductor outline is film walls and arcs of conductors and the port edges."""
-    assert conductor_outline_curves(outline_features()) == (1, 2, 3, 8)
+def test_the_conductor_outline_is_film_walls_sheet_outlines_and_arcs_of_conductors_and_the_port_edges():
+    """The conductor outline is film walls, sheet outlines and arcs of conductors, and the port edges."""
+    assert conductor_outline_curves(outline_features()) == (1, 2, 3, 8, 9)
 
 
 def test_the_outline_field_has_the_edge_size_and_grows_over_its_own_distance():
@@ -287,7 +309,7 @@ def test_the_outline_field_has_the_edge_size_and_grows_over_its_own_distance():
     requests = rules.size_requests(outline_features(), box_with_diagonal(2000.0))
     (outline,) = requests.fields
     assert (outline.curves, outline.size, outline.distance) == (
-        (1, 2, 3, 8),
+        (1, 2, 3, 8, 9),
         5.0,
         300.0,
     )

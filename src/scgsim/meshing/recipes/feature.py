@@ -5,6 +5,11 @@ sidewalls, and sizing those curves from the film thickness removes them before a
 Surface-EPR bands, the band edges are the other place: bands 0.5 um wide next to elements tens of micrometres
 long leave slivers that local repair does not clear, so every band edge is sized from the width of its bands
 (``experiments/meshing-benchmark/band_edge.md``).
+
+A Route A conductor sheet has no walls, so its outline takes the film-wall rule from the thickness of the film
+it stands for: a film gets the same edge size on both routes.  Without it, the coarse size alone left each
+6 um CPW gap one element 100 um across, and the line's S-parameters and Eigenmode frequencies came out wrong
+(issue #309).
 """
 
 from __future__ import annotations
@@ -30,26 +35,28 @@ class FeatureRecipe:
     """Sizing parameters of the feature rules.
 
     The film and outline defaults were measured on 2026-11-05 and the band-edge default on 2026-11-10
-    (Gmsh 4.15.2).  Changing a number means a new version; the version and every parameter are recorded in
-    each quality report.
+    (Gmsh 4.15.2).  Changing a number or the curves a rule sizes means a new version: features/3 sizes the
+    outlines of Route A sheets.  The version and every parameter are recorded in each quality report.
     """
 
     name: ClassVar[str] = "features"
-    version: ClassVar[str] = "scgsim.meshing.features/2"
+    version: ClassVar[str] = "scgsim.meshing.features/3"
 
     # Coarse size away from every feature: the bounding-box diagonal over this number.
     max_size_divisor: float = 20.0
     # Size grows by 1 um per um of distance from a refined curve.  Gradation of 1.5 or more created new
     # near-flat tetrahedra at the edge of the refined region.
     gradation: float = 1.0
-    # A film wall of thickness t gets elements of at most this multiple of t, but only when that is finer
-    # than this fraction of the coarse size; a thicker wall is already resolved and gets no size.
+    # A film wall of thickness t, and the outline of a Route A sheet whose film is t thick, gets elements of
+    # at most this multiple of t, but only when that is finer than this fraction of the coarse size; a
+    # thicker wall is already resolved and gets no size.
     film_sidewall_thickness_multiple: float = 25.0
     film_sidewall_ceiling_fraction: float = 0.5
     # Conductor-outline rule, off by default: a Palace AMR comparison found that resolving the edges of
     # the conductors in the initial mesh needs fewer degrees of freedom for a 0.1 % capacitance, and the
-    # validation decides the default.  When on, the outline edges of the conductors (their film walls,
-    # arcs and the port edges; never the outer domain, the substrate walls or band edges) get this size ...
+    # validation decides the default.  When on, the outline edges of the conductors (their film walls or
+    # sheet outlines, arcs and the port edges; never the outer domain, the substrate walls or band edges)
+    # get this size ...
     conductor_outline: bool = False
     conductor_edge_size_um: float = 5.0
     # ... growing linearly to the coarse size over this distance.
@@ -137,7 +144,7 @@ class FeatureRecipe:
 
 
 def conductor_outline_curves(features: SidecarFeatures) -> tuple[int, ...]:
-    """Native tags of the conductors' outline edges: film walls, arcs and port edges, in ascending order.
+    """Native tags of the conductors' outline edges: film walls, sheet outlines, arcs and port edges, ascending.
 
     A feature counts when a conductor owns it (``source``).  Port edges are the exception: their source is
     the port sheet, not a conductor, but they are the outline where the port lands on the conductors.
@@ -146,18 +153,20 @@ def conductor_outline_curves(features: SidecarFeatures) -> tuple[int, ...]:
     tags: set[int] = set()
     for feature in features.features:
         if feature.kind == "port_edge" or (
-            feature.kind in ("film_sidewall", "arc")
+            feature.kind in ("film_sidewall", "sheet_outline", "arc")
             and feature.source in features.conductors
         ):
             tags.update(feature.native_tags)
     return tuple(sorted(tags))
 
 
-def _film_sidewall_size(
+def _film_edge_size(
     feature: Feature, max_size: float, recipe: FeatureRecipe
 ) -> float | None:
-    """Elements at a thin film wall: a multiple of its thickness, on the ladder; nothing for a thick one.
+    """Elements at the edge of a thin film: a multiple of its thickness, on the ladder; nothing for a thick one.
 
+    The edge is a film wall (``film_sidewall``) or, on Route A, the outline of the sheet the film became
+    (``sheet_outline``), so a film gets the same edge size on both routes: 2.5 um for 100 nm.
     The rule binds only when the thickness multiple is finer than the ceiling (a fraction of the coarse
     size).  A wall at or above the ceiling, such as a 10 um substrate in a 1 mm model, is already resolved
     relative to the coarse size, so sizing it would only add elements; the repair loop still catches
@@ -175,11 +184,12 @@ def _band_boundary_size(
     """The largest mesh element on a band boundary curve: the multiple times the narrowest band width.
 
     The narrowest band width is that of the curve's face, and the size is rounded down the ladder.  Unlike
-    a film wall, a band boundary curve is always sized.  Its bands are as narrow as the margins between
-    them (0.5 um for margins 0.5 and 1 um) and sit at the conductor edges, where Route A has no film wall
-    whose size would reach them; with no size of their own, SimplePad on Route A met elements up to 61 um
-    long there and stalled.  The sidecar states the narrowest band per banded face, not per curve, so
-    every boundary curve of a face takes the same size.
+    a film edge, a band boundary curve is always sized.  Its bands are as narrow as the margins between
+    them (0.5 um for margins 0.5 and 1 um) and sit at the conductor edges, where the film-edge size is set
+    by the film thickness, not by the bands; before Route A sheet outlines were sized, nothing reached the
+    bands of a sheet, and with no size of their own SimplePad on Route A met elements up to 61 um long there
+    and stalled.  The sidecar states the narrowest band per banded face, not per curve, so every boundary
+    curve of a face takes the same size.
     """
     wanted = recipe.band_mesh_size_multiple * feature.fact("narrowest_band_um")
     return ladder_size(wanted, max_size)
@@ -197,7 +207,8 @@ _SizeRule = Callable[[Feature, float, FeatureRecipe], float | None]
 # One hook per feature kind, so a later version changes the answer for one kind in one place.
 _KIND_RULES: Mapping[str, _SizeRule] = MappingProxyType(
     {
-        "film_sidewall": _film_sidewall_size,
+        "film_sidewall": _film_edge_size,
+        "sheet_outline": _film_edge_size,
         "band_boundary": _band_boundary_size,
         "arc": _no_size,
         "port_edge": _no_size,

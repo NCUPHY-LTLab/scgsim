@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from sgb_scenes import (
     GRID,
+    SHEET_FILM_UM,
     chip_prisms,
     footprint,  # noqa: E402,I001 -- grouped with the scene helpers above
     rect_um,
@@ -99,6 +100,7 @@ def test_sheets_get_the_same_advice():
             net_id="N",
             layer=p.layer,
             occurrence=p.occurrence,
+            film_thickness_um=SHEET_FILM_UM,
         )
         for p in (first, second)
     ]
