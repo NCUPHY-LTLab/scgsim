@@ -418,9 +418,11 @@ That is 4,497 frequencies: the band's five from 7.30 to 7.34 GHz are also
 the window's, and each is solved once. `Log(start, stop, points=...)`
 spaces its points evenly on a log scale, for a band of several decades, and
 `Points([...])` lists chosen frequencies; all three come from
-`scgsim.palace` and can be mixed in one list. Two frequencies closer than
-Palace can print apart, 10 Hz between 1 and 10 GHz, are refused, and an
-adaptive sweep needs at least three frequencies.
+`scgsim.palace` and can be mixed in one list. Two frequencies must be the
+same or more than 10 Hz apart, 1 Hz below 1 GHz and 100 Hz from 10 GHz up:
+Palace takes frequencies less than 1 Hz apart as one and prints each with
+nine significant digits, so closer ones are refused. An adaptive sweep
+needs at least three frequencies.
 
 The frequencies you list are what such a sweep costs. The adaptive sweep's
 model covers the lowest to the highest frequency whatever the ranges are,
@@ -450,13 +452,12 @@ sim.set_driven(
 sweep: without `adaptive_tolerance` every frequency is solved in full
 already, and `set_driven` refuses it. The full solves count toward
 `adaptive_max_samples`, or Palace's cap of 20, together with the two at the
-lowest and the highest frequency, so a cap below them is refused. Of two
-frequencies less than 1 Hz apart Palace keeps the lower and then cannot find
-a full solve it dropped, so a full-solve frequency less than 1 Hz above a
-frequency of another range is refused. One that falls on such a frequency
-is accepted, but Palace may compute that frequency lower by a rounding
-error and stop as it starts, naming the full-solve frequency: move it more
-than 10 Hz away then. On a hanger resonator with
+lowest and the highest frequency, so a cap below them is refused. A
+full-solve frequency that falls on a frequency of another range is that
+frequency once. Palace may then compute the other range's frequency lower
+by a rounding error, keep it instead and stop as it starts, naming the
+full-solve frequency: move it more than 10 Hz away then. On a hanger
+resonator with
 Q ≈ 11,000, one full solve at its resonance cut the time Palace spent
 building the model from 1,190 s to 921 s, and S21 agreed with the sweep
 without it to 1.4 × 10⁻⁵.

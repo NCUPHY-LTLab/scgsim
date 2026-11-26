@@ -5,13 +5,13 @@ built by SGB on Routes A and B.  ``mesh()`` runs its preparation, SGB build and 
 only Gmsh is stood in for (``palace_driven_support.mesh_without_gmsh``), so ``write_config()`` builds from the
 physical groups of the real SGB model.  No Palace runs here: the runs of this config on stock Palace 0.18.1
 are recorded on issue 187.  The launcher-to-launcher layout, two ports and both drawn senses, is in
-``test_palace_driven_launchers`` (PDK).
+``test_palace_driven_launchers`` (PDK); the frequencies Palace solves at, and how close two may be, in
+``test_palace_driven_sweep``.
 """
 
 from __future__ import annotations
 
 import json
-from itertools import pairwise
 
 import pytest
 from palace_driven_support import mesh_without_gmsh
@@ -31,7 +31,7 @@ from scgsim.palace import (
     Log,
     Points,
 )
-from scgsim.palace.config.driven_sweep import DrivenSweep, palace_frequencies_ghz
+from scgsim.palace.config.driven_sweep import palace_frequencies_ghz
 from scgsim.palace.config.numerical import NumericalControls
 from scgsim.palace.results.driven_tables import (
     requested_frequencies_ghz,
@@ -274,89 +274,6 @@ def test_the_written_config_reads_back_as_the_sweep_set(monkeypatch, tmp_path):
     assert len(requested_frequencies_ghz(config)) == sim.sweep.frequency_count == 4509
 
 
-# ---- The frequencies Palace solves at ----------------------------------------------------------------------
-
-
-def test_a_linear_range_is_evenly_spaced_with_both_ends():
-    """``NSample`` frequencies from ``MinFreq`` to ``MaxFreq``, as Palace's ``ConstructLinearRange`` spaces them."""
-    entry = Linear(2e9, 10e9, points=5).samples_entry()
-    assert palace_frequencies_ghz([entry]) == (2.0, 4.0, 6.0, 8.0, 10.0)
-
-
-def test_a_log_range_is_evenly_spaced_on_a_log_scale():
-    """1 to 10 GHz in 5 points is 10^(k/4) GHz: 1, 10^(1/4), sqrt(10), 10^(3/4) and 10 GHz."""
-    entry = Log(1e9, 1e10, points=5).samples_entry()
-    assert palace_frequencies_ghz([entry]) == pytest.approx(
-        (1.0, 1.77827941003892, 3.16227766016838, 5.62341325190349, 10.0), rel=1e-14
-    )
-    # A range of two decades in 3 points has the decade between.
-    entry = Log(1e8, 1e10, points=3).samples_entry()
-    assert palace_frequencies_ghz([entry]) == pytest.approx((0.1, 1.0, 10.0), rel=1e-15)
-
-
-def test_the_ranges_merge_sorted_and_each_shared_frequency_once():
-    """The band's 501 and the window's 4,001 less the five they share: 7.30, 7.31, 7.32, 7.33 and 7.34 GHz.
-
-    Palace sorts every range's frequencies together, whatever the order the ranges are given in.
-    """
-    band, window = BAND_AND_WINDOW
-    merged = palace_frequencies_ghz([window.samples_entry(), band.samples_entry()])
-    assert len(merged) == 501 + 4001 - 5
-    assert (merged[0], merged[-1]) == (4.0, 9.0)
-    assert all(high > low for low, high in pairwise(merged))
-    # 7.29 GHz is the band's last below the window, 10 MHz away; the window then steps 10 kHz.
-    around = [f for f in merged if 7.28 < f < 7.36]
-    assert len(around) == 4001 + 2
-    assert around[:3] == pytest.approx([7.29, 7.30, 7.30001], rel=1e-15)
-    assert around[-2:] == pytest.approx([7.34, 7.35], rel=1e-15)
-
-
-def test_full_solve_frequencies_merge_with_their_neighbours_as_palace_reads_them():
-    """A full solve on another range's frequency is that frequency once; one Palace would lose is refused.
-
-    Palace merges every frequency and, apart, the full-solve ones, then looks for each full solve among the
-    merged by its exact value.  Of two within 1 Hz it keeps the lower, so a full solve just below a frequency
-    of the band replaces it, and one 0.5 Hz above is lost and Palace stops (a stock Palace 0.18.1 dry run said
-    so: "PROM sample frequency 6.0000000005000000e+00 not found in sample frequencies!").  Within rounding it
-    depends on the build: unfused arithmetic puts the band's 4.44 GHz at 4.4399999999999995, and the stock
-    build, which fuses it, at 4.44 and accepts a full solve there, so that is left to Palace.  The lowest and
-    the highest frequency are solved in full anyway, so a full solve there adds none: the cap counts it only
-    inside the band.
-    """
-    band = Linear(4e9, 9e9, points=501)
-    grid = palace_frequencies_ghz([band.samples_entry()])
-    assert grid[45] == 4.45 and grid[44] == 4.4399999999999995
-
-    def sweep(full_solve_hz, **options):
-        ranges = [band, Points([full_solve_hz], full_solve=True)]
-        return DrivenSweep(ranges=ranges, adaptive_tolerance=1e-3, **options)
-
-    # On the band's 4.45 GHz, or less than 1 Hz below it: 501 frequencies, one of them a full solve.
-    assert sweep(4.45e9).frequency_count == 501
-    assert sweep(4.45e9 - 0.5).frequency_count == 501
-    with pytest.raises(ValueError, match="adaptive_max_samples must be at least 3"):
-        sweep(4.45e9, adaptive_max_samples=2)
-    # At the band's ends it is one of the two solves every adaptive sweep starts from.
-    assert sweep(4e9, adaptive_max_samples=2).frequency_count == 501
-    assert sweep(9e9, adaptive_max_samples=2).frequency_count == 501
-    assert sweep(4.44e9).frequency_count == 501
-    with pytest.raises(
-        ValueError,
-        match=r"4\.4500000005 GHz is 0\.5 Hz above 4\.45 GHz, another frequency of the sweep\. "
-        r"Palace solves the two as 4\.45 GHz, then looks for the full solve",
-    ):
-        sweep(4.45e9 + 0.5)
-
-
-def test_frequencies_within_1_hz_of_the_last_kept_are_one():
-    """Palace's ``std::unique`` keeps a frequency 1 Hz or more above the last one kept, not the one before.
-
-    0.6 Hz above 7.3 GHz goes; 1.2 Hz above stays, though it is only 0.6 Hz above the one that went.
-    """
-    entries = [{"Type": "Point", "Freq": [7.3 + 1.2e-9, 7.3, 2.0, 7.3 + 0.6e-9]}]
-    assert palace_frequencies_ghz(entries) == (2.0, 7.3, 7.3 + 1.2e-9)
-
-
 def test_the_fem_order_is_two_unless_another_is_given(monkeypatch, tmp_path):
     """Second-order elements unless another order is given (issue 187), in the config too; Eigenmode keeps first."""
     sim = meshed(monkeypatch, tmp_path, driven_plan(monkeypatch))
@@ -452,7 +369,8 @@ def test_a_plan_without_a_port_is_refused_by_every_call_that_prepares_it(
         pytest.param(
             lambda: {"frequencies": [Points([7.3e9, 7.3e9 + 5.0])]},
             ValueError,
-            r"7\.3 GHz and 7\.300000005 GHz are 5 Hz apart.* 10 Hz here, so their rows could not be read back",
+            r"7\.3 GHz and 7\.300000005 GHz are 5 Hz apart, and two frequencies must be the same or "
+            r"more than 10 Hz apart there",
             id="5 Hz apart",
         ),
         pytest.param(
@@ -464,7 +382,7 @@ def test_a_plan_without_a_port_is_refused_by_every_call_that_prepares_it(
         pytest.param(
             lambda: {"frequencies": [Points([12e9, 12e9 + 80.0])]},
             ValueError,
-            r"12 GHz and 12\.00000008 GHz are 80 Hz apart.* 100 Hz here",
+            r"12 GHz and 12\.00000008 GHz are 80 Hz apart.* more than 100 Hz apart there",
             id="80 Hz apart above 10 GHz",
         ),
         pytest.param(
@@ -484,12 +402,12 @@ def test_a_plan_without_a_port_is_refused_by_every_call_that_prepares_it(
         ),
         pytest.param(
             lambda: {
-                "frequencies": [Linear(7e9, 8e9, points=2), Points([7e9 + 0.5])],
+                "frequencies": [Linear(7e9, 8e9, points=2), Points([7e9])],
                 "adaptive_tolerance": 1e-3,
             },
             ValueError,
             "the ranges give 2",
-            id="adaptive at three frequencies, two within 1 Hz",
+            id="adaptive at three frequencies, two the same",
         ),
         pytest.param(
             lambda: {"frequencies": [Linear(0.0, 1e9, points=2)]},

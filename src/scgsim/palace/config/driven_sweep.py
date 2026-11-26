@@ -2,21 +2,20 @@
 
 ``Linear``, ``Log`` and ``Points`` are the ranges ``DrivenSim.set_driven`` takes, in Hz; each writes one entry of
 Palace's ``Solver.Driven.Samples``, in GHz (``samples_entry``).  Palace 0.18.1 merges every entry into one list of
-frequencies (``palace_frequencies_ghz``).  That one rule serves both ends of a run: ``DrivenSweep`` checks the
+frequencies (``palace_frequencies_ghz``).  That one rule serves both ends of a run: ``DrivenSweep`` counts the
 merged list when the sweep is set, and the read-back (``scgsim.palace.results.driven_tables``) checks that Palace's
-returned rows are that list.  Palace prints a frequency with 9 significant digits (``printed_unit_ghz``), so
-``DrivenSweep`` refuses two frequencies Palace solves apart but prints too close to be read back apart.  A range
-given ``full_solve=True`` writes Palace's ``AddToPROM``: an adaptive sweep solves its frequencies in full first.
+returned rows are that list.  So that every Palace build merges the same frequencies and prints each kept one
+apart, ``DrivenSweep`` takes each frequency only as one, to rounding, with the last one Palace keeps, or as farther
+from it than Palace's 1 Hz merge and 9 printed digits (``_merged``).  A range given ``full_solve=True`` writes
+Palace's ``AddToPROM``: an adaptive sweep solves its frequencies in full first.
 """
 
 from __future__ import annotations
 
 import math
-from bisect import bisect_right
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from itertools import pairwise
-from typing import Any
+from typing import Any, NamedTuple
 
 from scgsim.refusal import Declared, internal
 
@@ -31,7 +30,8 @@ _MODEL_ENDS = 2
 _PALACE_MAX_SAMPLES = 20
 # Palace builds round a range's frequencies differently, by a unit or two in the last place: a stock 0.18.1 build
 # fuses the multiply and the add of ``ConstructLinearRange``, so its 4.44 GHz of 4-9 GHz in 501 points is 4.44, not
-# 4.4399999999999995.  Within this many units SCGSim cannot tell which of two frequencies a build keeps.
+# 4.4399999999999995.  Two frequencies within this many units are one to SCGSim, and any build merges them; SCGSim
+# cannot tell which of them a build keeps.
 _ROUNDING_ULPS = 8
 
 PRINTED_DIGITS = 9
@@ -205,11 +205,10 @@ class DrivenSweep:
     Raises on build:
         TypeError: ``ranges`` is not a list of ``Linear``, ``Log`` and ``Points`` ranges, the tolerance is not a
             number, or ``adaptive_max_samples`` is not an integer.
-        ValueError: ``ranges`` is empty; two merged frequencies are closer than the 9 significant digits Palace
-            prints them with; ``adaptive_tolerance`` is not finite and above zero; ``adaptive_max_samples`` or
-            ``full_solve`` is given without ``adaptive_tolerance``; an adaptive sweep has no more frequencies than
-            the full solves its model starts from, or a cap below them; or a ``full_solve`` frequency is less than
-            1 Hz above another frequency, which Palace keeps in its place and then stops.
+        ValueError: ``ranges`` is empty; two frequencies are neither the same, to rounding, nor farther apart
+            than Palace's 1 Hz merge and its 9 printed digits; ``adaptive_tolerance`` is not finite and above
+            zero; ``adaptive_max_samples`` or ``full_solve`` is given without ``adaptive_tolerance``; or an
+            adaptive sweep has no more frequencies than the full solves its model starts from, or a cap below them.
     """
 
     ranges: Sequence[FrequencyRange]
@@ -222,8 +221,10 @@ class DrivenSweep:
         where = Declared("the frequency sweep", _WHERE_DRIVEN_SWEEP)
         object.__setattr__(self, "ranges", _checked_ranges(where, self.ranges))
         _check_adaptive_settings(where, self)
-        frequencies = palace_frequencies_ghz(self.samples())
-        _require_printed_apart(where, frequencies)
+        merge = _merged(self.samples())
+        if merge.unsure is not None:
+            raise ValueError(_unsure_refusal(where, merge.unsure))
+        frequencies = merge.frequencies
         if self.adaptive:
             _check_model_start(where, self, frequencies)
         object.__setattr__(self, "frequency_count", len(frequencies))
@@ -251,15 +252,67 @@ class DrivenSweep:
 def palace_frequencies_ghz(entries: Iterable[Mapping[str, Any]]) -> tuple[float, ...]:
     """The frequencies Palace 0.18.1 solves at for ``Solver.Driven.Samples`` entries as SCGSim writes them, in GHz.
 
-    As ``DrivenSolverData`` does (``palace/utils/configfile.cpp``): each entry's frequencies in Palace's own
-    arithmetic, every entry's together, sorted, with each frequency within 1 Hz of the last one kept left out.
-    Palace's ``std::unique`` compares a frequency with the last one kept, not with the one just before it.
+    As ``DrivenSolverData`` does (``palace/utils/configfile.cpp``): each entry's frequencies, every entry's
+    together, sorted, with each frequency within 1 Hz of the last one kept left out (``_merged``).
+    """
+    return _merged(entries).frequencies
+
+
+class _UnsurePair(NamedTuple):
+    """A frequency a Palace build may merge with the last one kept or not, and the spacing it needs, in GHz."""
+
+    kept: float
+    frequency: float
+    spacing: float
+
+
+class _Merge(NamedTuple):
+    """The frequencies Palace keeps, and the first one a build may keep or drop by its rounding, if any."""
+
+    frequencies: tuple[float, ...]
+    unsure: _UnsurePair | None
+
+
+def _merged(entries: Iterable[Mapping[str, Any]]) -> _Merge:
+    """Palace's merge of the entries' frequencies, walked once, with the first frequency its rounding decides.
+
+    Palace sorts every frequency and keeps each that is 1 Hz or more above the last one kept: its ``std::unique``
+    compares with the last kept, not with the one just before.  The same walk measures each frequency from that
+    last kept one.  Within ``_ROUNDING_ULPS`` units in the last place and below the 1 Hz it is the same frequency,
+    and every build drops it.  Above about 10 PHz one unit in the last place exceeds 1 Hz, so a pair within rounding
+    there is not the same: Palace keeps both, and they print alike.  Farther than both the 1 Hz and one printed unit
+    (``printed_unit_ghz``), with that rounding on top, every build keeps it and prints it apart from the last kept.
+    Between the two, a build may keep it or not: that is ``unsure``, which ``DrivenSweep`` refuses.  So for every
+    sweep it accepts, each frequency is one of the first two kinds, and every build keeps the frequencies this walk
+    keeps.  Below 1 GHz a printed unit is 1 Hz or less, so the merge distance sets the spacing there; from 1 GHz up
+    the printed unit does.  A frequency is computed to the last place as unfused arithmetic rounds it
+    (``_entry_frequencies``).
     """
     merged: list[float] = []
+    unsure: _UnsurePair | None = None
     for frequency in sorted(f for entry in entries for f in _entry_frequencies(entry)):
-        if not merged or frequency - merged[-1] >= _SAME_FREQUENCY_GHZ:
-            merged.append(frequency)
-    return tuple(merged)
+        if merged:
+            distance = frequency - merged[-1]
+            rounding = _ROUNDING_ULPS * math.ulp(frequency)
+            spacing = max(_SAME_FREQUENCY_GHZ, printed_unit_ghz(frequency)) + rounding
+            same = distance <= rounding and distance < _SAME_FREQUENCY_GHZ
+            if unsure is None and not same and distance <= spacing:
+                unsure = _UnsurePair(merged[-1], frequency, spacing)
+            if distance < _SAME_FREQUENCY_GHZ:
+                continue
+        merged.append(frequency)
+    return _Merge(tuple(merged), unsure)
+
+
+def _unsure_refusal(where: Declared, pair: _UnsurePair) -> str:
+    """The refusal of a frequency a Palace build may merge with the last one kept or not."""
+    distance_hz, spacing_hz = (pair.frequency - pair.kept) * 1e9, pair.spacing * 1e9
+    return where.refusal(
+        f"{pair.kept:.12g} GHz and {pair.frequency:.12g} GHz are {distance_hz:.3g} Hz apart, and two frequencies "
+        f"must be the same or more than {spacing_hz:.6g} Hz apart there: Palace takes frequencies less than 1 Hz "
+        f"apart as one, and prints each with {PRINTED_DIGITS} significant digits, so closer ones could not be read "
+        f"back as Palace solved them. Give them as one frequency, or more than {spacing_hz:.6g} Hz apart"
+    )
 
 
 def printed_unit_ghz(frequency_ghz: float) -> float:
@@ -363,12 +416,12 @@ def _check_model_start(
     holds no adaptive sampling; on a cap below them it stops with an error (``SweepAdaptive``, both in
     ``palace/drivers/drivensolver.cpp``).
     """
-    full_solves = _full_solves_ghz(where, sweep, frequencies_ghz)
-    starting = _MODEL_ENDS + len(full_solves)
+    full_solves = _full_solve_count(sweep, frequencies_ghz)
+    starting = _MODEL_ENDS + full_solves
     solves = "the lowest and the highest frequency"
     if full_solves:
-        noun = "frequency" if len(full_solves) == 1 else "frequencies"
-        solves += f" and {len(full_solves)} full_solve {noun}"
+        noun = "frequency" if full_solves == 1 else "frequencies"
+        solves += f" and {full_solves} full_solve {noun}"
     if len(frequencies_ghz) <= starting:
         also = " and full_solve" if full_solves else ""
         raise ValueError(
@@ -398,38 +451,20 @@ def _check_model_start(
         )
 
 
-def _full_solves_ghz(
-    where: Declared, sweep: DrivenSweep, frequencies_ghz: Sequence[float]
-) -> tuple[float, ...]:
-    """The ``full_solve`` frequencies Palace adds to the two its model starts from, in GHz.
+def _full_solve_count(sweep: DrivenSweep, frequencies_ghz: Sequence[float]) -> int:
+    """How many solves the ``full_solve`` frequencies add to the two at the ends the model starts from.
 
     As ``DrivenSolverData`` reads ``AddToPROM``: every marked range's frequencies, merged as all of them are
     (``palace_frequencies_ghz``), less the lowest and the highest of the sweep.  Palace then looks for each one
-    among the frequencies it keeps, by its exact value, and stops when one is not there.  So a ``full_solve``
-    frequency less than 1 Hz above another, which Palace keeps in its place, is refused.  One within rounding of
-    another is left to Palace's own check: which of the two a build keeps depends on how it rounds.
+    among the frequencies it keeps, by its exact value, and stops when one is not there.  In an accepted sweep
+    (``_merged``) that can only be a full solve within rounding of another frequency, which a build keeps or drops by its own
+    rounding, so Palace's own check decides it.
     """
     marked = palace_frequencies_ghz(
         item.samples_entry() for item in sweep.ranges if item.full_solve
     )
     ends = (frequencies_ghz[0], frequencies_ghz[-1])
-    kept = set(frequencies_ghz)
-    full_solves = tuple(frequency for frequency in marked if frequency not in ends)
-    for frequency in full_solves:
-        if frequency in kept:
-            continue
-        below = frequencies_ghz[bisect_right(frequencies_ghz, frequency) - 1]
-        if frequency - below > _ROUNDING_ULPS * math.ulp(frequency):
-            unit = printed_unit_ghz(frequency) * 1e9
-            raise ValueError(
-                where.refusal(
-                    f"the full_solve frequency {frequency:.15g} GHz is {(frequency - below) * 1e9:.2g} Hz "
-                    f"above {below:.15g} GHz, another frequency of the sweep. Palace solves the two as "
-                    f"{below:.15g} GHz, then looks for the full solve at {frequency:.15g} GHz and stops: move "
-                    f"the full_solve frequency more than {unit:.3g} Hz away from {below:.15g} GHz"
-                )
-            )
-    return full_solves
+    return sum(1 for frequency in marked if frequency not in ends)
 
 
 def _check_full_solve(where: Declared, value: object) -> None:
@@ -441,25 +476,6 @@ def _check_full_solve(where: Declared, value: object) -> None:
 def _with_full_solve(entry: dict[str, Any], full_solve: bool) -> dict[str, Any]:
     """``entry`` with Palace's ``AddToPROM`` when its frequencies are full solves; Palace's default is false."""
     return {**entry, "AddToPROM": True} if full_solve else entry
-
-
-def _require_printed_apart(where: Declared, frequencies_ghz: Sequence[float]) -> None:
-    """Refuse two neighbouring frequencies no more than one printed unit apart: their rows could not be told apart.
-
-    More than one unit in the last printed digit apart, the two print as different numbers however Palace
-    rounds them, so each returned row is read back as its own frequency.
-    """
-    for low, high in pairwise(frequencies_ghz):
-        unit = printed_unit_ghz(high)
-        if high - low <= unit:
-            raise ValueError(
-                where.refusal(
-                    f"{low:.12g} GHz and {high:.12g} GHz are {(high - low) * 1e9:.3g} Hz apart, and Palace "
-                    f"prints a frequency with {PRINTED_DIGITS} significant digits, {unit * 1e9:.3g} Hz here, "
-                    f"so their rows could not be read back apart: keep the frequencies more than "
-                    f"{unit * 1e9:.3g} Hz apart there"
-                )
-            )
 
 
 def _checked_band(where: Declared, band: Linear | Log) -> tuple[float, float]:

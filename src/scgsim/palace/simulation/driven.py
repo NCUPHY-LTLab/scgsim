@@ -87,9 +87,11 @@ class DrivenSim(PalaceSimulation):
         """Set the frequency sweep: ``frequencies``, a list of ``Linear``, ``Log`` and ``Points`` ranges in Hz.
 
         ``Linear`` spaces its points evenly, ``Log`` evenly on a log scale, and ``Points`` lists chosen
-        frequencies.  Palace solves at all of their frequencies together, in order, each frequency once (two
-        within 1 Hz are one): ``[Linear(4e9, 9e9, points=501), Linear(7.30e9, 7.34e9, points=4001)]`` is 4,497
-        frequencies, a band 10 MHz apart and a window 10 kHz apart.
+        frequencies.  Palace solves at all of their frequencies together, in order, each frequency once (one two
+        ranges share is one): ``[Linear(4e9, 9e9, points=501), Linear(7.30e9, 7.34e9, points=4001)]`` is 4,497
+        frequencies, a band 10 MHz apart and a window 10 kHz apart.  Two frequencies must be the same or more than
+        10 Hz apart (1 Hz below 1 GHz, 100 Hz from 10 GHz up), so that Palace, which takes frequencies less than
+        1 Hz apart as one, solves them as SCGSim reads them back.
 
         Without ``adaptive_tolerance`` Palace solves the field at every frequency, once per port.  With it,
         Palace's adaptive fast sweep solves a few frequencies per port and evaluates a reduced model built from
@@ -103,12 +105,10 @@ class DrivenSim(PalaceSimulation):
         Raises:
             TypeError: ``frequencies`` is not a list of ranges, ``adaptive_tolerance`` is not a number, or
                 ``adaptive_max_samples`` is not an integer.
-            ValueError: ``frequencies`` is empty; two of its frequencies are closer than the 9 significant digits
-                Palace prints them with, so they could not be read back apart; ``adaptive_tolerance`` is not
-                above 0; ``adaptive_max_samples`` or ``full_solve`` is given without ``adaptive_tolerance``; an
-                adaptive sweep has no more frequencies than the full solves its model starts from, or a cap below
-                them; or a ``full_solve`` frequency is less than 1 Hz above another frequency, which Palace keeps
-                in its place and then stops.
+            ValueError: ``frequencies`` is empty; two of its frequencies are neither the same nor that far
+                apart; ``adaptive_tolerance`` is not above 0; ``adaptive_max_samples`` or ``full_solve`` is given
+                without ``adaptive_tolerance``; or an adaptive sweep has no more frequencies than the full solves
+                its model starts from, or a cap below them.
         """
         self.sweep = DrivenSweep(
             ranges=frequencies,
