@@ -51,8 +51,8 @@ you prepared or ran:
   gap could be a single element across. The results came out far off, with no
   error: on a CPW test layout, sizing the edges moved the first Eigenmode
   frequency from 2.04 to 4.12 GHz and the capacitance from 1.19 to 0.29 pF.
-  Each film's edge now gets the same elements as on Route B, at most 2.5 µm
-  for a 100 nm film, so a Route A mesh has about as many unknowns as Route B's.
+  Each film's edge is now meshed as on Route B, so a Route A mesh has about
+  as many unknowns as Route B's.
   Route B and AEDT are not affected.
 
 ## From 3.0.0rc4 {#from-3-0-0rc4}
