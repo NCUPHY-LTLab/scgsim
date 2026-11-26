@@ -78,11 +78,11 @@ scgsim-id: "docs/contribute/internals/api-owners"
 
 ## Palace 名稱 {#palace-package-symbols}
 
-`scgsim.palace` 匯出 36 個名稱，以下依定義它們的模組分組：
+`scgsim.palace` 匯出 37 個名稱，以下依定義它們的模組分組：
 
 | 定義模組 | 職責 | 名稱 |
 |---|---|---|
-| `scgsim.palace.simulation` | 共用同一個核心的兩個模擬類別 | `ElectrostaticSim`、`EigenmodeSim` |
+| `scgsim.palace.simulation` | 共用同一個核心的三個模擬類別 | `ElectrostaticSim`、`EigenmodeSim`、`DrivenSim` |
 | `scgsim.palace.simulation.drc` | 兩階段的版圖檢查，`mesh()` 也會執行 | `SimulationDrcError`、`SimulationDrcReport`、`StageResult` |
 | `scgsim.palace.config.convergence` | 收斂宣告的條件 | `Capacitance`、`Criterion`、`CriterionGroup`、`ErrorIndicator`、`ModeFrequency`、`SurfaceEpr` |
 | `scgsim.contracts.palace_convergence` | 宣告的計畫、檢查與判定 | `ConvergenceCheck`、`ConvergencePlan`、`ConvergenceVerdict` |

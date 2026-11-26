@@ -30,7 +30,12 @@ from numbers import Real
 from typing import Any, ClassVar, Literal
 
 from scgsim.contracts.palace_convergence import Test
-from scgsim.contracts.palace_run_folder import EIGENMODE, ELECTROSTATIC
+from scgsim.contracts.palace_run_folder import (
+    DRIVEN,
+    EIGENMODE,
+    ELECTROSTATIC,
+    ProblemName,
+)
 from scgsim.refusal import Declared, found_text
 
 from .index import SURFACE_INTERFACES
@@ -42,9 +47,6 @@ _WHERE_NUMERICAL_OR_CONVERGENCE = "the calls to set_numerical and set_convergenc
 # The tests a quantity offers: a change for the solved quantities, a value for Palace's indicator.
 _CHANGE_TESTS: tuple[Test, ...] = ("percent_change", "absolute_change")
 _VALUE_TESTS: tuple[Test, ...] = ("at_most",)
-
-Problem = Literal["Eigenmode", "Electrostatic"]
-
 
 # ---- Quantities --------------------------------------------------------------------------------------------
 
@@ -519,10 +521,11 @@ _WITHOUT_TOLERANCE = {
     ),
 }
 
-# The quantities each problem takes: the tables Palace writes for it.
+# The quantities each problem takes: the tables Palace writes for it.  Driven's S-matrix quantity is not written yet.
 _QUANTITIES: dict[str, tuple[type, ...]] = {
     ELECTROSTATIC.name: (Capacitance, SurfaceEpr, ErrorIndicator),
     EIGENMODE.name: (ModeFrequency, SurfaceEpr, ErrorIndicator),
+    DRIVEN.name: (),
 }
 
 
@@ -530,7 +533,7 @@ _QUANTITIES: dict[str, tuple[type, ...]] = {
 class ConvergenceDeclaration:
     """What ``set_convergence`` stores: the problem, the criteria in the order given, and the passes in a row."""
 
-    problem: Problem
+    problem: ProblemName
     criteria: tuple[Criterion, ...]
     minimum_converged_passes: int
 
@@ -540,15 +543,25 @@ class ConvergenceDeclaration:
         criteria: Sequence[Criterion | CriterionGroup],
         *,
         minimum_converged_passes: Any,
-        problem: Problem,
+        problem: ProblemName,
         simulation: str,
     ) -> ConvergenceDeclaration:
         """Check ``set_convergence``'s arguments for a ``problem`` simulation and hold them.
 
         Raises:
-            ValueError: no criterion is given, an argument is not a criterion, a quantity does not fit the
-                problem, or ``minimum_converged_passes`` is not an integer of at least 1.
+            ValueError: the problem takes no convergence quantity, no criterion is given, an argument is not
+                a criterion, a quantity does not fit the problem, or ``minimum_converged_passes`` is not an
+                integer of at least 1.
         """
+        if not _QUANTITIES[problem]:
+            raise ValueError(
+                Declared(
+                    f"{simulation}.set_convergence()", _WHERE_SET_CONVERGENCE
+                ).refusal(
+                    f"{simulation} takes no convergence quantity yet: leave set_convergence out; the run "
+                    "then solves on the mesh mesh() writes, with the refinement set_numerical sets"
+                )
+            )
         flat = tuple(
             checked_criterion(item, _WHERE_SET_CONVERGENCE)
             for argument in criteria
@@ -635,7 +648,7 @@ class ConvergenceDeclaration:
             )
 
 
-def _check_fit(criterion: Criterion, problem: Problem, simulation: str) -> None:
+def _check_fit(criterion: Criterion, problem: ProblemName, simulation: str) -> None:
     """Refuse a quantity the problem's tables do not hold."""
     taken = _QUANTITIES[problem]
     names = ", ".join(kind.__name__ for kind in taken)

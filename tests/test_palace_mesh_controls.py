@@ -8,7 +8,7 @@ import pytest
 from palace_sgb_support import FILM
 from test_simulation_drc import LAYER_STACK, MATERIALS, two_pads
 
-from scgsim.geometry import GeometryPlan
+from scgsim.geometry import GeometryPlan, LumpedPort
 from scgsim.meshing import (
     Budgets,
     FeatureRecipe,
@@ -16,7 +16,7 @@ from scgsim.meshing import (
     MesherOptions,
     UniformBoundaryRecipe,
 )
-from scgsim.palace import EigenmodeSim, ElectrostaticSim
+from scgsim.palace import DrivenSim, EigenmodeSim, ElectrostaticSim
 from scgsim.palace.mesh.controls import DEFAULT_QUALITY_THRESHOLD, MeshControls
 from scgsim.palace.simulation import core
 from scgsim.palace.simulation.lifecycle import Stage
@@ -29,24 +29,31 @@ STACK = {
 }
 
 
-def two_pad_snapshot(monkeypatch, surface_epr_specs=None):
+def two_pad_snapshot(monkeypatch, surface_epr_specs=None, *, simulation=None):
     """The prepared plan of two pads in the stand-in PDK's vacuum, as a user binds it with ``set_plan``.
 
-    ``surface_epr_specs``, when given, are the plan's.
+    ``surface_epr_specs``, when given, are the plan's.  A ``DrivenSim`` has a port to excite: for one, the pads
+    are joined by their port sheet, declared as a 50 ohm port with the electrode its reference.
     """
+    driven = simulation is DrivenSim
     plan = GeometryPlan(
-        two_pads(monkeypatch, gap_um=10.0),
+        two_pads(monkeypatch, gap_um=10.0, port=driven),
         root_id="chip",
         layer_stack=LAYER_STACK,
         material_records=MATERIALS,
         coupon_padding_um=0.0,
     )
+    if driven:
+        plan.set_nets({"pad": ("chip/pad",), "electrode": ("chip/electrode",)})
+        plan.set_lumped_elements(
+            [LumpedPort("chip/P1", reference_net="electrode", impedance_ohm=50.0)]
+        )
     if surface_epr_specs is not None:
         plan.set_surface_epr(surface_epr_specs)
     return plan.prepare()
 
 
-@pytest.mark.parametrize("sim_type", [ElectrostaticSim, EigenmodeSim])
+@pytest.mark.parametrize("sim_type", [ElectrostaticSim, EigenmodeSim, DrivenSim])
 def test_defaults_are_the_module_defaults_and_the_provisional_threshold(sim_type):
     """FeatureRecipe, MesherOptions, Budgets and 0.01 minSICN for both simulations."""
     controls = sim_type().mesh_controls
@@ -56,7 +63,7 @@ def test_defaults_are_the_module_defaults_and_the_provisional_threshold(sim_type
     assert DEFAULT_QUALITY_THRESHOLD == 0.01
 
 
-@pytest.mark.parametrize("sim_type", [ElectrostaticSim, EigenmodeSim])
+@pytest.mark.parametrize("sim_type", [ElectrostaticSim, EigenmodeSim, DrivenSim])
 def test_set_mesh_retains_omitted_controls_and_invalidates_only_on_change(sim_type):
     """Each setter call changes the named controls only; an equal setting keeps the mesh."""
     sim = sim_type()
@@ -79,7 +86,7 @@ def test_set_mesh_retains_omitted_controls_and_invalidates_only_on_change(sim_ty
     assert sim.mesh_controls.recipe == GlobalSizeRecipe()
 
 
-@pytest.mark.parametrize("sim_type", [ElectrostaticSim, EigenmodeSim])
+@pytest.mark.parametrize("sim_type", [ElectrostaticSim, EigenmodeSim, DrivenSim])
 @pytest.mark.parametrize(
     "removed",
     (
@@ -115,7 +122,7 @@ class PlainRecipe:
         return {}
 
 
-@pytest.mark.parametrize("sim_type", [ElectrostaticSim, EigenmodeSim])
+@pytest.mark.parametrize("sim_type", [ElectrostaticSim, EigenmodeSim, DrivenSim])
 def test_a_plain_class_recipe_passes_set_mesh_and_the_input_summary(sim_type):
     """The manifest records a non-dataclass recipe by name and version with no parameters, as the report does."""
     sim = sim_type()
@@ -169,7 +176,7 @@ def stand_in_mesh_stages(monkeypatch, module, tmp_path):
     return calls
 
 
-@pytest.mark.parametrize("sim_type", [ElectrostaticSim, EigenmodeSim])
+@pytest.mark.parametrize("sim_type", [ElectrostaticSim, EigenmodeSim, DrivenSim])
 def test_mesh_passes_the_controls_and_the_surface_epr_specs_to_the_builder(
     sim_type, monkeypatch, tmp_path
 ):
@@ -188,7 +195,11 @@ def test_mesh_passes_the_controls_and_the_surface_epr_specs_to_the_builder(
     monkeypatch.setattr(layout_ports, "prepare_mesh_input", lambda **kwargs: prepared)
     sim = sim_type()
     sim.set_plan(
-        two_pad_snapshot(monkeypatch, {"MA": {**FILM, "inset_margins_um": [0.5]}})
+        two_pad_snapshot(
+            monkeypatch,
+            {"MA": {**FILM, "inset_margins_um": [0.5]}},
+            simulation=sim_type,
+        )
     )
     sim.set_output_dir(tmp_path / "run")
     sim.set_mesh(quality_threshold=0.02, budgets=Budgets(max_rounds=1))

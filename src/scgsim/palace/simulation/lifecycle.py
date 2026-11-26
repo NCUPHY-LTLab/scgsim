@@ -53,6 +53,7 @@ Call = Literal[
     "add_terminal",
     "add_ground",
     "set_electrostatic",
+    "set_driven",
     "set_numerical",
     "set_convergence",
     "input_summary",
@@ -95,6 +96,7 @@ CALLS: dict[Call, CallRule] = {
     "add_terminal": _PROBLEM_CHANGE,
     "add_ground": _PROBLEM_CHANGE,
     "set_electrostatic": _PROBLEM_CHANGE,
+    "set_driven": _PROBLEM_CHANGE,
     "set_numerical": _PROBLEM_CHANGE,
     "set_convergence": _PROBLEM_CHANGE,
     "input_summary": CallRule(

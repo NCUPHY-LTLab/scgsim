@@ -25,7 +25,7 @@ import scgsim.palace.mesh.build as build_module
 import scgsim.palace.simulation.core as core_module
 from scgsim.geometry import GeometryPlan, LumpedElement
 from scgsim.geometry.source.summary import summarize_geometry_input
-from scgsim.palace import EigenmodeSim, ElectrostaticSim
+from scgsim.palace import DrivenSim, EigenmodeSim, ElectrostaticSim
 
 # The two pads on their substrate span z from -5 um to the metal's top at 0.2 um; this padding, as
 # ``GeometryPlan.set_vacuum_region`` takes it, adds nothing in the plane and 1000 um below and above.
@@ -173,7 +173,7 @@ def test_the_electrostatic_summary_shows_the_vacuum_mesh_builds_and_its_settings
     assert {key: summary[key] for key in built_from} == built_from
 
 
-@pytest.mark.parametrize("sim_type", [EigenmodeSim, ElectrostaticSim])
+@pytest.mark.parametrize("sim_type", [EigenmodeSim, ElectrostaticSim, DrivenSim])
 def test_the_summary_needs_a_bound_plan(sim_type):
     """Without ``set_plan`` there is no input to summarise, and the refusal names the call to make."""
     with pytest.raises(ValueError, match=r"call set_plan\(\) before input_summary\(\)"):

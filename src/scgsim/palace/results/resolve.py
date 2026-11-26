@@ -23,7 +23,6 @@ from scgsim.contracts.palace_run_folder import (
     RETURNED_RECEIPT,
     RUN_METADATA,
     output_table,
-    palace_problem,
     read_json,
 )
 from scgsim.palace.results.artifacts import (
@@ -65,6 +64,7 @@ from scgsim.palace.results.resolved_records import (
 from scgsim.palace.results.tables import (
     count_index_entries,
     output_families,
+    read_problem,
     read_result_table,
 )
 from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
@@ -135,9 +135,8 @@ def _checked_run(root: Path, expected_handoff_id: str) -> ResolvedRunData:
                 f"route {route!r} of {HANDOFF_METADATA}", RETURNED_RUN_FOLDER
             ).refusal("must be 'A' or 'B'")
         )
-    palace_problem(
-        problem
-    )  # refuses a problem SCGSim does not write, naming those it does
+    # Refuses a problem SCGSim does not write, naming those it does, and a Driven run, which it does not read.
+    read_problem(problem, str(root))
     _check_identity(
         root,
         records,

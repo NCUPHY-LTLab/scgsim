@@ -199,10 +199,11 @@
         {
           "title": "Simulations",
           "title_zh": "模擬",
-          "gloss": "Set up, check and prepare a capacitance or eigenmode run.",
-          "gloss_zh": "設定、檢查並準備電容或本徵模態計算。",
+          "gloss": "Set up, check and prepare a capacitance, eigenmode or S-parameter run.",
+          "gloss_zh": "設定、檢查並準備電容、本徵模態或 S 參數計算。",
           "page": "specs/palace-electrostatic-sgb.qmd",
           "names": [
+            "DrivenSim",
             "EigenmodeSim",
             "ElectrostaticSim",
             "SimulationDrcError",

@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from scgsim.palace import EigenmodeSim, ElectrostaticSim
+from scgsim.palace import DrivenSim, EigenmodeSim, ElectrostaticSim
 from scgsim.palace.config.config import (
     build_eigenmode_config,
     build_electrostatic_config,
@@ -175,7 +175,7 @@ def test_direct_mumps_solver_controls_remain_explicit() -> None:
     }
 
 
-@pytest.mark.parametrize("sim_type", (ElectrostaticSim, EigenmodeSim))
+@pytest.mark.parametrize("sim_type", (ElectrostaticSim, EigenmodeSim, DrivenSim))
 def test_new_optional_controls_retain_choices_across_later_setters(
     sim_type: Any,
 ) -> None:
@@ -199,7 +199,7 @@ def test_new_optional_controls_retain_choices_across_later_setters(
         {"ksp_type": "unknown"},
     ),
 )
-@pytest.mark.parametrize("sim_type", (ElectrostaticSim, EigenmodeSim))
+@pytest.mark.parametrize("sim_type", (ElectrostaticSim, EigenmodeSim, DrivenSim))
 def test_invalid_new_controls_preserve_numerical_state(
     sim_type: Any, invalid: dict[str, Any]
 ) -> None:

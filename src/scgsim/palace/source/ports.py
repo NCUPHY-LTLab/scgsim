@@ -31,11 +31,13 @@ _WHERE_LAYOUT = "the layout"
 
 @dataclass(frozen=True)
 class RequestedPort:
-    """One caller-selected authored port with its target layer and its circuit, as ``LayoutPortBinding.circuit``."""
+    """One caller-selected authored port with its target layer, circuit and excitation, as ``LayoutPortBinding`` holds them."""
 
     name: str
     layer: str
     circuit: Mapping[str, float]
+    excited: bool = False
+    reverses_direction: bool = False
 
 
 @dataclass(frozen=True)
@@ -44,6 +46,10 @@ class LayoutPortBinding:
 
     ``circuit`` holds the port's Palace ``LumpedPort`` circuit keys with their SI values, such as
     ``{"L": 1e-8}`` (henry) for an Eigenmode port; the port's ``LumpedPort`` row carries them unchanged.
+    ``direction`` is the authored sheet's direction, from the conductor at its start to the one it points to.
+    An ``excited`` port is a Driven excitation of its own, numbered as the port is.  ``reverses_direction``
+    says that the row's ``Direction`` is ``direction`` reversed: a Driven port's ``Direction`` points from its
+    signal conductor to its reference, and this sheet was drawn from the reference to the signal.
     """
 
     index: int
@@ -52,6 +58,8 @@ class LayoutPortBinding:
     source_layer: str
     direction: tuple[float, float, float]
     circuit: Mapping[str, float]
+    excited: bool = False
+    reverses_direction: bool = False
 
 
 def with_rectangular_ports(build_input: GeometryBuildInput) -> GeometryBuildInput:

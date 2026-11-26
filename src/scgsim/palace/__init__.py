@@ -2,12 +2,13 @@
 
 One folder per stage, in the order the work flows:
 
-- ``simulation``: the stage a user drives, the two simulation classes and their lifecycle.
+- ``simulation``: the stage a user drives, the three simulation classes and their lifecycle.
 - ``source``: from a bound plan to the input of the geometry build.
 - ``mesh``: from that input to ``palace.msh`` with its physical groups and manifest.
 - ``config``: from the mesh's groups and the problem's settings to ``config.json`` and the index map.
 - ``run``: the run folder handed to Palace, and what Palace returns.
-- ``results``: from a returned run folder to the checked records of the run.
+- ``results``: from a returned run folder to the checked records of the run (Electrostatic and Eigenmode; a
+  Driven run is refused by name until SCGSim reads it).
 - ``reports``: the result a user holds (``resolve_palace_result``) and the notebook views of it.
 
 A public entry point refuses state it cannot run from (no bound plan, a stage called out of order, a name that
@@ -52,6 +53,7 @@ from .results.resolved_records import (
     ParsedTable,
 )
 from .simulation.drc import SimulationDrcError, SimulationDrcReport, StageResult
+from .simulation.driven import DrivenSim
 from .simulation.eigenmode import EigenmodeSim
 from .simulation.electrostatic import ElectrostaticSim
 
@@ -62,6 +64,7 @@ __all__ = [
     "ConvergenceVerdict",
     "Criterion",
     "CriterionGroup",
+    "DrivenSim",
     "EigenmodeSim",
     "ElectrostaticSim",
     "ErrorIndicator",

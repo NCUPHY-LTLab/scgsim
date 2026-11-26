@@ -19,14 +19,14 @@ from test_palace_simulation_lifecycle import handed_off
 from test_simulation_drc import LAYER_STACK
 
 from scgsim.geometry import ApproximationProfile
-from scgsim.palace import EigenmodeSim, ElectrostaticSim
+from scgsim.palace import DrivenSim, EigenmodeSim, ElectrostaticSim
 from scgsim.palace.config.index import SurfaceEprEntry
 from scgsim.palace.simulation import core
 from scgsim.palace.simulation.lifecycle import Stage
 from scgsim.palace.source import layout_ports
 from scgsim.palace.source.workflow import route_profile
 
-SIMS = [EigenmodeSim, ElectrostaticSim]
+SIMS = [EigenmodeSim, ElectrostaticSim, DrivenSim]
 THIN_FILM = ApproximationProfile("thin_film", "v1", {})
 SUBSTRATE_FACE = ApproximationProfile(
     "substrate_face",
@@ -68,7 +68,7 @@ def test_a_simulation_that_never_calls_set_route_is_route_b(
     assert profile_used(sim) == ROUTE_B
     calls = stand_in_mesh_stages(monkeypatch, core, tmp_path)
     monkeypatch.setattr(layout_ports, "prepare_mesh_input", _prepared_stand_in)
-    sim.set_plan(two_pad_snapshot(monkeypatch))
+    sim.set_plan(two_pad_snapshot(monkeypatch, simulation=sim_type))
     sim.set_output_dir(tmp_path)
     sim.mesh()
     (_, geometry), *_ = calls
@@ -124,7 +124,7 @@ def test_route_a_without_a_profile_prepares_the_same_input_as_the_thin_film_prof
     sim_type, monkeypatch
 ):
     """``set_route("A")`` and ``set_route("A", approximation_profile=thin_film)`` prepare one geometry input."""
-    snapshot = two_pad_snapshot(monkeypatch)
+    snapshot = two_pad_snapshot(monkeypatch, simulation=sim_type)
     prepared = []
     for profile in (None, THIN_FILM):
         sim = sim_type()
@@ -154,7 +154,7 @@ def test_input_summary_names_the_profile_the_preparation_uses(
 ):
     """The route and the profile's name, the route's default included; a second call replaces both."""
     sim = sim_type()
-    sim.set_plan(two_pad_snapshot(monkeypatch))
+    sim.set_plan(two_pad_snapshot(monkeypatch, simulation=sim_type))
     for route, given in calls:
         sim.set_route(route, approximation_profile=given)
     backend = sim.input_summary().data["backend"]
@@ -237,7 +237,7 @@ def test_a_plan_without_surface_epr_meshes_with_no_bands(
     calls = stand_in_mesh_stages(monkeypatch, core, tmp_path)
     monkeypatch.setattr(layout_ports, "prepare_mesh_input", _prepared_stand_in)
     sim = sim_type()
-    sim.set_plan(two_pad_snapshot(monkeypatch))
+    sim.set_plan(two_pad_snapshot(monkeypatch, simulation=sim_type))
     sim.set_output_dir(tmp_path)
     sim.mesh()
     (_, geometry), *_ = calls

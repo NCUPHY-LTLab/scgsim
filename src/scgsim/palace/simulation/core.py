@@ -1,6 +1,6 @@
 """What every Palace simulation shares: the plan it is bound to, the geometry settings, ``mesh()`` and the handoff.
 
-``PalaceSimulation`` is the base of ``EigenmodeSim`` and ``ElectrostaticSim``.  It owns the calls that do
+``PalaceSimulation`` is the base of ``EigenmodeSim``, ``ElectrostaticSim`` and ``DrivenSim``.  It owns the calls that do
 not depend on the problem: binding a plan, the output folder, the route, the mesh controls, the
 convergence declaration, ``input_summary()``, ``mesh()``, ``simulation_drc``, ``mesh_summary()`` and
 ``prepare_handoff()``.  The vacuum region, the Surface-EPR specs and the lumped elements are the plan's: the
@@ -25,6 +25,7 @@ from scgsim.contracts.palace_run_folder import (
     CONFIG,
     CONVERGENCE_PLAN,
     INDEX_MAP_SCHEMA_VERSION,
+    ProblemName,
 )
 from scgsim.geometry.models.physical import ApproximationProfile
 from scgsim.geometry.source.plan import (
@@ -41,7 +42,12 @@ from ..config.convergence import ConvergenceDeclaration, Criterion, CriterionGro
 from ..config.convergence_plan import PlanContext, convergence_plan
 from ..config.files import MetadataFile, persist_problem_files
 from ..config.index import IndexEntry
-from ..config.numerical import PROBLEM_DEFAULT, NumericalControls, ProblemDefaults
+from ..config.numerical import (
+    PROBLEM_DEFAULT,
+    NumericalControls,
+    ProblemDefault,
+    ProblemDefaults,
+)
 from ..mesh.build import (
     MeshBuildResult,
     RouteGeometry,
@@ -78,7 +84,7 @@ _Output = TypeVar("_Output")
 
 @dataclass
 class PalaceSimulation(ABC):
-    """The shared lifecycle of a Palace simulation; use ``EigenmodeSim`` or ``ElectrostaticSim``.
+    """The shared lifecycle of a Palace simulation; use ``EigenmodeSim``, ``ElectrostaticSim`` or ``DrivenSim``.
 
     The simulation prepares geometry, mesh, config and manual handoff files; it never runs Palace.
     """
@@ -109,7 +115,7 @@ class PalaceSimulation(ABC):
 
     # ---- What a problem adds ------------------------------------------------------------------------
 
-    problem: ClassVar[Literal["Eigenmode", "Electrostatic"]]
+    problem: ClassVar[ProblemName]
     """The Palace ``Problem.Type`` this class writes; the mesh summary and the handoff record it."""
 
     numerical_defaults: ClassVar[ProblemDefaults]
@@ -411,9 +417,10 @@ class PalaceSimulation(ABC):
         The geometry stage runs the preparation and SGB geometry build of ``mesh()`` on the route the
         simulation will use: ``route`` and ``approximation_profile`` are the arguments of ``set_route``, with
         its defaults and refusals, and a refusal names this call.  Without them the check is Route B.
-        ``EigenmodeSim`` cuts the sheet of every lumped element of the plan as its port and leaves out an
-        authored sheet that carries none; ``ElectrostaticSim`` adds no terminals, which are not needed before
-        meshing, and cuts no port sheet.  A plan it refuses raises the error ``mesh()`` raises, unchanged.
+        ``EigenmodeSim`` and ``DrivenSim`` cut the sheet of every lumped element of the plan as its port and
+        leave out an authored sheet that carries none, and ``DrivenSim`` refuses a plan that declares no
+        ``LumpedPort``; ``ElectrostaticSim`` adds no terminals, which are not needed before meshing, and cuts no
+        port sheet.  A plan it refuses raises the error ``mesh()`` raises, unchanged.
         The bands of the plan's Surface-EPR specs are cut as ``mesh()`` cuts them; a plan without specs gets
         no bands.  The report's ``lumped_elements`` says, one line each, what the simulation does with each
         lumped element of the plan, in the report returned and in the one a refusal carries.
@@ -484,11 +491,14 @@ class PalaceSimulation(ABC):
             RuntimeError: ``mesh()`` has not built the current mesh.
         """
         mesh = self._require("mesh_summary", self._mesh_result)
+        order = self.numerical.order
+        # The constructor and every set_numerical fill the problem's defaults, the FEM order among them.
+        assert not isinstance(order, ProblemDefault)
         return summary_from_files(
             mesh.mesh_path,
             mesh.mesh_manifest_path,
             problem=self.problem,
-            fem_order=self.numerical.order,
+            fem_order=order,
         )
 
     # ---- Config and handoff -------------------------------------------------------------------------

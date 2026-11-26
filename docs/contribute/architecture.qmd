@@ -79,12 +79,13 @@ convergence declaration of a run answers.
 
 ## Palace preparation lifecycle {#palace-preparation-lifecycle}
 
-`ElectrostaticSim` and `EigenmodeSim` own their mutable mesh, config,
-resolved-port and handoff state. Both are subclasses of one private base,
-`scgsim.palace.simulation.core.PalaceSimulation`, which holds what they share:
+`ElectrostaticSim`, `EigenmodeSim` and `DrivenSim` own their mutable mesh,
+config, resolved-port and handoff state. All three are subclasses of one private
+base, `scgsim.palace.simulation.core.PalaceSimulation`, which holds what they share:
 `set_plan`, `set_output_dir`, `set_route`, `set_mesh`, `input_summary()`,
 `mesh()`, `simulation_drc`, `mesh_summary()` and `prepare_handoff()`. Each
-problem file (`simulation/electrostatic.py`, `simulation/eigenmode.py`) adds
+problem file (`simulation/electrostatic.py`, `simulation/eigenmode.py`,
+`simulation/driven.py`) adds
 only its setters, its numerical defaults and its `write_config()`. The vacuum
 region and the Surface-EPR specs are the plan's
 (`GeometryPlan.set_vacuum_region`, `GeometryPlan.set_surface_epr`); the

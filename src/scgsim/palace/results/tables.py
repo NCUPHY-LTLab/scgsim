@@ -15,7 +15,13 @@ from scgsim.contracts.palace_index_map import (
     LUMPED_PORT_SECTION,
     TERMINAL_SECTION,
 )
-from scgsim.contracts.palace_run_folder import EIGENMODE, palace_problem
+from scgsim.contracts.palace_run_folder import (
+    EIGENMODE,
+    ELECTROSTATIC,
+    PalaceProblem,
+    output_table,
+    palace_problem,
+)
 from scgsim.palace.results.artifacts import (
     expect_int,
     expect_list,
@@ -25,6 +31,34 @@ from scgsim.palace.results.artifacts import (
 from scgsim.palace.results.resolved_records import ParsedTable
 from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
 from scgsim.refusal import Declared, found_text, internal
+
+READ_PROBLEMS = (ELECTROSTATIC.name, EIGENMODE.name)
+"""The problems whose returned run folders SCGSim reads.  It prepares Driven runs too, and reads none of them yet."""
+
+
+def read_problem(name: object, subject: str) -> PalaceProblem:
+    """The problem record of the returned run folder ``subject`` names, for a problem SCGSim reads.
+
+    Every reader of a returned run folder starts here, so a Driven run is refused by name before any table
+    of it is read as an Electrostatic or Eigenmode one.
+
+    Raises:
+        ValueError: ``name`` is not a problem SCGSim writes.
+        NotImplementedError: ``name`` is a problem SCGSim writes but does not read, Driven.
+    """
+    problem = palace_problem(name)
+    if problem.name not in READ_PROBLEMS:
+        raise NotImplementedError(
+            Declared(
+                f"the {problem.name} run folder {subject}",
+                f"your own reading of the run: open {output_table(problem.primary_table)} and the "
+                "other tables Palace wrote beside it",
+            ).refusal(
+                f"SCGSim prepares {problem.name} runs but does not read them back yet; it reads "
+                f"{' and '.join(READ_PROBLEMS)} runs"
+            )
+        )
+    return problem
 
 
 def output_families(problem: str, index_counts: dict[str, int]) -> tuple[str, ...]:

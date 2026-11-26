@@ -6,9 +6,9 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
-from scgsim.contracts.palace_run_folder import palace_problem
+from scgsim.contracts.palace_run_folder import PalaceProblem
 from scgsim.palace.results.index_contract import validate_index_entries
 from scgsim.palace.results.inspection_records import (
     SurfaceEprRecord,
@@ -20,6 +20,7 @@ from scgsim.palace.results.resolved_records import ParsedTable
 from scgsim.palace.results.surface_contract import entry_rows, surface_epr_entries
 from scgsim.palace.results.tables import (
     read_csv_table,
+    read_problem,
     requested_modes,
     validate_surface_table,
 )
@@ -153,6 +154,11 @@ def _read_surface_table(path: Path, mode_count: int | None) -> ParsedTable:
     return table if mode_count is None else requested_modes(table, mode_count)
 
 
+def _series_kind(problem: PalaceProblem) -> Literal["mode", "excitation"]:
+    """What one row of a read problem's surface-Q table is; ``read_problem`` refused the problems of any other row."""
+    return "mode" if problem.solves_modes else "excitation"
+
+
 @dataclass(frozen=True)
 class SurfaceEprReader:
     """A native surface-Q table and its pass-local source bindings for detached EPR."""
@@ -175,7 +181,7 @@ class SurfaceEprReader:
             table = _read_surface_table(self.path, self.mode_count)
             validate_surface_table(table, self.surface_count, self.expected_rows)
             snapshots: list[SurfaceEprSeriesSnapshot] = []
-            problem = palace_problem(self.problem)
+            problem = read_problem(self.problem, str(self.path))
             for row in table.rows:
                 series_index = int(row[problem.series_index])
                 records = tuple(
@@ -209,7 +215,7 @@ class SurfaceEprReader:
                         pass_index=self.pass_index,
                         source=self.source,
                         series_index=series_index,
-                        series_kind=problem.series,
+                        series_kind=_series_kind(problem),
                         records=records,
                         quality_factor_total=quality_factor,
                         t1_seconds=t1_seconds,
@@ -247,13 +253,13 @@ class SurfaceMarginEprReader:
         try:
             table = _read_surface_table(self.path, self.mode_count)
             validate_surface_table(table, self.surface_count, self.expected_rows)
-            problem = palace_problem(self.problem)
+            problem = read_problem(self.problem, str(self.path))
             return tuple(
                 SurfaceMarginEprSeriesSnapshot(
                     pass_index=self.pass_index,
                     source=self.source,
                     series_index=int(row[problem.series_index]),
-                    series_kind=problem.series,
+                    series_kind=_series_kind(problem),
                     records=tuple(
                         SurfaceMarginEprRecord(
                             **binding.record_fields(),
