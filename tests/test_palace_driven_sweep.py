@@ -143,6 +143,11 @@ def test_two_frequencies_one_to_rounding_or_apart_in_every_palace_build_are_acce
             r"than 10000 Hz apart there",
             id="a chain of neighbours within rounding, 1.46 Hz long at 1 THz",
         ),
+        pytest.param(
+            [Points([1e16, math.nextafter(1e16, math.inf)])],
+            r"are 1\.86 Hz apart, and two frequencies must be the same or more than",
+            id="one unit in the last place, 1.86 Hz at 10 PHz",
+        ),
     ],
 )
 def test_two_frequencies_a_palace_build_may_merge_or_not_are_refused(ranges, match):
@@ -154,7 +159,8 @@ def test_two_frequencies_a_palace_build_may_merge_or_not_are_refused(ranges, mat
     so its 1 Hz merge sets the spacing, uniform or adaptive alike.  Palace measures each frequency from the last
     one it kept, so a chain whose neighbours are each within rounding is refused once it leaves the rounding of
     the first: 3,001 points 4 units in the last place apart at 1 THz span 1.46 Hz, and Palace would keep two of
-    them that print the same.
+    them that print the same.  At 10 PHz one unit in the last place is 1.86 Hz: Palace keeps both, and they print
+    alike.
     """
     for adaptive_tolerance in (None, 1e-3):
         if adaptive_tolerance is None and any(item.full_solve for item in ranges):
