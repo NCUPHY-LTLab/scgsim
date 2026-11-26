@@ -295,7 +295,10 @@ def _merged(entries: Iterable[Mapping[str, Any]]) -> _Merge:
             distance = frequency - merged[-1]
             rounding = _ROUNDING_ULPS * math.ulp(frequency)
             spacing = max(_SAME_FREQUENCY_GHZ, printed_unit_ghz(frequency)) + rounding
-            same = distance <= rounding and distance + rounding < _SAME_FREQUENCY_GHZ
+            # The same value cannot round apart; any other pair keeps the rounding below the 1 Hz merge.
+            same = distance == 0.0 or (
+                distance <= rounding and distance + rounding < _SAME_FREQUENCY_GHZ
+            )
             if unsure is None and not same and distance <= spacing:
                 unsure = _UnsurePair(merged[-1], frequency, spacing)
             if distance < _SAME_FREQUENCY_GHZ:

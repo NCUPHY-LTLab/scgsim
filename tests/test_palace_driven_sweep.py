@@ -97,6 +97,9 @@ def hanger_sweep():
         pytest.param(
             {"ranges": [Points([0.5e9, 0.5e9 + 1.5])]}, 2, id="1.5 Hz apart below 1 GHz"
         ),
+        pytest.param(
+            {"ranges": [Points([1.2e15, 1.2e15])]}, 1, id="the same value at 1.2 PHz"
+        ),
     ],
 )
 def test_two_frequencies_one_to_rounding_or_apart_in_every_palace_build_are_accepted(
