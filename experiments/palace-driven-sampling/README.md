@@ -67,7 +67,7 @@ f0 = 7.356647804 GHz and Q = 13,947.6, so f0/Q = 527.4 kHz: the dense window run
 
 The issue's uniform 25,000-point sweep was not run. `adaptive`'s measured cost predicts 1,190 s to build the
 model plus 25,000 × (0.548 + 0.555) s online, 28,765 s (8.0 h), past the study's limit of about 7 h; so
-`uniform-2500` was run and its online cost scaled to 25,000 frequencies below.
+`uniform-2500` was run instead; its own cost scales to 28,690 s (below).
 
 The resonator mode is the Eigenmode mode with the largest share of its electric energy above y = 200 µm, where
 only the meander is: the energy density `U_e` of each mode's ParaView field, integrated cell by cell.
@@ -89,9 +89,11 @@ per node (`PeakNodeMemoryMegabytes`) from `palace.json`.
 | adaptive | 501 band + 2001 window, adaptive 0.001 | 521,337 | 3,677,860 | 9, 4 | 1190.0 | 0.548, 0.555 | 3947.6 | 35,738 |
 | add-to-prom | 501 band + 2001 window, adaptive 0.001, AddToPROM at f0 | 521,337 | 3,677,860 | 5, 5 | 921.0 | 0.527, 0.539 | 3587.8 | 34,996 |
 | tolerance-1e-5 | 501 band + 2001 window, adaptive 1e-05 | 521,337 | 3,677,860 | 20 (cap; error 0.000198), 20 (cap; error 0.000371) | 3710.0 | 0.739, 0.747 | 7428.4 | 40,512 |
+| tolerance-1e-5-max-40 | 501 band + 2001 window, adaptive 1e-05, max samples 40 | 521,337 | 3,677,860 | 32, 15 | 4370.0 | 0.791, 0.8 | 8351.7 | 41,625 |
 | no-surface-epr | 501 band + 2001 window, adaptive 0.001, no Surface EPR | 521,337 | 3,677,860 | 9, 4 | 1190.0 | 0.528, 0.532 | 3842.0 | 35,739 |
 | full-solves | 9 full solves | 521,337 | 3,677,860 | - | - | 86.7, 88 | 1586.0 | 33,325 |
 | full-solves-linear-1e-9 | 9 full solves, linear tol 1e-09 | 521,337 | 3,677,860 | - | - | 119, 117 | 2136.7 | 34,233 |
+| uniform-2500 | 2500 uniform, adaptive 0.001 | 521,337 | 3,677,860 | 9, 4 | 1190.0 | 0.544, 0.556 | 3940.4 | 35,796 |
 
 Where the adaptive sweeps placed their full solves, in GHz as Palace's log prints them (4 digits):
 
@@ -100,6 +102,8 @@ Where the adaptive sweeps placed their full solves, in GHz as Palace's log print
 | `adaptive`, `no-surface-epr` | 4, 9, 6.555, 8.044, 7.355, 4.883, 7.357, 4.337, 8.654 | 4, 9, 6.555, 8.045 |
 | `add-to-prom` | 4, 9, 7.357 (f0), 6.554, 5.077 | 4, 9, 7.357 (f0), 6.554, 5.077 |
 | `tolerance-1e-5` | 4, 9, 6.555, 8.044, 7.355, 4.883, 7.357, 4.337, 8.654, 7.458, 8.391, 6.053, 7.162, 5.220, 7.693, 5.837, 7.403, 7.630, 7.325, 7.379 | 4, 9, 6.555, 8.045, 7.355, 4.883, 7.357, 4.337, 8.654, 7.158, 7.606, 7.322, 7.236, 5.807, 5.623, 7.359, 8.863, 7.807, 7.339, 7.345 |
+| `uniform-2500` | as `adaptive` | as `adaptive` |
+| `tolerance-1e-5-max-40` | as `tolerance-1e-5`, then 8.937, 5.090, 7.345, 7.330, 7.401, 6.944, 5.294, 7.814, 7.156, 7.357, 5.481, 4.564 (32) | as `tolerance-1e-5`'s first 15 (15) |
 
 The two ports share one reduced model, so port 2 starts from port 1's solves.
 
@@ -110,16 +114,19 @@ The two ports share one reduced model, so port 2 starts from port 1's solves.
 | adaptive | 2003 | 1.75e-06 | 7.356663911 | 11140.8 | 11261.8 | 1.036e+06 | 1.611e+04 | -2.012e-01 | 4.537e-03 | 2.437e-06 | - |
 | add-to-prom | 2003 | 1.75e-06 | 7.356663907 | 11140.7 | 11261.8 | 1.035e+06 | 1.61e+04 | -2.012e-01 | 4.535e-03 | 1.306e-05 | 1.430e-05 |
 | tolerance-1e-5 (port-S.csv) | 2003 | 1.75e-06 | 7.356663911 | 11140.8 | 11261.8 | 1.036e+06 | 1.611e+04 | -2.012e-01 | 4.540e-03 | 2.535e-06 | 3.076e-06 |
+| tolerance-1e-5-max-40 | 2003 | 1.75e-06 | 7.356663911 | 11140.8 | 11261.8 | 1.036e+06 | 1.611e+04 | -2.012e-01 | 4.540e-03 | 2.530e-06 | 3.174e-06 |
 | no-surface-epr | 2003 | 1.75e-06 | 7.356663911 | 11140.8 | 11261.8 | 1.036e+06 | 1.611e+04 | -2.012e-01 | 4.537e-03 | 2.437e-06 | 1.604e-09 |
 | full-solves | 9 | 1.12e-03 | 7.356663554 | 11056.4 | 11228.2 | 7.219e+05 | 1.575e+04 | -2.073e-01 | - | 4.538e-03 | 4.537e-03 |
 | full-solves-linear-1e-9 | 9 | 1.30e-06 | 7.356663906 | 11140.8 | 11261.8 | 1.036e+06 | 1.61e+04 | -2.012e-01 | 4.538e-03 | - | 2.437e-06 |
+| uniform-2500 | 10 | 9.88e-07 | 7.356663916 | 11140.8 | 11261.9 | 1.036e+06 | 1.611e+04 | -2.012e-01 | - | - | 7.855e-15 |
 
 `f0`, `Q_l`, `abs(Q_c)` and `Q_i` are the hanger fit (`notch_fit.py`) of S21 on the dense window's points
 (the 9 points of a full-solve run), with the line's delay taken from the band's phase away from the resonance,
 14.64 ps (the full-solve runs use `adaptive`'s). `rms residual` is the fit's, in units of S21. The last columns
-are the largest `abs(S21 − S21_reference)` over the frequencies a run shares with the reference. The Eigenmode
-mode's Q from its complex frequency, 13,947.6, and the two ports' `Q_ext` from `port-Q.csv`, 22,548.5 and
-22,484.5 (11,258.2 together), are both Palace's numbers for the same mode.
+are the largest `abs(S21 − S21_reference)` over the frequencies a run shares with the reference; a dash, none
+shared (`uniform-2500` shares only 4 and 9 GHz with `adaptive`). The Eigenmode mode's Q from its complex
+frequency, 13,947.6, and the two ports' `Q_ext` from `port-Q.csv`, 22,548.5 and 22,484.5 (11,258.2 together),
+are both Palace's numbers for the same mode.
 
 ### The full solves and the linear solver
 
@@ -142,6 +149,34 @@ The nearest full solve to f0 in `adaptive` is the one its log prints as 7.357 GH
 itself. Against the 1e-6 full solves the gap at f0 is 4.537e-3 in `adaptive` and 4.535e-3 in `add-to-prom`;
 against the 1e-9 ones it is 2.0e-6 and 1.3e-5. A full solve at 1e-9 took 118 s, at 1e-6 87 s (29 to 39 GMRES
 iterations against 14 to 23).
+
+## What the runs show
+
+Numbers only; the agreement a result must reach is the Human's.
+
+- **A band with a dense window, adaptive at 1e-3** (`adaptive`): 9 and 4 full solves, 1,190 s to build the
+  model, then 0.548 and 0.555 s per frequency and port for 2,502 frequencies; 3,948 s in all. Its S21 is within
+  2.4e-6 of the full solves at a linear tolerance of 1e-9 at all 9 of their frequencies.
+- **The same with `AddToPROM` at f0** (`add-to-prom`): 5 and 5 full solves, f0 among them, 921 s to build the
+  model and 3,588 s in all; its S21 is within 1.4e-5 of `adaptive` and 1.3e-5 of the 1e-9 full solves.
+- **Tolerance 1e-5**: the default cap of 20 full solves per port was reached on both ports (3,710 s to build,
+  7,428 s in all) and `driven_result()` refuses the run; Palace's S21 is still within 3.1e-6 of `adaptive`. With
+  the cap at 40 it converged with 32 and 15 full solves (4,370 s to build, 0.79 and 0.80 s per frequency and
+  port, 8,352 s in all), within 3.2e-6 of `adaptive` and 2.5e-6 of the 1e-9 full solves.
+- **Surface EPR off** (`no-surface-epr`): 0.528 and 0.532 s per frequency and port against 0.548 and 0.555 with
+  the 7 Surface-EPR rows; Palace's `Postprocessing` timer 2,157 s against 2,254 s of the 3,948 s run. The model
+  and S21 are the same (largest difference 1.6e-9).
+- **A uniform grid, adaptive at 1e-3** (`uniform-2500`, 2.0 MHz apart): the same 9 and 4 full solves as
+  `adaptive`, 0.544 and 0.556 s per frequency and port, 3,940 s in all. No grid frequency is in the notch: the
+  nearest is 0.68 MHz above f0, where abs(S21) is −0.94 dB. The fit on the window's 10 grid points still gives
+  f0 within 5 Hz and Q_l within 0.03 of `adaptive`'s. At 25,000 points the same costs give
+  1,190 + 25,000 × (0.544 + 0.556) = 28,690 s (7.97 h).
+- **Full solves**: 87 to 88 s per frequency and port at the default linear tolerance of 1e-6, 117 to 119 s at
+  1e-9; the 1e-6 ones are off by up to 4.5e-3 near f0 (below).
+- **The notch against the Eigenmode mode**: every run but the 1e-6 full solves gives f0 from 7.356663906 to
+  7.356663916 GHz, 16.1 kHz above the Eigenmode mode's 7.356647804 GHz, Q_l from 11,140.75 to 11,140.82, 20.1 %
+  below the mode's Q of 13,947.6 and 1.0 % below the 11,258.2 the two ports' `Q_ext` give together, and
+  abs(Q_c) from 11,261.80 to 11,261.86. Q_i, from the small difference 1/Q_l − cos φ/abs(Q_c), is about 1.04e6.
 
 ## What failed
 
