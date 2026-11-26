@@ -232,6 +232,9 @@ _STATUS_LINE = re.compile(
 )
 _ERROR_LINE = re.compile(r"^ n = \d+, error = (\S+), tol = ")
 _SAMPLED_LINE = re.compile(r"^ Sampled frequencies \(GHz\): (.+)$")
+# Palace wraps a long list of values: a line that ends in "," goes on in the next line, indented under the
+# first value (five samples or more, issue 307).
+_WRAPPED_LIST = re.compile(r",\n\s+(?=[-+0-9.])")
 
 
 @dataclass
@@ -267,7 +270,12 @@ def _adaptive_sampling(
         status = logged.get(number)
         if status is not None and status.reached_maximum:
             raise ValueError(_not_converged(number, port, status, sweep))
-        if status is None or status.error is None or status.sampled_ghz is None:
+        if (
+            status is None
+            or status.error is None
+            or status.sampled_ghz is None
+            or len(status.sampled_ghz) != status.samples
+        ):
             raise ValueError(
                 Declared(f"the solver log {log['path']}", RETURNED_RUN_FOLDER).refusal(
                     f"does not record how the adaptive sweep converged with port {number} ({port.name}) "
@@ -293,7 +301,7 @@ def _logged_sampling(
     # With one excitation, no line names it, so every record is that excitation's.
     excitation = excitations[0] if len(excitations) == 1 else None
     current: _LoggedSampling | None = None
-    for line in text.splitlines():
+    for line in _WRAPPED_LIST.sub(", ", text).splitlines():
         if match := _EXCITATION_LINE.match(line):
             excitation, current = int(match[1]), None
         elif (match := _STATUS_LINE.match(line)) and excitation is not None:

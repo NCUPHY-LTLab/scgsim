@@ -526,6 +526,16 @@ def _rewrite_log(root: Path, change) -> None:
     path.write_text(change(path.read_text(encoding="utf-8")), encoding="utf-8")
 
 
+def _first(old: str, new: str):
+    """Replace the first occurrence of ``old``: the log record of excitation 1."""
+
+    def change(text: str) -> str:
+        assert old in text
+        return text.replace(old, new, 1)
+
+    return change
+
+
 def _second(old: str, new: str):
     """Replace the second occurrence of ``old``: the log line of excitation 2."""
 
@@ -553,6 +563,47 @@ def test_a_sweep_that_reached_its_maximum_for_a_port_is_refused_naming_it(tmp_pa
     assert "reached its maximum of 20 frequency samples" in message
     assert "adaptive_max_samples" in message
     assert "Change it in the call to DrivenSim.set_driven" in message
+
+
+def test_a_list_of_sampled_frequencies_palace_wraps_is_read_whole(tmp_path):
+    """Five samples or more: Palace ends the line after a comma and goes on, indented, on the next (issue 307).
+
+    The wrapped lines are as stock Palace 0.18.1 printed them on 2026-11-26 for a port with five samples.
+    """
+    root = copied_run(ADAPTIVE_RUN, tmp_path)
+    _rewrite_log(
+        root,
+        _first(
+            "Adaptive sampling converged with 4 frequency samples:\n"
+            " n = 8, error = 1.220e-06, tol = 1.000e-03, memory = 2/2\n"
+            " Sampled frequencies (GHz): 2.000e+00, 1.000e+01, 6.142e+00, 3.744e+00\n",
+            "Adaptive sampling converged with 5 frequency samples:\n"
+            " n = 10, error = 4.207e-05, tol = 1.000e-03, memory = 2/2\n"
+            " Sampled frequencies (GHz): 2.000e+00, 1.000e+01, 5.103e+00, 7.899e+00,\n"
+            "                            3.115e+00\n",
+        ),
+    )
+    sampling = fixture_result(root).driven_result().adaptive_sampling[0]
+    assert sampling.samples == 5
+    assert sampling.sampled_frequencies_hz == pytest.approx(
+        (2.0e9, 10.0e9, 5.103e9, 7.899e9, 3.115e9), rel=1e-12
+    )
+
+
+def test_a_list_shorter_than_its_sample_count_is_refused(tmp_path):
+    """The status line counts the samples, so a list missing one is an unreadable record, not fewer samples."""
+    root = copied_run(ADAPTIVE_RUN, tmp_path)
+    _rewrite_log(
+        root,
+        _first(
+            " Sampled frequencies (GHz): 2.000e+00, 1.000e+01, 6.142e+00, 3.744e+00",
+            " Sampled frequencies (GHz): 2.000e+00, 1.000e+01, 6.142e+00",
+        ),
+    )
+    with pytest.raises(
+        ValueError, match="does not record how the adaptive sweep converged with port 1"
+    ):
+        fixture_result(root).driven_result()
 
 
 def test_a_log_that_does_not_record_a_port_s_sampling_is_refused(tmp_path):
