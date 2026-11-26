@@ -60,7 +60,7 @@ Q = 11,141.7, so the window spans ±16 of their linewidths): the dense window ru
 | `eigenmode-linear-1e-9` | `eigenmode` with `set_numerical(tolerance=1e-9)`: the linear solves inside the eigensolver to 1e-9 |
 | `eigenmode-linear-1e-9-eigen-1e-9` | `eigenmode-linear-1e-9` with `set_eigenmode(..., tolerance=1e-9)` as well |
 | `adaptive` | `[Linear(4e9, 9e9, points=501), Linear(f0 − 20·f0/Q, f0 + 20·f0/Q, points=2001)]`, `adaptive_tolerance=1e-3`: 2,502 frequencies |
-| `add-to-prom` | `adaptive`, with `{"Type": "Point", "Freq": [f0], "AddToPROM": true}` added to the written `config.json`'s `Solver.Driven.Samples` before the handoff: a full solve at f0 that SCGSim does not expose |
+| `add-to-prom` | `adaptive`, with `{"Type": "Point", "Freq": [f0], "AddToPROM": true}` added to the written `config.json`'s `Solver.Driven.Samples` before the handoff: a full solve at f0 that SCGSim did not expose when this ran (see Decisions) |
 | `tolerance-1e-5` | `adaptive` with `adaptive_tolerance=1e-5` |
 | `tolerance-1e-5-max-40` | `tolerance-1e-5` with `adaptive_max_samples=40`: `tolerance-1e-5` reached Palace's default cap of 20 |
 | `no-surface-epr` | `adaptive` on a plan without `set_surface_epr` |
@@ -129,6 +129,33 @@ f0 = 7.356663931 GHz and Q = 11,141.7: 20 Hz and 0.008 % from the notch's f0 and
 runs `kappa_ext[1]` is negative and `kappa_ext[2]` positive: the Eigenmode config writes port 1's `Direction` as
 +x and port 2's as −x (attributes 11 and 12), where the Driven config writes port 1 as −x and port 2 as +x; the
 `Q_ext` values are positive either way.
+
+### Surface and bulk EPR at the two linear tolerances
+
+Mode 1 of `eigenmode` (linear tolerance 1e-6) against `eigenmode-linear-1e-9`, read from each run's Palace files;
+the relative change is abs(x(1e-9) − x(1e-6)) / x(1e-6). The resonator is part of Net `ground`, so its surfaces
+are the `ground` rows.
+
+| Quantity (mode 1) | Linear tolerance 1e-6 | Linear tolerance 1e-9 | Relative change |
+|---|---|---|---|
+| Re f (GHz, `eig.csv`) | 7.356647804 | 7.356663931 | 2.2e-06 |
+| Q = Re f / (2 Im f) (`eig.csv`) | 13,947.6 | 11,141.7 | 0.201 |
+| Q_ext of the two ports together (`port-Q.csv`) | 11,258.2 | 11,262.8 | 4.1e-04 |
+| p_surf[1], MA, ground sidewalls (`surface-Q.csv`) | 2.764556e-07 | 2.764555e-07 | 1.7e-07 |
+| p_surf[2], MA, ground top (`surface-Q.csv`) | 2.303732e-06 | 2.303732e-06 | 4.9e-08 |
+| p_surf[3], MA, signal sidewalls (`surface-Q.csv`) | 3.554161e-12 | 3.554110e-12 | 1.5e-05 |
+| p_surf[4], MA, signal top (`surface-Q.csv`) | 3.128858e-11 | 3.128654e-11 | 6.5e-05 |
+| p_surf[5], MS, ground bottom (`surface-Q.csv`) | 2.755683e-04 | 2.755683e-04 | 3.4e-08 |
+| p_surf[6], MS, signal bottom (`surface-Q.csv`) | 3.732674e-09 | 3.732416e-09 | 6.9e-05 |
+| p_surf[7], SA, substrate–vacuum (`surface-Q.csv`) | 2.403751e-04 | 2.403751e-04 | 5.0e-08 |
+| Q_surf of all 7 rows together, 1 / sum(1 / Q_surf) | 1,829,351 | 1,829,351 | 4.7e-08 |
+| p_elec of the substrate (`domain-E.csv`) | 0.9207327809 | 0.9207327806 | 3.6e-10 |
+
+The eigenvalue's Q holds only the losses inside the eigenproblem: the two 50 Ω ports and the substrate's loss
+tangent (2.6e-7). Surface EPR, the substrate's participation and the ports' `Q_ext` are computed from the field
+afterwards, and they barely move with the linear tolerance: `Q_ext` by 4.1e-4, the Surface-EPR rows by at most
+6.9e-5 (1.7e-7 for the rows above 1e-7), Q_surf together by 4.7e-8 and the substrate's p_elec by 3.6e-10. Only
+Im f, and with it the eigenvalue's Q, moves by 20 %.
 
 ### The notch
 
@@ -212,3 +239,15 @@ Numbers only; the agreement a result must reach is the Human's.
 - **`tolerance-1e-5` reached Palace's default cap of 20 full solves on both ports**, with last errors of
   1.98e-4 and 3.71e-4, and `driven_result()` refuses it as unconverged. `fit` reads its S21 from Palace's
   `port-S.csv` to compare it, and the table marks it so.
+
+## Decisions
+
+The Human decided on these runs:
+
+- **The linear tolerance stays at SCGSim's 1e-6.** The extra 45 % of Eigenmode time at 1e-9 would be worth it
+  only if it changed Surface or bulk EPR significantly, and it does not (above). The user guide calls out the two
+  cases that need `set_numerical(tolerance=1e-9)`: the Q from the complex eigenfrequency of a high-Q mode, and
+  Driven full solves through a high-Q resonance. Adaptive sampling is accurate at the default.
+- **`AddToPROM` becomes public API**, the `full_solve=True` flag on #308, because Palace offers it. How well it
+  works and how to use it are research.
+- **The hanger stays out of the nightly roster.**
