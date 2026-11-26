@@ -151,7 +151,7 @@ $$
 模型中若沒有任何有損耗的材料，就完全沒有損耗，Palace 會回報無限大的 Q；報告會標示為「native-reported infinite Q」（[本徵模態參考](../reference/specs/palace-eigenmode.qmd#native-eigenmode-q)）。
 
 ::: {.callout-important title="高 Q 模態需要更嚴格的線性求解容差"}
-在預設的 `set_numerical(tolerance=1e-6)` 下，模態頻率、Surface EPR 與體電場參與率都夠準確。但 Palace 由複數本徵頻率算出的 Q（Re f / (2 Im f)）在模態 Q 很高時並不準：Im f 比 Re f 小得多，求解器的近似線性求解會讓它大幅偏移，卻幾乎不影響 Re f 與電場。以 7.36 GHz 附近的 hanger 共振器為例，預設回報 Q = 13,948，比 `set_numerical(tolerance=1e-9)` 的 11,142 高 25 %；後者與獨立的 Driven S21 notch 擬合（11,141）一致。若要使用這個 Q，請設定 `tolerance=1e-9`，代價是 Eigenmode 求解時間增加約 45 %。由參與率算出的表面損耗 Q 不需要這樣做。
+在預設的 `set_numerical(tolerance=1e-6)` 下，模態頻率、Surface EPR 與體積電場參與率都夠準確。但 Palace 由複數本徵頻率算出的 Q（Re f / (2 Im f)）在模態 Q 很高時並不準：Im f 比 Re f 小得多，求解器的近似線性求解會讓它大幅偏移，卻幾乎不影響 Re f 與電場。以 7.36 GHz 附近的 hanger 共振器為例，預設回報 Q = 13,948，比 `set_numerical(tolerance=1e-9)` 的 11,142 高 25 %；後者與獨立的 Driven S21 凹口擬合（11,141）一致。若要使用這個 Q，請設定 `tolerance=1e-9`，代價是 Eigenmode 求解時間增加約 45 %。由參與率算出的表面損耗 Q 不需要這樣做。
 :::
 
 **表面損耗。** 表面薄膜不在求解之中。求解之後，Palace 由表面上的電場與薄膜的厚度、介電常數算出每個表面的參與率 p，並以 1/Q = p tan δ 算出損耗。最後三行是各類表面整面列（`evaluation_kind` 為 `"unmasked_baseline"`）的總和；這次計算沒有其他列：
