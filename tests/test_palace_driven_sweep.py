@@ -8,6 +8,7 @@ here.
 
 from __future__ import annotations
 
+import math
 from itertools import pairwise
 
 import pytest
@@ -136,6 +137,12 @@ def test_two_frequencies_one_to_rounding_or_apart_in_every_palace_build_are_acce
             r"or more than 1 Hz apart there",
             id="0.5 Hz apart at 50 MHz, printed apart",
         ),
+        pytest.param(
+            [Points([1e12 + k * 4 * math.ulp(1e12) for k in range(3001)])],
+            r"1000 GHz and 1000 GHz are 0\.00102 Hz apart, and two frequencies must be the same or more "
+            r"than 10000 Hz apart there",
+            id="a chain of neighbours within rounding, 1.46 Hz long at 1 THz",
+        ),
     ],
 )
 def test_two_frequencies_a_palace_build_may_merge_or_not_are_refused(ranges, match):
@@ -144,7 +151,10 @@ def test_two_frequencies_a_palace_build_may_merge_or_not_are_refused(ranges, mat
     The band's 4.44 GHz is 4.4399999999999995 in unfused arithmetic and 4.44 in the stock build's fused one:
     0.9999992 Hz and 1.0000001 Hz above 4.439999999 GHz, so SCGSim would merge the two and that build keep both,
     and the run would return a row more than SCGSim reads back.  At 50 MHz Palace prints a frequency to 0.1 Hz,
-    so its 1 Hz merge sets the spacing, uniform or adaptive alike.
+    so its 1 Hz merge sets the spacing, uniform or adaptive alike.  Palace measures each frequency from the last
+    one it kept, so a chain whose neighbours are each within rounding is refused once it leaves the rounding of
+    the first: 3,001 points 4 units in the last place apart at 1 THz span 1.46 Hz, and Palace would keep two of
+    them that print the same.
     """
     for adaptive_tolerance in (None, 1e-3):
         if adaptive_tolerance is None and any(item.full_solve for item in ranges):
