@@ -29,7 +29,13 @@ from typing import Any
 
 import orcapen_sc_pdk
 
-from scgsim.palace import DrivenSim, Linear, PalaceDrivenResult, resolve_palace_result
+from scgsim.palace import (
+    DrivenSim,
+    Linear,
+    PalaceDrivenResult,
+    Points,
+    resolve_palace_result,
+)
 
 # The roster lives in scripts/, beside this folder's parent; `python -I` does not put it on sys.path.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
@@ -75,6 +81,12 @@ def _parse_arguments() -> argparse.Namespace:
         help="Palace's adaptive fast sweep to this relative error; omitted: a full solve at every frequency",
     )
     parser.add_argument(
+        "--full-solve-hz",
+        type=float,
+        action="append",
+        help="a frequency the adaptive sweep solves in full first (full_solve=True); may be repeated",
+    )
+    parser.add_argument(
         "--bands",
         action="store_true",
         help="cut the Surface-EPR films as bands at 0.5 and 1.0 um, as the roster does",
@@ -118,10 +130,10 @@ def prepare(output: Path, args: argparse.Namespace) -> None:
     sim.set_plan(plan.prepare())
     sim.set_output_dir(output / "run")
     sim.set_route(args.route)
-    sim.set_driven(
-        [Linear(START_HZ, STOP_HZ, points=args.points)],
-        adaptive_tolerance=args.adaptive_tolerance,
-    )
+    frequencies: list[Linear | Points] = [Linear(START_HZ, STOP_HZ, points=args.points)]
+    if args.full_solve_hz:
+        frequencies.append(Points(args.full_solve_hz, full_solve=True))
+    sim.set_driven(frequencies, adaptive_tolerance=args.adaptive_tolerance)
     sim.set_numerical(order=args.order)
     started = time.perf_counter()
     sim.mesh()
@@ -168,6 +180,7 @@ def _settings(args: argparse.Namespace) -> dict[str, Any]:
         "stop_hz": STOP_HZ,
         "points": args.points,
         "adaptive_tolerance": args.adaptive_tolerance,
+        "full_solve_hz": args.full_solve_hz or [],
         "bands_um": [0.5, 1.0] if args.bands else [],
         "processes": args.processes,
     }

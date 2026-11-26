@@ -5,12 +5,14 @@ Palace's ``Solver.Driven.Samples``, in GHz (``samples_entry``).  Palace 0.18.1 m
 frequencies (``palace_frequencies_ghz``).  That one rule serves both ends of a run: ``DrivenSweep`` checks the
 merged list when the sweep is set, and the read-back (``scgsim.palace.results.driven_tables``) checks that Palace's
 returned rows are that list.  Palace prints a frequency with 9 significant digits (``printed_unit_ghz``), so
-``DrivenSweep`` refuses two frequencies Palace solves apart but prints too close to be read back apart.
+``DrivenSweep`` refuses two frequencies Palace solves apart but prints too close to be read back apart.  A range
+given ``full_solve=True`` writes Palace's ``AddToPROM``: an adaptive sweep solves its frequencies in full first.
 """
 
 from __future__ import annotations
 
 import math
+from bisect import bisect_right
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from itertools import pairwise
@@ -23,8 +25,10 @@ _WHERE_DRIVEN_SWEEP = "the call to set_driven"
 # ``delta_eps``, in ``palace/utils/configfile.cpp``).
 _SAME_FREQUENCY_GHZ = 1e-9
 
-# Palace 0.18.1 runs its adaptive sweep only on more frequencies than the two its reduced model starts from.
-_ADAPTIVE_FREQUENCIES = 3
+# Palace 0.18.1 starts the reduced model of each port from full solves at the lowest and the highest frequency.
+_MODEL_ENDS = 2
+# Palace 0.18.1's cap on the full solves per port without ``AdaptiveMaxSamples`` (``Solver.Driven`` in its schema).
+_PALACE_MAX_SAMPLES = 20
 
 PRINTED_DIGITS = 9
 """The significant digits Palace 0.18.1 prints a frequency with, in GHz (``2.10000000e+00``)."""
@@ -34,8 +38,10 @@ PRINTED_DIGITS = 9
 class Linear:
     """``points`` frequencies evenly spaced from ``start_hz`` to ``stop_hz``, both ends included.
 
+    ``full_solve=True`` has an adaptive sweep solve each of them in full (``DrivenSweep``).
+
     Raises on build:
-        TypeError: a frequency is not a number, or ``points`` is not an integer.
+        TypeError: a frequency is not a number, ``points`` is not an integer, or ``full_solve`` is not a bool.
         ValueError: ``start_hz`` is not finite and above 0 Hz, ``stop_hz`` is not finite and above ``start_hz``,
             or ``points`` is below 2.
     """
@@ -43,24 +49,26 @@ class Linear:
     start_hz: float
     stop_hz: float
     points: int
+    full_solve: bool = field(default=False, kw_only=True)
 
     def __post_init__(self) -> None:
         """Refuse a range Palace cannot sample, then hold the frequencies as floats."""
-        start, stop = _checked_band(
-            Declared("the Linear range", _WHERE_DRIVEN_SWEEP), self
-        )
+        where = Declared("the Linear range", _WHERE_DRIVEN_SWEEP)
+        start, stop = _checked_band(where, self)
+        _check_full_solve(where, self.full_solve)
         # A frozen dataclass normalizes its own fields through object.__setattr__.
         object.__setattr__(self, "start_hz", start)
         object.__setattr__(self, "stop_hz", stop)
 
     def samples_entry(self) -> dict[str, Any]:
         """The range as Palace's ``Samples`` entry, in GHz."""
-        return {
+        entry = {
             "Type": "Linear",
             "MinFreq": self.start_hz / 1e9,
             "MaxFreq": self.stop_hz / 1e9,
             "NSample": self.points,
         }
+        return _with_full_solve(entry, self.full_solve)
 
     def to_payload(self) -> dict[str, Any]:
         """The range as ``input_summary()`` shows it, in Hz."""
@@ -69,6 +77,7 @@ class Linear:
             "start_hz": self.start_hz,
             "stop_hz": self.stop_hz,
             "points": self.points,
+            "full_solve": self.full_solve,
         }
 
 
@@ -76,8 +85,10 @@ class Linear:
 class Log:
     """``points`` frequencies from ``start_hz`` to ``stop_hz``, both ends included, evenly spaced on a log scale.
 
+    ``full_solve=True`` has an adaptive sweep solve each of them in full (``DrivenSweep``).
+
     Raises on build:
-        TypeError: a frequency is not a number, or ``points`` is not an integer.
+        TypeError: a frequency is not a number, ``points`` is not an integer, or ``full_solve`` is not a bool.
         ValueError: ``start_hz`` is not finite and above 0 Hz, ``stop_hz`` is not finite and above ``start_hz``,
             or ``points`` is below 2.
     """
@@ -85,23 +96,25 @@ class Log:
     start_hz: float
     stop_hz: float
     points: int
+    full_solve: bool = field(default=False, kw_only=True)
 
     def __post_init__(self) -> None:
         """Refuse a range Palace cannot sample, then hold the frequencies as floats."""
-        start, stop = _checked_band(
-            Declared("the Log range", _WHERE_DRIVEN_SWEEP), self
-        )
+        where = Declared("the Log range", _WHERE_DRIVEN_SWEEP)
+        start, stop = _checked_band(where, self)
+        _check_full_solve(where, self.full_solve)
         object.__setattr__(self, "start_hz", start)
         object.__setattr__(self, "stop_hz", stop)
 
     def samples_entry(self) -> dict[str, Any]:
         """The range as Palace's ``Samples`` entry, in GHz."""
-        return {
+        entry = {
             "Type": "Log",
             "MinFreq": self.start_hz / 1e9,
             "MaxFreq": self.stop_hz / 1e9,
             "NSample": self.points,
         }
+        return _with_full_solve(entry, self.full_solve)
 
     def to_payload(self) -> dict[str, Any]:
         """The range as ``input_summary()`` shows it, in Hz."""
@@ -110,6 +123,7 @@ class Log:
             "start_hz": self.start_hz,
             "stop_hz": self.stop_hz,
             "points": self.points,
+            "full_solve": self.full_solve,
         }
 
 
@@ -117,16 +131,21 @@ class Log:
 class Points:
     """Chosen frequencies, in Hz, in any order; Palace solves each one once.
 
+    ``full_solve=True`` has an adaptive sweep solve each of them in full (``DrivenSweep``).
+
     Raises on build:
-        TypeError: ``frequencies_hz`` is not a list of frequencies, or one of them is not a number.
+        TypeError: ``frequencies_hz`` is not a list of frequencies, one of them is not a number, or ``full_solve``
+            is not a bool.
         ValueError: ``frequencies_hz`` is empty, or a frequency is not finite and above 0 Hz.
     """
 
     frequencies_hz: Sequence[float]
+    full_solve: bool = field(default=False, kw_only=True)
 
     def __post_init__(self) -> None:
         """Refuse an empty list or a frequency Palace cannot sample, then hold them as a tuple of floats."""
         where = Declared("the Points range", _WHERE_DRIVEN_SWEEP)
+        _check_full_solve(where, self.full_solve)
         values = self.frequencies_hz
         if isinstance(values, (str, bytes, Mapping)) or not isinstance(
             values, Iterable
@@ -150,11 +169,16 @@ class Points:
 
     def samples_entry(self) -> dict[str, Any]:
         """The frequencies as Palace's ``Samples`` entry, in GHz."""
-        return {"Type": "Point", "Freq": [f / 1e9 for f in self.frequencies_hz]}
+        entry = {"Type": "Point", "Freq": [f / 1e9 for f in self.frequencies_hz]}
+        return _with_full_solve(entry, self.full_solve)
 
     def to_payload(self) -> dict[str, Any]:
         """The frequencies as ``input_summary()`` shows them, in Hz."""
-        return {"kind": "points", "frequencies_hz": list(self.frequencies_hz)}
+        return {
+            "kind": "points",
+            "frequencies_hz": list(self.frequencies_hz),
+            "full_solve": self.full_solve,
+        }
 
 
 FrequencyRange = Linear | Log | Points
@@ -170,14 +194,18 @@ class DrivenSweep:
     solves the field at every frequency (a uniform sweep).  A tolerance turns on Palace's adaptive fast sweep:
     it solves a few frequencies, adds solves until a reduced model built from them agrees with them to that
     relative error, and evaluates the model at every frequency.  ``adaptive_max_samples`` caps those solves per
-    excitation; None leaves Palace's own cap.
+    excitation; None leaves Palace's own cap, 20.  The model starts from full solves at the lowest and the highest
+    frequency, and at every frequency of a range given ``full_solve=True`` (Palace's ``AddToPROM``); these count
+    toward the cap.
 
     Raises on build:
         TypeError: ``ranges`` is not a list of ``Linear``, ``Log`` and ``Points`` ranges, the tolerance is not a
             number, or ``adaptive_max_samples`` is not an integer.
         ValueError: ``ranges`` is empty; two merged frequencies are closer than the 9 significant digits Palace
-            prints them with; ``adaptive_tolerance`` is not finite and above zero; an adaptive sweep has fewer
-            than 3 frequencies; or ``adaptive_max_samples`` is below 2 or is given without ``adaptive_tolerance``.
+            prints them with; ``adaptive_tolerance`` is not finite and above zero; ``adaptive_max_samples`` or
+            ``full_solve`` is given without ``adaptive_tolerance``; an adaptive sweep has no more frequencies than
+            the full solves its model starts from, or a cap below them; or a ``full_solve`` frequency is less than
+            1 Hz above another frequency, which Palace keeps in its place and then stops.
     """
 
     ranges: Sequence[FrequencyRange]
@@ -192,18 +220,8 @@ class DrivenSweep:
         _check_adaptive_settings(where, self)
         frequencies = palace_frequencies_ghz(self.samples())
         _require_printed_apart(where, frequencies)
-        # Palace's reduced model starts from full solves at the lowest and the highest frequency, and Palace 0.18.1
-        # solves an adaptive sweep of no more frequencies than those in full, with only a warning
-        # (``DrivenSolver::Solve``, ``palace/drivers/drivensolver.cpp``), so its log would hold no adaptive sampling.
-        if self.adaptive and len(frequencies) < _ADAPTIVE_FREQUENCIES:
-            raise ValueError(
-                where.refusal(
-                    f"an adaptive sweep needs at least {_ADAPTIVE_FREQUENCIES} distinct frequencies, and the "
-                    f"ranges give {len(frequencies)}: Palace starts its reduced model from the lowest and the "
-                    "highest, and solves a sweep of no more in full. Add frequencies, or leave "
-                    "adaptive_tolerance out to solve them in full"
-                )
-            )
+        if self.adaptive:
+            _check_model_start(where, self, frequencies)
         object.__setattr__(self, "frequency_count", len(frequencies))
 
     @property
@@ -291,7 +309,18 @@ def _checked_ranges(where: Declared, ranges: object) -> tuple[FrequencyRange, ..
 
 
 def _check_adaptive_settings(where: Declared, sweep: DrivenSweep) -> None:
-    """Refuse a tolerance that is not above 0 or a cap without a tolerance, then hold the tolerance as a float."""
+    """Refuse a tolerance that is not above 0, or a cap or ``full_solve`` without a tolerance; hold it as a float."""
+    # Palace 0.18.1 ignores AddToPROM on a sweep that is not adaptive, with only a warning (``DrivenSolverData``).
+    if sweep.adaptive_tolerance is None and any(
+        item.full_solve for item in sweep.ranges
+    ):
+        raise ValueError(
+            where.refusal(
+                "full_solve applies only to an adaptive sweep, and no adaptive_tolerance turns one on: without "
+                "it Palace solves every frequency in full already. Give adaptive_tolerance too, or leave "
+                "full_solve out"
+            )
+        )
     if sweep.adaptive_tolerance is not None:
         tolerance = _sweep_number(where, "adaptive_tolerance", sweep.adaptive_tolerance)
         if tolerance <= 0.0:
@@ -313,16 +342,95 @@ def _check_adaptive_settings(where: Declared, sweep: DrivenSweep) -> None:
                 "adaptive_max_samples out"
             )
         )
-    # Palace's model starts from full solves at the lowest and highest frequency, and Palace 0.18.1 stops with
-    # an error when the cap is below those two (``SweepAdaptive``).
-    if _sweep_integer(where, "adaptive_max_samples", sweep.adaptive_max_samples) < 2:
+    _sweep_integer(where, "adaptive_max_samples", sweep.adaptive_max_samples)
+
+
+def _check_model_start(
+    where: Declared, sweep: DrivenSweep, frequencies_ghz: Sequence[float]
+) -> None:
+    """Refuse an adaptive sweep Palace 0.18.1 would solve in full, or stop on, before it builds its model.
+
+    Palace starts the model of each port from full solves at the lowest and the highest frequency and at each
+    ``full_solve`` one (``prom_indices``, ``DrivenSolverData`` in ``palace/utils/configfile.cpp``).  It solves a
+    sweep of no more frequencies than those in full, with only a warning (``DrivenSolver::Solve``), so its log
+    holds no adaptive sampling; on a cap below them it stops with an error (``SweepAdaptive``, both in
+    ``palace/drivers/drivensolver.cpp``).
+    """
+    full_solves = _full_solves_ghz(where, sweep, frequencies_ghz)
+    starting = _MODEL_ENDS + len(full_solves)
+    solves = "the lowest and the highest frequency"
+    if full_solves:
+        noun = "frequency" if len(full_solves) == 1 else "frequencies"
+        solves += f" and {len(full_solves)} full_solve {noun}"
+    if len(frequencies_ghz) <= starting:
+        also = " and full_solve" if full_solves else ""
+        raise ValueError(
+            where.refusal(
+                f"an adaptive sweep needs at least {starting + 1} distinct frequencies, and the ranges give "
+                f"{len(frequencies_ghz)}: Palace starts its reduced model from full solves at {solves}, and "
+                f"solves a sweep of no more in full. Add frequencies, or leave adaptive_tolerance{also} out to "
+                "solve them in full"
+            )
+        )
+    cap = sweep.adaptive_max_samples
+    if cap is None and starting > _PALACE_MAX_SAMPLES:
+        raise ValueError(
+            where.refusal(
+                f"the reduced model starts from {starting} full solves per port, at {solves}, and without "
+                f"adaptive_max_samples Palace caps them at {_PALACE_MAX_SAMPLES} and stops on a cap below "
+                f"them. Give adaptive_max_samples of at least {starting}, or fewer full_solve frequencies"
+            )
+        )
+    if cap is not None and cap < starting:
         raise ValueError(
             where.expected(
                 "adaptive_max_samples",
-                "at least 2, the solves at the lowest and highest frequency",
-                sweep.adaptive_max_samples,
+                f"at least {starting}, the solves at {solves}",
+                cap,
             )
         )
+
+
+def _full_solves_ghz(
+    where: Declared, sweep: DrivenSweep, frequencies_ghz: Sequence[float]
+) -> tuple[float, ...]:
+    """The ``full_solve`` frequencies Palace adds to the two its model starts from, in GHz.
+
+    As ``DrivenSolverData`` reads ``AddToPROM``: every marked range's frequencies, merged as all of them are
+    (``palace_frequencies_ghz``), less the lowest and the highest of the sweep.  Palace then looks for each one
+    among the frequencies it keeps by its exact value, and stops when one is not there: a ``full_solve`` frequency
+    less than 1 Hz above another, which Palace keeps in its place, is refused.
+    """
+    marked = palace_frequencies_ghz(
+        item.samples_entry() for item in sweep.ranges if item.full_solve
+    )
+    ends = (frequencies_ghz[0], frequencies_ghz[-1])
+    kept = set(frequencies_ghz)
+    full_solves = tuple(frequency for frequency in marked if frequency not in ends)
+    for frequency in full_solves:
+        if frequency not in kept:
+            below = frequencies_ghz[bisect_right(frequencies_ghz, frequency) - 1]
+            unit = printed_unit_ghz(frequency) * 1e9
+            raise ValueError(
+                where.refusal(
+                    f"the full_solve frequency {frequency!r} GHz is {(frequency - below) * 1e9:.2g} Hz above "
+                    f"{below!r} GHz, another frequency of the sweep as Palace computes it. Palace solves the "
+                    f"two as {below!r} GHz, then looks for the full solve at exactly {frequency!r} GHz and "
+                    f"stops: move the full_solve frequency more than {unit:.3g} Hz away from {below!r} GHz"
+                )
+            )
+    return full_solves
+
+
+def _check_full_solve(where: Declared, value: object) -> None:
+    """Refuse a ``full_solve`` that is not True or False."""
+    if not isinstance(value, bool):
+        raise TypeError(where.expected("full_solve", "True or False", value))
+
+
+def _with_full_solve(entry: dict[str, Any], full_solve: bool) -> dict[str, Any]:
+    """``entry`` with Palace's ``AddToPROM`` when its frequencies are full solves; Palace's default is false."""
+    return {**entry, "AddToPROM": True} if full_solve else entry
 
 
 def _require_printed_apart(where: Declared, frequencies_ghz: Sequence[float]) -> None:

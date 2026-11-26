@@ -94,17 +94,21 @@ class DrivenSim(PalaceSimulation):
         Without ``adaptive_tolerance`` Palace solves the field at every frequency, once per port.  With it,
         Palace's adaptive fast sweep solves a few frequencies per port and evaluates a reduced model built from
         them at every frequency, adding solves until the model agrees with them to that relative error;
-        ``adaptive_max_samples`` caps those solves per port (Palace's own cap when omitted).  Whether the
-        adaptive sweep converged is written only to Palace's log.  The values are checked (``DrivenSweep``)
-        before any is stored.
+        ``adaptive_max_samples`` caps those solves per port (Palace's own cap, 20, when omitted).  The model
+        starts from full solves at the lowest and the highest frequency; a range given ``full_solve=True``,
+        ``Points([7.3566e9], full_solve=True)`` say, adds full solves at each of its frequencies, which count
+        toward the cap.  Whether the adaptive sweep converged is written only to Palace's log.  The values are
+        checked (``DrivenSweep``) before any is stored.
 
         Raises:
             TypeError: ``frequencies`` is not a list of ranges, ``adaptive_tolerance`` is not a number, or
                 ``adaptive_max_samples`` is not an integer.
             ValueError: ``frequencies`` is empty; two of its frequencies are closer than the 9 significant digits
                 Palace prints them with, so they could not be read back apart; ``adaptive_tolerance`` is not
-                above 0; an adaptive sweep has fewer than 3 frequencies; or ``adaptive_max_samples`` is below 2
-                or is given without ``adaptive_tolerance``.
+                above 0; ``adaptive_max_samples`` or ``full_solve`` is given without ``adaptive_tolerance``; an
+                adaptive sweep has no more frequencies than the full solves its model starts from, or a cap below
+                them; or a ``full_solve`` frequency is less than 1 Hz above another frequency, which Palace keeps
+                in its place and then stops.
         """
         self.sweep = DrivenSweep(
             ranges=frequencies,

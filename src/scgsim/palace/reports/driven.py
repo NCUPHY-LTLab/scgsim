@@ -399,7 +399,15 @@ _LISTED_POINTS = 3
 
 
 def _range_text(item: FrequencyRange) -> str:
-    """One range of a sweep: ``4–9 GHz, 501 points``, ``0.1–10 GHz, 201 points, log-spaced`` or ``7.3, 7.32 GHz``."""
+    """One range of a sweep: ``4–9 GHz, 501 points``, ``0.1–10 GHz, 201 points, log-spaced`` or ``7.3, 7.32 GHz``.
+
+    A range of full solves ends in ``, full solve``: ``7.35665 GHz, full solve``.
+    """
+    return _range_frequencies_text(item) + (", full solve" if item.full_solve else "")
+
+
+def _range_frequencies_text(item: FrequencyRange) -> str:
+    """The frequencies of one range: ``4–9 GHz, 501 points``, ``..., log-spaced`` or ``7.3, 7.32 GHz``."""
     if isinstance(item, Points):
         values = [f / 1e9 for f in item.frequencies_hz]
         if len(values) <= _LISTED_POINTS:

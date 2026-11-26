@@ -185,6 +185,27 @@ def test_the_sweep_card_names_each_range_and_the_frequencies_they_merge_into(
     assert f">{card}</div>" in text
 
 
+def test_the_sweep_card_marks_the_ranges_of_full_solves(tmp_path):
+    """A range given ``full_solve=True`` ends in ``, full solve``, so the card says which frequencies were solved in full.
+
+    The sweep is set on the report of a real run, as above.
+    """
+    trust = resolved(UNIFORM_RUN, tmp_path).show_run_trustworthiness()
+    sweep = DrivenSweep(
+        ranges=[
+            Linear(4e9, 9e9, points=501),
+            Linear(7.30e9, 7.34e9, points=5, full_solve=True),
+            Points([7.3566e9], full_solve=True),
+        ],
+        adaptive_tolerance=1e-3,
+    )
+    card = (
+        "4–9 GHz, 501 points; 7.3–7.34 GHz, 5 points, full solve; "
+        "7.3566 GHz, full solve; 502 frequencies"
+    )
+    assert f">{card}</div>" in replace(trust, sweep=sweep).convergence_html()
+
+
 def test_the_full_record_is_behind_show_details(tmp_path):
     """``show_details`` adds the receipt, Palace's tag and the handoff, then the provenance."""
     trust = resolved(ADAPTIVE_RUN, tmp_path).show_run_trustworthiness(show_details=True)

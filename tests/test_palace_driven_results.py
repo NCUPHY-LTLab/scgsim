@@ -421,7 +421,13 @@ def test_the_sweep_and_the_provenance_name_the_request_and_the_files(tmp_path, r
     assert dict(result.sweep) == {
         "sampling": "adaptive" if adaptive else "uniform",
         "ranges": [
-            {"kind": "linear", "start_hz": 2e9, "stop_hz": 10e9, "points": POINTS[run]}
+            {
+                "kind": "linear",
+                "start_hz": 2e9,
+                "stop_hz": 10e9,
+                "points": POINTS[run],
+                "full_solve": False,
+            }
         ],
         "frequency_count": POINTS[run],
         "adaptive_tolerance": 1e-3 if adaptive else None,
@@ -587,6 +593,36 @@ def test_a_list_of_sampled_frequencies_palace_wraps_is_read_whole(tmp_path):
     assert sampling.samples == 5
     assert sampling.sampled_frequencies_hz == pytest.approx(
         (2.0e9, 10.0e9, 5.103e9, 7.899e9, 3.115e9), rel=1e-12
+    )
+
+
+def test_a_sweep_with_a_full_solve_reads_back_with_the_samples_palace_logged(tmp_path):
+    """A ``Point`` entry with ``AddToPROM`` reads back as a range of full solves, and the log's samples as before.
+
+    6 GHz is a frequency of the 81-point sweep, so the rows are unchanged.  Palace solves a full-solve frequency
+    right after the two ends, so it is the third sample in the log, as in the hanger resonator's run (issue 307).
+    """
+    root = copied_run(ADAPTIVE_RUN, tmp_path)
+    full_solve = {"Type": "Point", "Freq": [6.0], "AddToPROM": True}
+    _rewrite_config(
+        root, lambda config: config["Solver"]["Driven"]["Samples"].append(full_solve)
+    )
+    _rewrite_log(
+        root,
+        _first(
+            " Sampled frequencies (GHz): 2.000e+00, 1.000e+01, 6.142e+00, 3.744e+00",
+            " Sampled frequencies (GHz): 2.000e+00, 1.000e+01, 6.000e+00, 3.744e+00",
+        ),
+    )
+    result = fixture_result(root).driven_result()
+    assert result.sweep["ranges"][1] == {
+        "kind": "points",
+        "frequencies_hz": [6e9],
+        "full_solve": True,
+    }
+    assert result.sweep["frequency_count"] == len(result.frequencies_hz) == 81
+    assert result.adaptive_sampling[0].sampled_frequencies_hz == pytest.approx(
+        (2e9, 10e9, 6e9, 3.744e9), rel=1e-12
     )
 
 

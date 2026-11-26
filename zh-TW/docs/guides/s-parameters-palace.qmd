@@ -262,6 +262,10 @@ SA::D0_SUBSTRATE|VACUUM_REGION__interface p = 1.558e-04
 ## 可以調整的設定 {#settings-you-may-change}
 
 - **在每個頻率都完整求解。** 不給 `adaptive_tolerance`，Palace 就會對每個埠、在每個頻率各求解一次。這次掃描需要 162 次求解，在這個晶片上以二階元素每次約 37 秒；適合只看少數幾個頻率，或在其中幾個頻率檢查自適應掃頻。在這個晶片上以一階元素計算時，自適應掃頻在 2、4、6、8、10 GHz 與完整求解相比，arg S21 相差在 3 × 10⁻⁵° 以內，|S11| 相差在 2 × 10⁻⁴ dB 以內。
+
+  ::: {.callout-note title="高 Q 共振與完整求解"}
+  在高 Q 共振處完整求解，需要比預設 10⁻⁶ 更嚴格的線性求解容許誤差：`set_numerical(tolerance=1e-9)`。在一個 Q ≈ 11,000 的 hanger 型共振器上，以預設值完整求解時，共振處的 S21 偏差 4.5 × 10⁻³，擬合出的 Q 偏差 0.8 %。改用 10⁻⁹ 後，結果與自適應掃頻相差在 2.4 × 10⁻⁶ 以內，每次求解約多花 36 % 的時間。自適應掃頻在預設值下就準確，所以預設值維持 10⁻⁶。
+  :::
 - **自適應掃頻的上限。** `adaptive_max_samples` 限制每個埠的求解次數；不給時套用 Palace 自己的上限 20。若某個埠在模型達到容許誤差之前就用完上限，Palace 的記錄檔會記下這件事，`driven_result()` 會拒絕這次計算並指出是哪個埠：請以較大的上限重新執行。
 - **更多埠，或其他元件。** 版圖有幾片薄片，就可以給幾個 `LumpedPort`；第 i 個就是埠 i，每個埠都會輪流被驅動。`write_touchstone` 要求所有埠使用同一個阻抗，因為 Touchstone 1.1 只有一個參考阻抗。計畫中與埠並列的 `LumpedElement`（例如接面的電感）會以它的 R、L、C 當作負載求解，但從不被驅動；S 矩陣只包含各埠，所以一個埠加一個元件會得到單埠結果與 `.s1p` 檔（[集總元件](../reference/specs/geometry-plan.qmd#lumped-elements)）。
 - **網格細化。** 除非開啟細化 `set_numerical(amr_max_passes=..., amr_tolerance=..., amr_update_fraction=...)`，Palace 都在 `mesh()` 寫出的網格上求解。每個細化回合都會重新求解整個掃描，每個埠、每個頻率都算一次，所以請在只有幾個點的短掃描上細化。Driven 計算目前還不接受收斂宣告：`set_convergence` 會拒絕，細化回合在 `amr_max_passes` 或 Palace 的 `amr_tolerance` 處停止。
@@ -286,3 +290,18 @@ sim.set_driven(
 這樣共有 4,497 個頻率：頻段在 7.30 到 7.34 GHz 之間的五個點，也是窄頻段的點，各只求解一次。`Log(start, stop, points=...)` 在對數尺度上等間距取點，適合跨好幾個數量級的頻段；`Points([...])` 則列出指定的頻率。三者都從 `scgsim.palace` 匯入，可以混在同一個清單裡。兩個頻率若近到 Palace 印出的位數分不開（1 到 10 GHz 之間是 10 Hz），會被拒絕；自適應掃頻至少需要三個頻率。
 
 這種掃描的成本，就是你列出的頻率。不論範圍怎麼給，自適應掃頻的模型都涵蓋最低到最高的頻率，所以密集的窄頻段不會改變模型的建法。之後 Palace 在每個列出的頻率上都花固定的時間：在本頁的晶片上，以二階元素、8 個行程計算，每個頻率、每個埠約 0.17 秒。窄頻段能把這部分壓低，均勻的網格做不到：若整個頻段都以 10 kHz 為間距，就有 500,001 個頻率。
+
+給某個範圍 `full_solve=True`，它的每個頻率都會對每個埠完整求解一次，然後自適應掃頻才挑選自己要加的求解，模型也由這些解一起建立。[以 Palace 計算共振模態](modes-palace.qmd)找到的共振頻率，就是這樣的一個頻率：
+
+```python
+sim.set_driven(
+    [
+        Linear(4e9, 9e9, points=501),
+        Linear(7.30e9, 7.34e9, points=4001),
+        Points([7.3566e9], full_solve=True),  # solved in full
+    ],
+    adaptive_tolerance=1e-3,
+)
+```
+
+`full_solve` 可用於 `Linear`、`Log` 與 `Points`，但只在自適應掃頻中有作用：不給 `adaptive_tolerance` 時，每個頻率本來就會完整求解，`set_driven` 會拒絕它。這些完整求解與最低、最高頻率的兩次求解一起計入 `adaptive_max_samples`（不給時是 Palace 的上限 20），上限低於它們就會被拒絕。完整求解的頻率若比另一個範圍的某個頻率高不到 1 Hz，也會被拒絕，因為 Palace 只保留兩者中較低的那個，之後就找不到這個完整求解：請把它移開 10 Hz 以上。在一個 Q ≈ 11,000 的 hanger 型共振器上，在共振頻率加一個完整求解，讓 Palace 建立模型的時間從 1,190 秒縮短為 921 秒，S21 與不加時的掃頻相差在 1.4 × 10⁻⁵ 以內。

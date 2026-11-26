@@ -180,20 +180,23 @@ def _requested_range(entry: object) -> FrequencyRange:
     """One ``Samples`` entry as the range it was written from, in Hz; an entry ``DrivenSim`` never writes is refused."""
     sample = entry if isinstance(entry, dict) else {}
     kind = sample.get("Type")
+    # Palace reads a missing AddToPROM as false; the range refuses one that is not a bool.
+    full_solve = sample.get("AddToPROM", False)
     if kind == "Point":
         values = expect_list(sample.get("Freq"), "Samples Freq")
         return Points(
             [
                 checked_number(value, "Samples Freq", positive=True) * 1e9
                 for value in values
-            ]
+            ],
+            full_solve=full_solve,
         )
     if kind in {"Linear", "Log"}:
         low = checked_number(sample.get("MinFreq"), "Samples MinFreq", positive=True)
         high = checked_number(sample.get("MaxFreq"), "Samples MaxFreq", positive=True)
         count = expect_int(sample.get("NSample"), "Samples NSample")
         band = Linear if kind == "Linear" else Log
-        return band(low * 1e9, high * 1e9, count)
+        return band(low * 1e9, high * 1e9, count, full_solve=full_solve)
     raise ValueError(
         Declared(f"{CONFIG} Solver.Driven.Samples", RETURNED_RUN_FOLDER).refusal(
             "must hold only the Linear, Log and Point entries DrivenSim writes: "

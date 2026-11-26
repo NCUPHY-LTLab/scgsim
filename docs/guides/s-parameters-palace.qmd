@@ -355,6 +355,16 @@ participation, so SCGSim derives no Q or T1 from it. A film's
   frequencies, or to check the adaptive sweep at some of them. On this chip
   at first order, the adaptive sweep agreed with the full solves at 2, 4, 6,
   8 and 10 GHz to 3 × 10⁻⁵° in arg S21 and 2 × 10⁻⁴ dB in |S11|.
+
+  ::: {.callout-note title="High-Q resonances and full solves"}
+  Full solves through a high-Q resonance need a tighter linear-solver
+  tolerance than the default 10⁻⁶: `set_numerical(tolerance=1e-9)`. On a
+  hanger resonator with Q ≈ 11,000, full solves at the default put S21 at
+  the resonance off by 4.5 × 10⁻³ and the fitted Q off by 0.8 %. At 10⁻⁹
+  they agreed with the adaptive sweep to 2.4 × 10⁻⁶, and each solve took
+  about 36 % longer. The adaptive sweep is accurate at the default, so the
+  default stays 10⁻⁶.
+  :::
 - **The adaptive sweep's limit.** `adaptive_max_samples` caps the solves per
   port; without it Palace's own cap of 20 applies. When a port reaches the
   cap before the model agrees to the tolerance, Palace's log says so and
@@ -419,3 +429,31 @@ fixed time at every listed frequency, about 0.17 s per frequency and port
 on this guide's chip at second order with 8 processes. A window keeps that
 small where a uniform grid cannot: 10 kHz apart across the whole band
 would be 500,001 frequencies.
+
+A range given `full_solve=True` is solved in full at each of its
+frequencies, once per port, before the adaptive sweep chooses solves of its
+own, and its model is built from those solves too. A resonance found with
+[Resonant modes with Palace](modes-palace.qmd) is one such frequency:
+
+```python
+sim.set_driven(
+    [
+        Linear(4e9, 9e9, points=501),
+        Linear(7.30e9, 7.34e9, points=4001),
+        Points([7.3566e9], full_solve=True),  # solved in full
+    ],
+    adaptive_tolerance=1e-3,
+)
+```
+
+`full_solve` works on `Linear`, `Log` and `Points`, and only in an adaptive
+sweep: without `adaptive_tolerance` every frequency is solved in full
+already, and `set_driven` refuses it. The full solves count toward
+`adaptive_max_samples`, or Palace's cap of 20, together with the two at the
+lowest and the highest frequency, so a cap below them is refused. A
+full-solve frequency less than 1 Hz above a frequency of another range is
+refused too, because Palace keeps the lower of the two and then cannot find
+the full solve: move it more than 10 Hz away. On a hanger resonator with
+Q ≈ 11,000, one full solve at its resonance cut the time Palace spent
+building the model from 1,190 s to 921 s, and S21 agreed with the sweep
+without it to 1.4 × 10⁻⁵.

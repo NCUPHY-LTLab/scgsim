@@ -31,7 +31,7 @@ from scgsim.palace import (
     Log,
     Points,
 )
-from scgsim.palace.config.driven_sweep import palace_frequencies_ghz
+from scgsim.palace.config.driven_sweep import DrivenSweep, palace_frequencies_ghz
 from scgsim.palace.config.numerical import NumericalControls
 from scgsim.palace.results.driven_tables import (
     requested_frequencies_ghz,
@@ -201,11 +201,54 @@ BAND_AND_WINDOW = [Linear(4e9, 9e9, points=501), Linear(7.30e9, 7.34e9, points=4
                 "AdaptiveTol": 1e-3,
             },
         ),
+        (
+            {
+                "frequencies": [
+                    Linear(4e9, 9e9, points=501),
+                    Linear(7.30e9, 7.34e9, points=5, full_solve=True),
+                    Log(5.005e9, 8.005e9, points=3, full_solve=True),
+                    Points([7.3566e9], full_solve=True),
+                ],
+                "adaptive_tolerance": 1e-3,
+            },
+            {
+                "Samples": [
+                    {"Type": "Linear", "MinFreq": 4.0, "MaxFreq": 9.0, "NSample": 501},
+                    {
+                        "Type": "Linear",
+                        "MinFreq": 7.3,
+                        "MaxFreq": 7.34,
+                        "NSample": 5,
+                        "AddToPROM": True,
+                    },
+                    {
+                        "Type": "Log",
+                        "MinFreq": 5.005,
+                        "MaxFreq": 8.005,
+                        "NSample": 3,
+                        "AddToPROM": True,
+                    },
+                    {"Type": "Point", "Freq": [7.3566], "AddToPROM": True},
+                ],
+                "AdaptiveTol": 1e-3,
+            },
+        ),
     ],
-    ids=["uniform", "adaptive", "adaptive-capped", "log", "one-point", "mixed"],
+    ids=[
+        "uniform",
+        "adaptive",
+        "adaptive-capped",
+        "log",
+        "one-point",
+        "mixed",
+        "full-solves",
+    ],
 )
 def test_each_range_is_one_samples_entry_in_ghz(monkeypatch, tmp_path, sweep, block):
-    """Each range in Hz is one ``Solver.Driven.Samples`` entry in GHz, in the order given; uniform has no ``AdaptiveTol``."""
+    """Each range in Hz is one ``Solver.Driven.Samples`` entry in GHz, in the order given; uniform has no ``AdaptiveTol``.
+
+    A range of full solves adds ``AddToPROM``; the others leave it to Palace's default, false.
+    """
     sim = meshed(monkeypatch, tmp_path, driven_plan(monkeypatch))
     assert written_config(sim, **sweep)["Solver"]["Driven"] == block
 
@@ -215,7 +258,11 @@ def test_the_written_config_reads_back_as_the_sweep_set(monkeypatch, tmp_path):
     sim = meshed(monkeypatch, tmp_path, driven_plan(monkeypatch))
     config = written_config(
         sim,
-        frequencies=[*BAND_AND_WINDOW, Points([2.25e9]), Log(1e9, 1e10, points=11)],
+        frequencies=[
+            *BAND_AND_WINDOW,
+            Points([2.25e9], full_solve=True),
+            Log(1e9, 1e10, points=11),
+        ],
         adaptive_tolerance=1e-3,
         adaptive_max_samples=30,
     )
@@ -262,6 +309,39 @@ def test_the_ranges_merge_sorted_and_each_shared_frequency_once():
     assert len(around) == 4001 + 2
     assert around[:3] == pytest.approx([7.29, 7.30, 7.30001], rel=1e-15)
     assert around[-2:] == pytest.approx([7.34, 7.35], rel=1e-15)
+
+
+def test_full_solve_frequencies_merge_with_their_neighbours_as_palace_reads_them():
+    """A full solve on another range's frequency is that frequency once; one Palace would lose is refused.
+
+    Palace merges every frequency and, apart, the full-solve ones, then looks for each full solve among the
+    merged by its exact value.  Of two within 1 Hz it keeps the lower, so a full solve just below a frequency
+    of the band replaces it, and one just above is lost and Palace stops; the band's own arithmetic puts
+    4.44 GHz at 4.4399999999999995 GHz, 8.9e-7 Hz below.  The lowest and the highest frequency are solved in
+    full anyway, so a full solve there adds none: the cap counts it only inside the band.
+    """
+    band = Linear(4e9, 9e9, points=501)
+    grid = palace_frequencies_ghz([band.samples_entry()])
+    assert grid[45] == 4.45 and grid[44] == 4.4399999999999995
+
+    def sweep(full_solve_hz, **options):
+        ranges = [band, Points([full_solve_hz], full_solve=True)]
+        return DrivenSweep(ranges=ranges, adaptive_tolerance=1e-3, **options)
+
+    # On the band's 4.45 GHz, or less than 1 Hz below it: 501 frequencies, one of them a full solve.
+    assert sweep(4.45e9).frequency_count == 501
+    assert sweep(4.45e9 - 0.5).frequency_count == 501
+    with pytest.raises(ValueError, match="adaptive_max_samples must be at least 3"):
+        sweep(4.45e9, adaptive_max_samples=2)
+    # At the band's ends it is one of the two solves every adaptive sweep starts from.
+    assert sweep(4e9, adaptive_max_samples=2).frequency_count == 501
+    assert sweep(9e9, adaptive_max_samples=2).frequency_count == 501
+    for above, below in ((4.45e9 + 0.5, "4.45"), (4.44e9, "4.4399999999999995")):
+        with pytest.raises(
+            ValueError,
+            match=rf"Palace solves the two as {below} GHz, then looks for the full solve",
+        ):
+            sweep(above)
 
 
 def test_frequencies_within_1_hz_of_the_last_kept_are_one():
@@ -509,6 +589,65 @@ def test_a_plan_without_a_port_is_refused_by_every_call_that_prepares_it(
             "adaptive_max_samples must be at least 2",
             id="cap 1",
         ),
+        pytest.param(
+            lambda: {
+                "frequencies": [
+                    Linear(4e9, 9e9, points=501),
+                    Points([7.3566e9], full_solve=True),
+                ]
+            },
+            ValueError,
+            "full_solve applies only to an adaptive sweep",
+            id="full solve without tolerance",
+        ),
+        pytest.param(
+            lambda: {"frequencies": [Linear(4e9, 8e9, points=5, full_solve=True)]},
+            ValueError,
+            "full_solve applies only to an adaptive sweep",
+            id="full solves without tolerance",
+        ),
+        pytest.param(
+            lambda: {"frequencies": [Points([1e9], full_solve=1)]},
+            TypeError,
+            "the Points range: full_solve must be True or False, not 1",
+            id="full_solve not a bool",
+        ),
+        pytest.param(
+            lambda: {
+                "frequencies": [Points([4e9, 5e9, 6e9], full_solve=True)],
+                "adaptive_tolerance": 1e-3,
+            },
+            ValueError,
+            "an adaptive sweep needs at least 4 distinct frequencies, and the ranges give 3: Palace starts "
+            "its reduced model from full solves at the lowest and the highest frequency and 1 full_solve",
+            id="adaptive with every frequency a full solve",
+        ),
+        pytest.param(
+            lambda: {
+                "frequencies": [
+                    Linear(4e9, 9e9, points=501),
+                    Points([5.5e9, 7.3566e9], full_solve=True),
+                ],
+                "adaptive_tolerance": 1e-3,
+                "adaptive_max_samples": 3,
+            },
+            ValueError,
+            "adaptive_max_samples must be at least 4, the solves at the lowest and the highest frequency "
+            "and 2 full_solve frequencies, not 3",
+            id="cap below the full solves",
+        ),
+        pytest.param(
+            lambda: {
+                "frequencies": [
+                    Linear(4e9, 9e9, points=501),
+                    Linear(5e9, 5.18e9, points=19, full_solve=True),
+                ],
+                "adaptive_tolerance": 1e-3,
+            },
+            ValueError,
+            "starts from 21 full solves per port.* without adaptive_max_samples Palace caps them at 20",
+            id="Palace's own cap below the full solves",
+        ),
     ],
 )
 def test_set_driven_refuses_a_sweep_palace_cannot_sample(sweep, error, match):
@@ -578,17 +717,39 @@ def test_input_summary_shows_the_sweep_and_the_port(monkeypatch):
     sim.set_plan(driven_plan(monkeypatch).prepare())
     assert sim.input_summary().data["backend"]["sweep"] is None
     sim.set_driven(
-        [*BAND_AND_WINDOW, Points([2.25e9]), Log(1e9, 1e10, points=11)],
+        [
+            *BAND_AND_WINDOW,
+            Points([2.25e9], full_solve=True),
+            Log(1e9, 1e10, points=11),
+        ],
         adaptive_tolerance=1e-3,
     )
     backend = sim.input_summary().data["backend"]
     assert backend["sweep"] == {
         "sampling": "adaptive",
         "ranges": [
-            {"kind": "linear", "start_hz": 4e9, "stop_hz": 9e9, "points": 501},
-            {"kind": "linear", "start_hz": 7.30e9, "stop_hz": 7.34e9, "points": 4001},
-            {"kind": "points", "frequencies_hz": [2.25e9]},
-            {"kind": "log", "start_hz": 1e9, "stop_hz": 1e10, "points": 11},
+            {
+                "kind": "linear",
+                "start_hz": 4e9,
+                "stop_hz": 9e9,
+                "points": 501,
+                "full_solve": False,
+            },
+            {
+                "kind": "linear",
+                "start_hz": 7.30e9,
+                "stop_hz": 7.34e9,
+                "points": 4001,
+                "full_solve": False,
+            },
+            {"kind": "points", "frequencies_hz": [2.25e9], "full_solve": True},
+            {
+                "kind": "log",
+                "start_hz": 1e9,
+                "stop_hz": 1e10,
+                "points": 11,
+                "full_solve": False,
+            },
         ],
         "frequency_count": 4509,
         "adaptive_tolerance": 1e-3,
