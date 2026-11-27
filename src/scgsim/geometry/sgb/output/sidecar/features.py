@@ -8,6 +8,10 @@ and leaves every size to the mesher.  Each feature names a ``kind``, its ``sourc
 * ``film_sidewall`` -- every edge of the sidewall faces of a finite body (``source`` = the entity id; facts
   ``thickness_um``).  A body is a conductor, in Route B too where its volume is not emitted, or a dielectric
   that does not reach the model boundary; vacuum and the walls on the model boundary are not films;
+* ``sheet_outline`` -- the outline edges of a Route A conductor sheet (``source`` = the entity id; facts
+  ``thickness_um``, the declared normal thickness of the film the sheet stands for).  A sheet has no walls,
+  so this is where its film's edge is: the edges of its faces that lie inside no metal and on no wall of the
+  model boundary, where Route B emits the film's walls;
 * ``band_boundary`` -- the edges of an inset family (``source`` = the band family; facts ``margins_um`` and
   ``narrowest_band_um``);
 * ``arc`` -- the circular-arc edges of one radius (``source`` = the entity that owns them, or ``None``; facts
@@ -51,6 +55,7 @@ from scgsim.refusal import internal
 
 FEATURE_KINDS = (
     "film_sidewall",
+    "sheet_outline",
     "band_boundary",
     "arc",
     "port_edge",
@@ -70,6 +75,7 @@ def mesh_features(
     tag_of = {edge_id: tag for tag, edge_id in enumerate(plan.edge_ids, start=1)}
     stated: list[_Stated] = [
         *_film_sidewalls(model, plan),
+        *_sheet_outlines(model, plan),
         *_family_features(model, plan, lineage),
         *_arcs(model, plan, lineage),
         *_port_edges(model.topology, ports),
@@ -174,6 +180,59 @@ def _edges_at(topology: Topology, wall: TopoFace, z: Fraction) -> Iterator[str]:
             edge = topology.edges[edge_id]
             if edge.kind == "horizontal" and topology.vertices[edge.v0].z == z:
                 yield edge_id
+
+
+# --------------------------------------------------------------------------- sheet outlines
+
+
+def _sheet_outlines(model: ConformalModel, plan: BrepPlan) -> Iterator[_Stated]:
+    """One feature per conductor sheet: its outline edges, with the thickness of the film it stands for.
+
+    An edge of a sheet face is on the outline when no other sheet face carries it and no wall of the model
+    boundary does.  The other edges are not edges of the film, and Route B emits no wall there: an edge
+    between two sheet faces (two cells of one sheet, or two touching sheets of one Net) lies inside the metal,
+    and a sheet that reaches the side of the model ends there.
+    """
+    topology = model.topology
+    sheets_of_edge: dict[str, list[str]] = defaultdict(list)
+    on_boundary: set[str] = set()
+    for face_id in plan.face_ids:
+        face = topology.faces[face_id]
+        edge_ids = {edge_id for loop in face.loops for edge_id, _ in loop}
+        if face.kind == "wall" and (face.neg_domain is None or face.pos_domain is None):
+            on_boundary |= edge_ids
+        if face.owner is not None and face.owner.kind == "conductor":
+            for edge_id in edge_ids:
+                sheets_of_edge[edge_id].append(face.owner.name)
+    outline_of_sheet: dict[str, set[str]] = defaultdict(set)
+    for edge_id, sheets in sheets_of_edge.items():
+        if len(sheets) == 1 and edge_id not in on_boundary:
+            outline_of_sheet[sheets[0]].add(edge_id)
+    thickness_of = _film_thicknesses(model)
+    for entity, edge_ids in sorted(outline_of_sheet.items()):
+        yield "sheet_outline", entity, edge_ids, {"thickness_um": thickness_of[entity]}
+
+
+def _film_thicknesses(model: ConformalModel) -> dict[str, float]:
+    """The film thickness of each conductor sheet, by entity: the one value its sheet prisms carry.
+
+    Every conductor sheet prism carries one (``PrismRecord`` refuses one without), so every sheet face's owner
+    is here.
+    """
+    found: dict[str, set[float]] = defaultdict(set)
+    for prism in model.labelled.catalogue.prisms:
+        if prism.film_thickness_um is not None:
+            found[prism.entity_id].add(rounded(prism.film_thickness_um))
+    out: dict[str, float] = {}
+    for entity, thicknesses in sorted(found.items()):
+        if len(thicknesses) != 1:
+            raise SgbError(
+                internal(
+                    f"the sheets of {entity!r} state film thicknesses {sorted(thicknesses)}"
+                )
+            )
+        (out[entity],) = thicknesses
+    return out
 
 
 # --------------------------------------------------------------------------- cut families

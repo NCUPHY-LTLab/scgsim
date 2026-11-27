@@ -28,6 +28,7 @@ from scgsim.palace.results.artifacts import (
     expect_list,
     expect_mapping,
     expect_scalar,
+    optional_dict,
 )
 from scgsim.palace.results.driven_tables import validate_driven_table
 from scgsim.palace.results.resolved_records import ParsedTable
@@ -94,12 +95,27 @@ def snapshot_problem(name: object, subject: str) -> PalaceProblem:
     return problem
 
 
-def output_families(problem: str, index_counts: dict[str, int]) -> tuple[str, ...]:
-    """The native result families of ``problem`` for the lumped ports and surfaces the index map lists."""
+def output_families(
+    problem: str, config: Mapping[str, Any], index_counts: dict[str, int]
+) -> tuple[str, ...]:
+    """The native result families of ``problem``: its port tables by the ports' circuits, ``surface-Q`` by the index map."""
     return palace_problem(problem).written_families(
-        lumped_ports=bool(index_counts["lumped_port"]),
+        lumped_ports=lumped_ports(config),
         surfaces=bool(index_counts["surface"]),
     )
+
+
+def lumped_ports(config: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """The ``Boundaries.LumpedPort`` rows of a sealed config, whose R and L decide which port tables Palace writes."""
+    boundaries = optional_dict(config.get("Boundaries")) or {}
+    return [
+        expect_mapping(port, "config.Boundaries.LumpedPort row")
+        for port in expect_list(
+            boundaries.get("LumpedPort", []),
+            "config.Boundaries.LumpedPort",
+            allow_empty=True,
+        )
+    ]
 
 
 def validate_table(
@@ -238,54 +254,45 @@ def _validate_eig_table(table: ParsedTable, expected_modes: int) -> None:
 
 
 def _validate_port_table(
-    table: ParsedTable, port_count: int, expected_modes: int, *, kind: str
+    table: ParsedTable, columns: tuple[int, ...], expected_modes: int
 ) -> None:
-    """Validate indexed port participation or complex current/voltage columns by mode."""
-    if kind == "EPR":
-        if port_count == 0:
-            raise ValueError(
-                Declared(f"{table.path}", RETURNED_RUN_FOLDER).refusal(
-                    "requires at least one lumped port"
-                )
+    """Validate a port table by mode: one column group per port with a column in it, headed by its ``Index``.
+
+    ``port-EPR`` has a participation ``p[n]``, ``port-Q`` a coupling Q and rate, ``Q_ext[n]`` and
+    ``κ_ext[n] (GHz)``, and ``port-I`` and ``port-V`` the real and imaginary part of the port current and voltage.
+    """
+    if not columns:
+        raise ValueError(
+            Declared(f"{table.path}", RETURNED_RUN_FOLDER).refusal(
+                f"is present, but no lumped port of the config has a column in {table.name}"
             )
-        expected = 1 + port_count
-        if len(table.headers) != expected:
-            raise ValueError(
-                Declared(f"{table.path}", RETURNED_RUN_FOLDER).refusal(
-                    f"has {len(table.headers)} columns; expected {expected}"
-                )
+        )
+    expected_headers = (
+        "m",
+        *(
+            header.format(n=n)
+            for n in columns
+            for header in _PORT_COLUMN_HEADERS[table.name]
+        ),
+    )
+    if len(table.headers) != len(expected_headers):
+        raise ValueError(
+            Declared(f"{table.path}", RETURNED_RUN_FOLDER).refusal(
+                f"has {len(table.headers)} columns; expected {len(expected_headers)}"
             )
-        expected_headers = ("m", *(f"p[{idx}]" for idx in range(1, port_count + 1)))
-        if table.headers != expected_headers:
-            raise ValueError(
-                Declared(f"{table.path} port-EPR headers", RETURNED_RUN_FOLDER).refusal(
-                    "are malformed"
-                )
+        )
+    if table.headers != expected_headers:
+        raise ValueError(
+            Declared(f"{table.path} {table.name} headers", RETURNED_RUN_FOLDER).refusal(
+                "are malformed"
             )
-        _validate_port_rows(table, expected)
-    elif kind in {"I", "V"}:
-        expected = 1 + 2 * port_count
-        if len(table.headers) != expected:
-            raise ValueError(
-                Declared(f"{table.path}", RETURNED_RUN_FOLDER).refusal(
-                    f"has {len(table.headers)} columns; expected {expected}"
-                )
-            )
-        unit = "A" if kind == "I" else "V"
-        expected_headers = ["m"]
-        for port in range(1, port_count + 1):
-            expected_headers.extend(
-                (f"Re{{{kind}[{port}]}} ({unit})", f"Im{{{kind}[{port}]}} ({unit})")
-            )
-        if table.headers != tuple(expected_headers):
-            raise ValueError(
-                Declared(
-                    f"{table.path} port-{kind} headers", RETURNED_RUN_FOLDER
-                ).refusal("are malformed")
-            )
-        _validate_port_rows(table, expected)
+        )
+    if table.name == "port-Q":
+        for row in table.rows:
+            _require_coupling_q_data(row)
     else:
-        raise ValueError(internal(f"unsupported port table kind {kind!r}"))
+        for row in table.rows:
+            require_finite_data(row)
     if len(table.rows) != expected_modes:
         raise ValueError(
             Declared(f"{table.path}", RETURNED_RUN_FOLDER).refusal(
@@ -293,6 +300,15 @@ def _validate_port_table(
             )
         )
     require_ordered_index(table, "m", expected_modes)
+
+
+# The header of each column port n has in a port table, as Palace 0.18.1 writes it.
+_PORT_COLUMN_HEADERS = {
+    "port-EPR": ("p[{n}]",),
+    "port-Q": ("Q_ext[{n}]", "κ_ext[{n}] (GHz)"),
+    "port-I": ("Re{{I[{n}]}} (A)", "Im{{I[{n}]}} (A)"),
+    "port-V": ("Re{{V[{n}]}} (V)", "Im{{V[{n}]}} (V)"),
+}
 
 
 def _validate_domain_table(
@@ -442,7 +458,7 @@ def read_csv_table(path: Path) -> ParsedTable:
 
 # Palace writes one row per converged eigenpair in these tables, in mode order.
 _MODE_FAMILIES = frozenset(
-    {"eig", "port-EPR", "port-I", "port-V", "domain-E", "surface-Q"}
+    {"eig", "port-EPR", "port-Q", "port-I", "port-V", "domain-E", "surface-Q"}
 )
 
 
@@ -527,6 +543,27 @@ def _parse_cell(value: str) -> Any:
         return value
 
 
+def _require_coupling_q_data(row: Mapping[str, Any]) -> None:
+    """Permit a coupling Q of +inf, for a mode a port does not load (its κ is 0); every Q must be positive.
+
+    Palace writes Q_ext = Re f / |κ_ext|, so a Q at or below zero is not one it wrote.
+    """
+    require_finite_data(
+        {
+            key: value
+            for key, value in row.items()
+            if not (key.startswith("Q_ext[") and value == math.inf)
+        }
+    )
+    for key, value in row.items():
+        if key.startswith("Q_ext[") and value <= 0:
+            raise ValueError(
+                Declared(f"coupling Q in column {key!r}", RETURNED_RUN_FOLDER).refusal(
+                    f"must be positive; got {value!r}"
+                )
+            )
+
+
 def eigenmode_count(config: dict[str, Any]) -> int:
     """Read the positive requested mode count from the sealed Eigenmode solver config."""
     solver = expect_mapping(config.get("Solver"), "config.Solver")
@@ -571,17 +608,11 @@ def _validate_eigenmode_table(
     expected_rows = eigenmode_count(config)
     if table.name == "eig":
         _validate_eig_table(table, expected_rows)
-    elif table.name == "port-EPR":
+    elif table.name in _PORT_COLUMN_HEADERS:
         _validate_port_table(
-            table, index_counts["lumped_port"], expected_rows, kind="EPR"
-        )
-    elif table.name == "port-I":
-        _validate_port_table(
-            table, index_counts["lumped_port"], expected_rows, kind="I"
-        )
-    elif table.name == "port-V":
-        _validate_port_table(
-            table, index_counts["lumped_port"], expected_rows, kind="V"
+            table,
+            EIGENMODE.port_columns(table.name, lumped_ports(config)),
+            expected_rows,
         )
     elif table.name == "domain-E":
         _validate_domain_table(table, index_counts["domain"], expected_rows)

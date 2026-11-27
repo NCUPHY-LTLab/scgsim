@@ -12,10 +12,12 @@ from scgsim.palace import inspect_run_trustworthiness
 from scgsim.palace.results.snapshots import collect_amr_passes
 from scgsim.palace.results.tables import configured_mode_count, read_result_table
 
-# One lumped port, one energy domain and one Dielectric row, as Palace heads each table.
+# One lumped port with an inductance and a resistance, one energy domain and one Dielectric row, as Palace heads
+# each table.
 _HEADERS = {
     "eig": "m,Re{f} (GHz),Im{f} (GHz),Q,Error (Bkwd.),Error (Abs.)",
     "port-EPR": "m,p[1]",
+    "port-Q": "m,Q_ext[1],κ_ext[1] (GHz)",
     "port-I": "m,Re{I[1]} (A),Im{I[1]} (A)",
     "port-V": "m,Re{V[1]} (V),Im{V[1]} (V)",
     "domain-E": (
@@ -29,7 +31,10 @@ _FAMILIES = sorted(_HEADERS)
 
 
 def _config(modes: int) -> dict:
-    return {"Solver": {"Eigenmode": {"N": modes}}}
+    return {
+        "Solver": {"Eigenmode": {"N": modes}},
+        "Boundaries": {"LumpedPort": [{"Index": 1, "L": 1e-8, "R": 50.0}]},
+    }
 
 
 def _value(mode: float, column: int) -> float:

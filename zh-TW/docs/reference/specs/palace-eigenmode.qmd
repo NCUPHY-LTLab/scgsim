@@ -75,7 +75,7 @@ sim.set_convergence(
 
 ## 集總埠 {#lumped-ports}
 
-規劃上的每個集總元件（[`set_lumped_elements`](geometry-plan.qmd#lumped-elements)）成為 Palace 的一個集總埠，依規劃的編號排列：`P1` 是第一個。`LumpedElement` 以 Palace 的 `R`、`L`、`C` 帶著它的 R、L、C，是並聯電路；`LumpedPort` 以 `R` 帶著它的阻抗，作為負載，所以模態的 Q 是有載 Q。沒有任何埠被激發。規劃沒有宣告任何元件的繪製薄片不在模型中。Palace 要求每個埠是矩形，所以 `mesh()` 交給 Palace 畫出薄片的中央矩形，並把兩端剩下的部分併入它們所落在的導體。[集總埠會切成矩形](../supported-geometry.qmd#lumped-port-rectangle)說明切口如何選擇，並以 Xmon 的接面埠為例。薄片必須恰好落在兩個不同 Net 的導體上；否則 `plan.prepare()` 會引發 `ValueError`，指出該元件、其薄片的圖層與位置。沒有 Net 的導體自成一個 Net。
+規劃上的每個集總元件（[`set_lumped_elements`](geometry-plan.qmd#lumped-elements)）成為 Palace 的一個集總埠，依規劃的編號排列：`P1` 是第一個。`LumpedElement` 以 Palace 的 `R`、`L`、`C` 帶著它的 R、L、C，是並聯電路；`LumpedPort` 以 `R` 帶著它的阻抗，作為負載，所以模態的 Q 是有載 Q。沒有任何埠被激發。Palace 把帶電感的埠回報為參與比（`junction`），把帶電阻的埠回報為耦合 Q（`external`）；見[結果包含什麼](#results-and-offline-analysis)。規劃沒有宣告任何元件的繪製薄片不在模型中。Palace 要求每個埠是矩形，所以 `mesh()` 交給 Palace 畫出薄片的中央矩形，並把兩端剩下的部分併入它們所落在的導體。[集總埠會切成矩形](../supported-geometry.qmd#lumped-port-rectangle)說明切口如何選擇，並以 Xmon 的接面埠為例。薄片必須恰好落在兩個不同 Net 的導體上；否則 `plan.prepare()` 會引發 `ValueError`，指出該元件、其薄片的圖層與位置。沒有 Net 的導體自成一個 Net。
 
 ## EPR 要求選取什麼 {#selection-and-physical-meaning}
 
@@ -85,7 +85,7 @@ sim.set_convergence(
 |---|---|---|
 | `surface_interfaces` | 表面薄膜 | `"MA"`（金屬-空氣）、`"MS"`（金屬-基板）、`"SA"`（基板-空氣） |
 | `bulk_domain_ids` | 體積區域 | `Domains.Postprocessing.Energy` 中的 SGB 體積名稱 |
-| `port_names` | 埠 | 規劃上集總元件的名稱，即其薄片的名稱 |
+| `port_names` | 埠：電感埠的參與比、電阻埠的耦合 Q | 規劃上集總元件的名稱，即其薄片的名稱 |
 
 `None` 選取全部，`()` 不選任何項目，未知的名稱會在寫出設定或讀取結果時被拒絕。例如 `set_epr_request(surface_interfaces=["MA"], port_names=())` 回報金屬-空氣參與比，不回報任何埠。少選不會把區域或埠從模型中移除，也不改變正規化。
 
@@ -135,8 +135,20 @@ sim.set_convergence(
 
 結果恰好包含你要求的 `num_modes` 個模態。Palace 可能回報更多已收斂的模態；SCGSim 依 Palace 的順序保留模態 1 至 `num_modes`。列數較少、或模態編號不是依序 1、2、… 的表格會被拒絕。
 
+`result.epr_result().rows` 的每一列是一個模態：
+
+| 鍵 | 內容 |
+|---|---|
+| `mode`、`frequency_hz` | 模態編號與頻率（Hz） |
+| `surface` | 每個 Surface-EPR 列一項：它的參與比，以及薄膜有損耗正切時的損耗 `inverse_q`（1/Q） |
+| `bulk` | 每個體積區域一項：它的參與比 |
+| `junction` | 每個帶電感的埠一項：帶正負號的 `participation` |
+| `external` | 每個帶電阻的埠一項（`LumpedPort`，或帶 `resistance_ohm` 的 `LumpedElement`）：`port_name` 與它的耦合損耗 `inverse_q`，即 1/Q_ext |
+
+每個群組列出 `set_epr_request` 選取的項目。同時帶電感與電阻的埠會同時出現在 `junction` 與 `external`；沒有電阻埠的計算，`external` 是空的。`external` 的 `inverse_q` 不論埠的薄片朝哪個方向畫都是正值，而且各項損耗可以相加：hanger 共振器兩個 50 Ω 饋線埠的 `inverse_q` 為 4.43 × 10⁻⁵ 與 4.45 × 10⁻⁵，合起來的耦合 Q 是 1 / (8.88 × 10⁻⁵) = 1.13 × 10⁴。
+
 ### 無限大的 Q {#native-eigenmode-q}
 
-當 Palace 回報某個模態的 Q 為無限大（`eig.csv` 中的 `+inf`，模型中沒有損耗的模態）時，結果保留它，報告標示為 **native-reported infinite Q**（原生回報的無限大 Q），不為該模態給出有限的 Q。該模態的頻率與能量照常讀取。這是 SCGSim 在 Palace 表格中唯一接受的無限大值。
+當 Palace 回報某個模態的 Q 為無限大（`eig.csv` 中的 `+inf`，模型中沒有損耗的模態）時，結果保留它，報告標示為 **native-reported infinite Q**（原生回報的無限大 Q），不為該模態給出有限的 Q。該模態的頻率與能量照常讀取。當模態完全不經由某個埠損耗能量時，該埠的耦合 Q 為無限大，它的 `external` 項目的 `inverse_q` 為 0。SCGSim 只在 Q 上接受 Palace 表格中的無限大值。
 
 Palace 的埠參與比帶正負號，並取決於相位慣例；它不是 AEDT 那一對非負的電感與電容參與比。正規化與損耗見 [Surface EPR](../../concepts/surface-epr.qmd)，報告顯示什麼見[讀取一次計算](report-model.qmd)。

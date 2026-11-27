@@ -17,7 +17,7 @@ SCGSim 3.0 的每個預發行版都改了一些呼叫，而且沒有相容層：
 
 | 你的程式碼是為哪個版本寫的 | 最大的改變 | 你的清單 |
 |---|---|---|
-| 3.0.0rc5 | 程式碼不需要改。沒有 `aedt` extra 的安裝現在也能匯入 `scgsim.aedt` 與 `scgsim.visualization` | 不需要 |
+| 3.0.0rc5 或 3.0.0rc6 | 程式碼不需要改。請重新準備模型、重新執行 Palace Route A，並重新儲存 Palace EPR 結果 | [從 3.0.0rc5 或 rc6 升級](#from-3-0-0rc6) |
 | 3.0.0rc4 | 接面、集總 RLC 與 Driven 埠改為宣告在計畫上，不再宣告在模擬上 | [從 3.0.0rc4 升級](#from-3-0-0rc4) |
 | 3.0.0rc3 | Surface EPR 與真空區域改為設定在計畫上，不再設定在模擬上 | [從 3.0.0rc3 升級](#from-3-0-0rc3) |
 | 3.0.0rc1 或 3.0.0rc2 | 版圖檢查改為接收計畫，AEDT 的每個 3D 模型都從計畫建立 | [從 3.0.0rc1 或 rc2 升級](#from-rc1-or-rc2) |
@@ -25,9 +25,17 @@ SCGSim 3.0 的每個預發行版都改了一些呼叫，而且沒有相容層：
 
 比 2.0 更早、仍匯入 `scgsim.sgb` 的程式碼，請先依[舊匯入對照](../contribute/internals/api-owners.qmd#geometry-api)改好匯入，再照「從 2.0 升級」進行。
 
+## 從 3.0.0rc5 或 rc6 升級 {#from-3-0-0rc6}
+
+程式碼不需要改。從 3.0.0rc6 起，沒有 `aedt` extra 的安裝也能匯入 `scgsim.aedt` 與 `scgsim.visualization`。有三項改變會影響你準備、執行或儲存過的東西：
+
+- **重新準備。** SGB 模型現在標示為 `scgsim.sgb.sidecar.v7`。用 3.0.0rc6 或更早版本準備的模型、Palace 執行資料夾或 AEDT 交接資料夾，在 SCGSim 讀取其模型時都會被拒絕，錯誤訊息會請你重建。較舊的 Route A 模型沒有列出各層膜的邊緣，而網格現在依這些邊緣決定元素大小。請呼叫 `plan.prepare()`，重新準備模擬。
+- **重新執行 Palace Route A。** 在 Route A（`set_route("A")`）上，3.0.0rc6 及更早版本用模型的粗網格尺寸切分每層膜的邊緣，一條 CPW 縫可能只有一個元素寬。結果因此偏差很大，卻不會報錯：在一個 CPW 測試版圖上，加密邊緣後，第一個本徵頻率從 2.04 GHz 變成 4.12 GHz，電容從 1.19 pF 變成 0.29 pF。現在每層膜的邊緣與 Route B 用同樣的方式切分，所以 Route A 網格的未知數也與 Route B 相近。Route B 與 AEDT 不受影響。
+- **重新儲存 Palace EPR 結果。** 每個 Eigenmode EPR 列現在多了 `external` 群組，列出每個帶電阻的埠所造成的耦合損耗；所有埠都是電阻的 Eigenmode 執行（例如 50 Ω 的饋線埠）現在會被讀取，不再被拒絕。用 3.0.0rc6 或更早版本儲存的獨立 EPR 結果（`scgsim.palace.epr-result.v2`）沒有這個群組，所以 `resolve_epr_result` 會拒絕它；請重新儲存新執行的 `epr_result()`（[結果包含什麼](../reference/specs/palace-eigenmode.qmd#results-and-offline-analysis)）。
+
 ## 從 3.0.0rc4 升級 {#from-3-0-0rc4}
 
-[]{#lumped-elements-on-the-plan}集總元件（接面、電阻、電容，或量測所驅動的埠）是元件本身的事實，對每個求解器都相同，所以現在它只在 `GeometryPlan` 上宣告一次，以它所在集總埠片的名稱指名。Palace 與 AEDT 都從快照讀取它；任何模擬都不再自己宣告。不論用舊方式或新方式宣告，研究都建出同一個模型，逐位元組相同（網格、Palace 設定與 AEDT 模型檔，已在 roster 的 Eigenmode 版圖與 HFSS EPR 驗收案例上確認）。這個版本另有三項改變，列在本節最後：[用 3.0.0rc4 準備的東西](#models-from-rc4)。
+[]{#lumped-elements-on-the-plan}集總元件（接面、電阻、電容，或量測所驅動的埠）是元件本身的事實，對每個求解器都相同，所以現在它只在 `GeometryPlan` 上宣告一次，以它所在集總埠片的名稱指名。Palace 與 AEDT 都從快照讀取它；任何模擬都不再自己宣告。不論用舊方式或新方式宣告，研究都建出同一個模型，逐位元組相同（網格、Palace 設定與 AEDT 模型檔，已在 roster 的 Eigenmode 版圖與 HFSS EPR 驗收案例上確認）。另有四項改變，列在本節最後：[用 3.0.0rc4 準備的東西](#models-from-rc4)。
 
 1. 把 Palace 的 `sim.add_port(name, layer=..., layout_sheet=True, inductance=L)` 換成 `plan.set_lumped_elements([...])` 中的 `LumpedElement(name, inductance_h=L)`，在 `plan.prepare()` 之前。`layer` 拿掉了：計畫知道埠片所在的圖層。元件保持你給的順序，所以第一個仍是 Palace 的 `P1`。
 2. 把 AEDT 的 `sim.add_junction(planar_junction_from_port(...))`，以及你交給 `plan.set_rectangular_junctions(...)` 的 `RectangularJunctionSpec`，換成計畫上的一個 `LumpedElement(sheet, inductance_h=L, capacitance_f=C)`。計畫自己找出埠片的兩個導體及其 Net。接面的 id 現在就是其埠片的名稱：在 `EprAnalysisRequest(junction_ids=...)` 中寫這個名稱，結果中也以它讀取。
@@ -71,11 +79,12 @@ hsim.set_epr_request(EprAnalysisRequest(junction_ids=("chip/J1",)))
 
 錯誤現在來自 `prepare()`，並指出元件、其埠片的圖層與以 µm 表示的位置：版圖沒有畫出的埠片、落在不只或少於兩個導體上的埠片、同一個 Net 的兩個導體，或 `reference_net` 不是任一導體之 Net 的埠。紀錄見[集總元件](../reference/specs/geometry-plan.qmd#lumped-elements)，每種計算如何使用它們見[支援的計算](../reference/supported-calculations.qmd#lumped-elements)。
 
-[]{#models-from-rc4}另有三項改變，會影響你用 3.0.0rc4 準備或執行的東西：
+[]{#models-from-rc4}另有四項改變，會影響你用 3.0.0rc4 準備或執行的東西：
 
-- **重新準備。** SGB 模型現在標示為 `scgsim.sgb.sidecar.v6`。用 3.0.0rc4 或更早版本準備的模型、Palace 執行資料夾或 AEDT 交接資料夾，在 SCGSim 讀取其模型時都會被拒絕，錯誤訊息會請你重建。舊模型可能以相反的順序列出埠片的兩個導體，現在讀取會把 HFSS 的 Terminal 放在錯的邊上。請呼叫 `plan.prepare()`，重新準備模擬。
+- **重新準備。** SGB 模型現在標示為 `scgsim.sgb.sidecar.v7`。用 3.0.0rc6 或更早版本準備的模型、Palace 執行資料夾或 AEDT 交接資料夾，在 SCGSim 讀取其模型時都會被拒絕，錯誤訊息會請你重建。舊模型可能以相反的順序列出埠片的兩個導體，現在讀取會把 HFSS 的 Terminal 放在錯的邊上。請呼叫 `plan.prepare()`，重新準備模擬。
 - **重新執行 HFSS Driven Terminal**，如果版圖先宣告埠的訊號導體、再宣告接地，例如 OrcaPen SC PDK 的 launcher。3.0.0rc4 把 Terminal 放在埠片靠接地的那一邊；現在它在靠訊號的那一邊。
 - **集總元件有電容時，重新執行 HFSS Eigenmode。** 3.0.0rc4 及更早版本寫出電容時所用的單位，AEDT 會讀成飛法拉（fF），所以模型裡的電容只有你宣告值的 10⁻¹⁵ 倍，而且不會報錯。受影響的是設了 `capacitance_f` 的 Lumped RLC 與 EPR 接面；它們的電感與電阻都正確，Palace 也不受影響。
+- **重新執行 Palace Route A**，原因見[從 3.0.0rc5 或 rc6 升級](#from-3-0-0rc6)。
 
 ## 從 3.0.0rc3 升級 {#from-3-0-0rc3}
 
@@ -220,7 +229,7 @@ sim.set_plan(plan.prepare())
    |---|---|
    | `SurfaceMaskEprRecord`、`SurfaceMaskEprSeriesSnapshot` | `SurfaceMarginEprRecord`、`SurfaceMarginEprSeriesSnapshot` |
    | `PhysicsQuantitiesReport.masked_snapshots` | `PhysicsQuantitiesReport.margin_snapshots` |
-   | `scgsim.palace.epr-result.v1` | `scgsim.palace.epr-result.v2` |
+   | `scgsim.palace.epr-result.v1` | `scgsim.palace.epr-result.v3` |
    | `surface-mask-Q.csv` 與 `surface-mask-energy.csv` | 邊距列改從 `surface-Q.csv` 讀取 |
    :::
 

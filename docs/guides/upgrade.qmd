@@ -24,7 +24,7 @@ prints.
 
 | Your code was written for | What changes most | Your checklist |
 |---|---|---|
-| 3.0.0rc5 | Nothing in your code. An install without the `aedt` extra now imports `scgsim.aedt` and `scgsim.visualization` | None |
+| 3.0.0rc5 or 3.0.0rc6 | Nothing in your code. Prepare your models again, run Palace Route A again, and save Palace EPR results again | [From 3.0.0rc5 or rc6](#from-3-0-0rc6) |
 | 3.0.0rc4 | Junctions, lumped RLCs and Driven ports are declared on the plan, not on the simulation | [From 3.0.0rc4](#from-3-0-0rc4) |
 | 3.0.0rc3 | Surface EPR and the vacuum region are set on the plan, not on the simulation | [From 3.0.0rc3](#from-3-0-0rc3) |
 | 3.0.0rc1 or 3.0.0rc2 | The layout check takes the plan, and AEDT builds every 3D model from the plan | [From 3.0.0rc1 or rc2](#from-rc1-or-rc2) |
@@ -33,6 +33,34 @@ prints.
 Code older than 2.0, which imports `scgsim.sgb`, first moves its imports with
 the [old-import inventory](../contribute/internals/api-owners.qmd#geometry-api),
 then follows From 2.0.
+
+## From 3.0.0rc5 or rc6 {#from-3-0-0rc6}
+
+Nothing in your code changes. From 3.0.0rc6 on, an install without the `aedt`
+extra imports `scgsim.aedt` and `scgsim.visualization`. Three changes affect
+what you prepared, ran or saved:
+
+- **Prepare it again.** An SGB model now says it is `scgsim.sgb.sidecar.v7`.
+  A model, Palace run folder or AEDT handoff prepared with 3.0.0rc6 or earlier
+  is refused wherever SCGSim reads its model, with an error that says to
+  rebuild it. An older Route A model does not state the edges of its films,
+  which the mesh is now sized from. Call `plan.prepare()` and prepare the
+  simulation again.
+- **Run Palace Route A again.** On Route A (`set_route("A")`), 3.0.0rc6 and
+  earlier meshed the edge of each film at the model's coarse size, so a CPW
+  gap could be a single element across. The results came out far off, with no
+  error: on a CPW test layout, sizing the edges moved the first Eigenmode
+  frequency from 2.04 to 4.12 GHz and the capacitance from 1.19 to 0.29 pF.
+  Each film's edge is now meshed as on Route B, so a Route A mesh has about
+  as many unknowns as Route B's.
+  Route B and AEDT are not affected.
+- **Save Palace EPR results again.** Each Eigenmode EPR row now has an
+  `external` group, the coupling loss of each port with a resistance, and an
+  Eigenmode run whose ports are all resistive, such as 50 Ω feedline ports, is
+  read instead of refused. A detached EPR result saved with 3.0.0rc6 or
+  earlier (`scgsim.palace.epr-result.v2`) has no such group, so
+  `resolve_epr_result` refuses it; save `epr_result()` of the new run again
+  ([What a result holds](../reference/specs/palace-eigenmode.qmd#results-and-offline-analysis)).
 
 ## From 3.0.0rc4 {#from-3-0-0rc4}
 
@@ -43,7 +71,7 @@ name of the port sheet it sits on. Palace and AEDT read it from the snapshot;
 no simulation declares one of its own. Declared the old way or the new way, a
 study builds the same model, byte for byte (the mesh, the Palace configuration
 and the AEDT model files, checked on the roster's Eigenmode layouts and the
-HFSS EPR acceptance case). Three other changes of this version are at the end
+HFSS EPR acceptance case). Four other changes are at the end
 of this section: [what you prepared with 3.0.0rc4](#models-from-rc4).
 
 1. Replace Palace `sim.add_port(name, layer=..., layout_sheet=True, inductance=L)`
@@ -110,11 +138,11 @@ neither conductor's Net. [Lumped elements](../reference/specs/geometry-plan.qmd#
 gives the records, and [Supported calculations](../reference/supported-calculations.qmd#lumped-elements)
 what each calculation does with them.
 
-[]{#models-from-rc4}Three other changes affect what you prepared or ran with
+[]{#models-from-rc4}Four other changes affect what you prepared or ran with
 3.0.0rc4:
 
-- **Prepare it again.** An SGB model now says it is `scgsim.sgb.sidecar.v6`.
-  A model, Palace run folder or AEDT handoff prepared with 3.0.0rc4 or earlier
+- **Prepare it again.** An SGB model now says it is `scgsim.sgb.sidecar.v7`.
+  A model, Palace run folder or AEDT handoff prepared with 3.0.0rc6 or earlier
   is refused wherever SCGSim reads its model, with an error that says to
   rebuild it. The old model may list a port sheet's two conductors in the
   other order, and read now it would put an HFSS Terminal on the wrong edge.
@@ -129,6 +157,8 @@ what each calculation does with them.
   no error. This affects a Lumped RLC and an EPR junction given
   `capacitance_f`; their inductance and resistance were right, and Palace is
   not affected.
+- **Run Palace Route A again**, as [From 3.0.0rc5 or rc6](#from-3-0-0rc6)
+  explains.
 
 ## From 3.0.0rc3 {#from-3-0-0rc3}
 
@@ -368,7 +398,7 @@ Work through these steps in order, then continue with
    |---|---|
    | `SurfaceMaskEprRecord`, `SurfaceMaskEprSeriesSnapshot` | `SurfaceMarginEprRecord`, `SurfaceMarginEprSeriesSnapshot` |
    | `PhysicsQuantitiesReport.masked_snapshots` | `PhysicsQuantitiesReport.margin_snapshots` |
-   | `scgsim.palace.epr-result.v1` | `scgsim.palace.epr-result.v2` |
+   | `scgsim.palace.epr-result.v1` | `scgsim.palace.epr-result.v3` |
    | `surface-mask-Q.csv` and `surface-mask-energy.csv` | Margin rows are read from `surface-Q.csv` |
    :::
 

@@ -193,6 +193,22 @@ A model without any lossy material has no loss at all, and Palace then
 reports an infinite Q; the report shows it as "native-reported infinite Q"
 ([Eigenmode reference](../reference/specs/palace-eigenmode.qmd#native-eigenmode-q)).
 
+::: {.callout-important title="A high-Q mode needs a tighter linear tolerance"}
+At the default `set_numerical(tolerance=1e-6)`, the mode frequency, the Surface
+EPR and the bulk electric participation are accurate. The Q that Palace
+reports, which it computes from the complex eigenfrequency as
+Re f / (2 Im f), is not when the mode's Q is high: Im f is tiny next to Re f,
+so the solver's approximate linear solves move it far more than they move
+Re f or the field. For a hanger resonator near 7.36 GHz the default reported
+Q = 13,948, 25 % above the 11,142 that `set_numerical(tolerance=1e-9)` gave,
+which agrees with an independent driven S21 notch fit (11,141). If you rely on
+that Q, set `tolerance=1e-9`; it costs about 45 % more Eigenmode time. The
+surface-loss Q built from the participations does not need it, nor does the
+coupling Q of a port with a resistance ([below](#port-as-a-load)): for that
+hanger, the two feedline ports' coupling Q moved by 0.04 % between
+`tolerance=1e-6` and `1e-9`, while the reported Q moved by 25 %.
+:::
+
 **Surface loss.** The surface films are not part of the solve. After it,
 Palace computes each surface's participation p from the field at that surface
 and the film's thickness and permittivity, and its loss as 1/Q = p tan δ. The
@@ -228,6 +244,20 @@ one, and its loss tangent is 3.6 times higher.
   condition.
 - **Metal as sheets.** `sim.set_route("A")` before `mesh()`, as for
   capacitance ([Metal as sheets](capacitance-palace.qmd#select-the-geometry-approximation-and-build-inputs)).
+- []{#port-as-a-load}**A port as a load.** A lumped element with a resistance,
+  such as `LumpedElement(sheet, resistance_ohm=50.0)`, or a `LumpedPort` is a
+  load: the mode loses energy through it, so Palace's Q is the loaded Q. The
+  result's `external` group gives each such port's share of that loss, its
+  coupling 1/Q:
+
+  ```python
+  for port in epr["external"]:
+      print(f"{port['port_name']}  1/Q_ext = {port['inverse_q']:.3e}")
+  ```
+
+  It is empty for this pad, whose only element is an inductor. The coupling
+  losses add like the surface ones: a hanger resonator's coupling Q is
+  1 / (sum of its feedline ports' `inverse_q`).
 
 ## Surface EPR near the gaps {#surface-epr-margin-rows}
 

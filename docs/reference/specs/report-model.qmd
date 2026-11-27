@@ -219,7 +219,7 @@ degree-of-freedom number is an estimate, not Palace's count;
 
 ::: {#palace-run-schemas .callout-important title="Palace run folders of older schemas are not read"}
 Result reading reads mesh manifest `schema_version` 2, Palace index map
-`schema_version` 3 and detached EPR results `scgsim.palace.epr-result.v2`. A
+`schema_version` 3 and detached EPR results `scgsim.palace.epr-result.v3`. A
 run folder or detached result of an older schema is refused with an error that
 names its version. To read such a study again, prepare it with the current
 package and run it again.

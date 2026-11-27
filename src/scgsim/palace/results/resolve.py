@@ -301,7 +301,7 @@ def _discover_results(  # noqa: PLR0913 -- the tables, where they are, and what 
     ones returned.
     """
     discovered: dict[str, ParsedTable] = {}
-    for family in output_families(problem, index_counts):
+    for family in output_families(problem, config, index_counts):
         relative = output_table(family, result_folder)
         path = root / relative
         if not path.is_file():

@@ -52,7 +52,7 @@ Route B with MA, MS and SA bands at 0.5 and 1.0 µm, meshed by the meshing
 module with Gmsh 4.15.2 and the default settings:
 
 ```text
-scgsim.meshing scgsim.meshing.features/2: clean after 0 refinement rounds
+scgsim.meshing scgsim.meshing.features/3: clean after 0 refinement rounds
   quality measure minSICN, threshold 0.01
   19722 tetrahedra, min quality 0.04212, 0 below the threshold (linear mesh before elevation); algorithm 1, geometry order 1
   143 sized curves, 0 local sizes, smallest -
@@ -95,7 +95,7 @@ made the same way.
 | Identity | Example | Where it is recorded | Changes |
 |---|---|---|---|
 | Package version | `scgsim <version>` | `scgsim_version` in the run's provenance (`metadata/route_b_provenance.json`, or `route_a_…` on Route A) | With every release of SCGSim |
-| Recipe version | `scgsim.meshing.features/2` for `FeatureRecipe`; `uniform-boundary/N`, `global-size/N` for the others | `recipe.version` in each quality report and in the mesh manifest, beside `recipe.parameters` | Only when the sizes the recipe asks for change |
+| Recipe version | `scgsim.meshing.features/3` for `FeatureRecipe`; `uniform-boundary/N`, `global-size/N` for the others | `recipe.version` in each quality report and in the mesh manifest, beside `recipe.parameters` | Only when the sizes the recipe asks for change |
 | Report format | `scgsim.meshing.report/N` | `report_version` in each quality report | When the report's fields change |
 :::
 

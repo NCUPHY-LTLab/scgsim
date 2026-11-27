@@ -1,6 +1,6 @@
 """The mesh features of the sidecar: what is true of a set of edges for the mesher, never a size.
 
-Owns the four feature records (film sidewall, band boundary, arc, port edge) and their facts.
+Owns the five feature records (film sidewall, sheet outline, band boundary, arc, port edge) and their facts.
 Each names its source in the table its kind refers to.  Part of the one definition with :mod:`.records`.
 """
 
@@ -34,6 +34,21 @@ class FilmSidewall(_MeshFeatureEdges):
 
 class FilmSidewallFacts(TypedDict):
     """The facts of a film sidewall."""
+
+    thickness_um: Positive
+
+
+class SheetOutline(_MeshFeatureEdges):
+    """The outline edges of a Route A conductor sheet: the edges of its faces inside no metal and on no wall of the
+    model boundary; thickness_um is the declared normal thickness of the film the sheet stands for."""
+
+    kind: Literal["sheet_outline"]
+    source: Annotated[EntityRef, Doc("The conductor.")]
+    facts: SheetOutlineFacts
+
+
+class SheetOutlineFacts(TypedDict):
+    """The facts of a sheet outline."""
 
     thickness_um: Positive
 
@@ -83,4 +98,4 @@ class NoFacts(TypedDict):
     """The facts of a feature kind that has none: an empty object."""
 
 
-MeshFeature = FilmSidewall | BandBoundary | ArcFeature | PortEdge
+MeshFeature = FilmSidewall | SheetOutline | BandBoundary | ArcFeature | PortEdge

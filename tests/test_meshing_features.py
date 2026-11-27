@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
-from meshing_support import feature, film, sidecar_with
+from meshing_support import feature, film, sheet_outline, sidecar_with
 
 from scgsim.meshing import SidecarError
 from scgsim.meshing.features import load_features, read_features
@@ -23,6 +23,7 @@ def test_every_kind_of_the_interface_is_read_with_its_facts():
         ),
         feature("arc", [5], {"radius_um": 10.0}, source=None),
         feature("port_edge", [7, 8]),
+        sheet_outline([9, 10], 0.1),
     )
     features = {f.kind: f for f in read_features(sidecar).features}
     assert [f.kind for f in read_features(sidecar).features] == sorted(features)
@@ -33,6 +34,8 @@ def test_every_kind_of_the_interface_is_read_with_its_facts():
     assert features["band_boundary"].facts["margins_um"] == [0.5, 1.0]
     assert features["arc"].source is None
     assert features["arc"].fact("radius_um") == 10.0
+    assert features["sheet_outline"].native_tags == (9, 10)
+    assert features["sheet_outline"].fact("thickness_um") == 0.1
 
 
 def test_the_binding_groups_and_embeddings_are_carried_for_the_audit():
@@ -83,7 +86,18 @@ def test_another_version_is_refused_by_name():
     sidecar = sidecar_with()
     sidecar["schema"] = "scgsim.sgb.sidecar.v5"
     with pytest.raises(
-        SidecarError, match="sidecar.v5.*sidecar.v6.*Rebuild the geometry"
+        SidecarError, match="sidecar.v5.*sidecar.v7.*Rebuild the geometry"
+    ):
+        read_features(sidecar)
+
+
+def test_a_v6_route_a_sidecar_is_refused_rather_than_meshed_without_its_sheet_outlines():
+    """A v6 sidecar states no sheet outlines, so a Route A model read from one would mesh its sheets coarse (#309)."""
+    sidecar = sidecar_with()
+    sidecar["schema"] = "scgsim.sgb.sidecar.v6"
+    sidecar["model"]["route"] = "A"
+    with pytest.raises(
+        SidecarError, match="sidecar.v6.*sidecar.v7.*Rebuild the geometry"
     ):
         read_features(sidecar)
 
@@ -98,6 +112,8 @@ def test_an_unknown_kind_is_refused():
     ("entry", "message"),
     [
         (feature("film_sidewall", [1]), "lacks the field 'thickness_um'"),
+        (feature("sheet_outline", [1]), "lacks the field 'thickness_um'"),
+        (sheet_outline([1], 0.0), "0.0 is not greater than 0"),
         (film([1], 0.0), "0.0 is not greater than 0"),
         (film([1], -0.2), "-0.2 is not greater than 0"),
         (feature("arc", [1], {"radius_um": "ten"}), "'ten' is not number"),

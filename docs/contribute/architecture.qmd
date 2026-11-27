@@ -136,8 +136,10 @@ handoff identity (`HandoffIdentity`) that the handoff writes and
 `resolve_palace_result` checks, and one record per problem (`PalaceProblem`:
 `EIGENMODE`, `ELECTROSTATIC`). Code that differs by problem reads that record
 instead of comparing problem names; its `written_families` decides which
-tables a run must return. The module imports only the standard library, so
-`palace/run` can copy it into the run folder: the receipt recorder
+tables a run must return. Palace writes a port table only when a port's
+circuit gives it a column (`PortTable`): `port-EPR` for a port with an
+inductance, `port-Q` for one with a resistance. The module imports only the
+standard library, so `palace/run` can copy it into the run folder: the receipt recorder
 (`metadata/record_palace_return.py`) and, for a run with a convergence
 declaration, the convergence runner (`metadata/run_palace_until_converged.py`)
 need only a Python interpreter on the solver host.

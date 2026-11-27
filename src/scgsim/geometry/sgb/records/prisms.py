@@ -192,6 +192,10 @@ class PrismRecord:
     # The source physical declaration's feature kind (``stack_film``, ``local_film`` or
     # ``finite_volume``); ``None`` when the conductor has no declaration.
     feature_kind: str | None = None
+    # The declared normal thickness in um of the film a conductor sheet stands for (Route A collapses the
+    # film to a sheet); ``None`` for every other prism.  The mesher sizes the sheet's outline from it, as it
+    # sizes a film wall from the wall's height, so every conductor sheet must carry it.
+    film_thickness_um: float | None = None
     # Where the entity comes from, for errors that must say which source supplies a missing priority.
     occurrence: str | None = None  # the source occurrence (component instance) path
     layer: str | None = (
@@ -213,6 +217,20 @@ class PrismRecord:
             )
         if self.material_kind == "port" and self.z0 != self.z1:
             raise ValueError(internal(f"{self.entity_id}: a port prism is a sheet"))
+        conductor_sheet = self.material_kind == "conductor" and self.is_sheet
+        if conductor_sheet != (self.film_thickness_um is not None):
+            raise ValueError(
+                internal(
+                    f"{self.entity_id}: exactly the conductor sheets carry the thickness of their film"
+                )
+            )
+        if self.film_thickness_um is not None and not self.film_thickness_um > 0:
+            raise ValueError(
+                internal(
+                    f"{self.entity_id}: the film thickness of a conductor sheet must be positive, "
+                    f"not {self.film_thickness_um}"
+                )
+            )
 
     @property
     def is_sheet(self) -> bool:

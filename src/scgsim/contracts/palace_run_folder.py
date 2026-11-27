@@ -34,6 +34,7 @@ import hashlib
 import json
 import os
 import tempfile
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -270,23 +271,52 @@ ProblemName = Literal["Electrostatic", "Eigenmode", "Driven"]
 
 
 @dataclass(frozen=True)
+class PortTable:
+    """A table Palace writes from a run's lumped ports, and which ports have a column in it.
+
+    Palace 0.18.1 decides each port table by the ports' circuits, not by whether ports exist
+    (``palace/models/postoperatorcsv.cpp``: ``InitializePortVI``, ``InitializeEigPortEPR``,
+    ``InitializeEigPortQ``): every lumped port has a column in ``port-I`` and ``port-V``, only a port with a
+    nonzero ``L`` in ``port-EPR`` (its inductive participation), and only one with a nonzero ``R`` in
+    ``port-Q`` (its coupling Q).  A table is written when at least one port has a column, and each column is
+    headed by the port's ``Index``.  So a run whose ports are all 50 ohm loads has a ``port-Q`` and no
+    ``port-EPR``.  ``circuit_key`` is that key, or None for a table every port is in.  SCGSim writes a
+    circuit as ``R``, ``L`` and ``C``; a key a row does not give, Palace reads as zero.
+    """
+
+    family: str
+    circuit_key: Literal["R", "L"] | None = None
+
+    def has_column(self, port: Mapping[str, Any]) -> bool:
+        """Whether lumped port ``port`` (a ``Boundaries.LumpedPort`` row) has a column in this table."""
+        if self.circuit_key is None:
+            return True
+        value = port.get(self.circuit_key, 0.0)
+        # Palace's test, abs(value) > 0, which a NaN fails as it does there.
+        return (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and abs(value) > 0
+        )
+
+
+@dataclass(frozen=True)
 class PalaceProblem:
     """What differs between the Palace problems SCGSim writes: one record per problem, read by every stage.
 
     ``name`` is the problem's ``Problem.Type`` and the key of its ``Solver`` block in ``config.json``.
     ``output_families`` are the tables Palace can write for it, in the order the recorder lists them;
-    ``port_families`` of them are written only when the config has lumped ports, and ``surface-Q`` only when
-    it has Surface-EPR rows.  ``excitation`` is the ``Boundaries`` block whose rows drive the problem and
-    ``excitation_section`` its index-map section.  ``series`` says what one row of a table is: a ``mode``
-    (rows ``m`` = 1..N of the requested modes), an ``excitation`` (rows ``i``, one per terminal) or a
-    ``frequency`` (rows ``f (GHz)``, one per frequency of the sweep); ``series_index`` is that first column.
+    ``port_tables`` say which tables the lumped ports decide (``PortTable``). The config writes ``surface-Q``
+    when it has Surface-EPR rows. ``excitation`` names the ``Boundaries`` block whose rows drive the problem
+    and ``excitation_section`` names its index-map section. ``series`` describes one row of a table: a mode,
+    a terminal excitation or a frequency. ``series_index`` is the first column of those tables.
     ``primary_table`` holds the problem's physics, ``snapshot_tables`` the files that make one result
     snapshot complete, and ``fem_space`` the finite-element space of its unknowns.
     """
 
     name: ProblemName
     output_families: tuple[str, ...]
-    port_families: tuple[str, ...]
+    port_tables: tuple[PortTable, ...]
     excitation: str
     excitation_section: str
     series: Literal["mode", "excitation", "frequency"]
@@ -303,15 +333,28 @@ class PalaceProblem:
         """
         return self.series == "mode"
 
+    def port_columns(
+        self, family: str, lumped_ports: Sequence[Mapping[str, Any]]
+    ) -> tuple[int, ...]:
+        """The ``Index`` of each of ``lumped_ports`` with a column in port table ``family``, in Palace's order."""
+        (table,) = (table for table in self.port_tables if table.family == family)
+        return tuple(
+            sorted(port["Index"] for port in lumped_ports if table.has_column(port))
+        )
+
     def written_families(
-        self, *, lumped_ports: bool, surfaces: bool
+        self, *, lumped_ports: Sequence[Mapping[str, Any]], surfaces: bool
     ) -> tuple[str, ...]:
-        """The output families Palace writes for a config with or without lumped ports and Surface-EPR rows."""
+        """The output families Palace writes for a config with these ``LumpedPort`` rows, with or without Surface-EPR rows."""
+        unwritten = {
+            table.family
+            for table in self.port_tables
+            if not any(table.has_column(port) for port in lumped_ports)
+        }
         return tuple(
             family
             for family in self.output_families
-            if (lumped_ports or family not in self.port_families)
-            and (surfaces or family != "surface-Q")
+            if family not in unwritten and (surfaces or family != "surface-Q")
         )
 
 
@@ -326,7 +369,7 @@ ELECTROSTATIC = PalaceProblem(
         "surface-Q",
         "error-indicators",
     ),
-    port_families=(),
+    port_tables=(),
     excitation="Terminal",
     excitation_section="Boundaries.Terminal",
     series="excitation",
@@ -340,19 +383,25 @@ EIGENMODE = PalaceProblem(
     output_families=(
         "eig",
         "port-EPR",
+        "port-Q",
         "port-I",
         "port-V",
         "domain-E",
         "surface-Q",
         "error-indicators",
     ),
-    port_families=("port-EPR", "port-I", "port-V"),
+    port_tables=(
+        PortTable("port-EPR", "L"),
+        PortTable("port-Q", "R"),
+        PortTable("port-I"),
+        PortTable("port-V"),
+    ),
     excitation="LumpedPort",
     excitation_section="Boundaries.LumpedPort",
     series="mode",
     series_index="m",
     primary_table="eig",
-    snapshot_tables=("eig", "port-EPR", "surface-Q", "error-indicators"),
+    snapshot_tables=("eig", "port-EPR", "port-Q", "surface-Q", "error-indicators"),
     fem_space="ND",
 )
 # Driven solves the field at each frequency of the sweep with one lumped port excited at a time; ``port-S``
@@ -367,7 +416,7 @@ DRIVEN = PalaceProblem(
         "surface-Q",
         "error-indicators",
     ),
-    port_families=("port-S", "port-I", "port-V"),
+    port_tables=(PortTable("port-S"), PortTable("port-I"), PortTable("port-V")),
     excitation="LumpedPort",
     excitation_section="Boundaries.LumpedPort",
     series="frequency",

@@ -42,7 +42,7 @@ Groups = Mapping[str, Mapping[str, Mapping[str, Any]]]
 
 
 def groups_from_sidecar(sidecar: Sidecar) -> Groups:
-    """The group dict of one ``scgsim.sgb.sidecar.v6`` sidecar the shared reader accepted, with attributes assigned.
+    """The group dict of one ``scgsim.sgb.sidecar.v7`` sidecar the shared reader accepted, with attributes assigned.
 
     Attributes are numbered per dimension from 1 in sorted group-name order (the parts of a split group in
     signature order), the numbering SGB itself uses for physical tags.

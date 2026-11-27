@@ -93,7 +93,7 @@ inverse-Q 小計只計入已知的整個表面項。未知損耗計為未知，�
 Palace 報告顯示計算的網格摘要（`mesh_summary()`）：尺寸配方及其設定、品質門檻與最低元素品質（minSICN，在線性網格上量測）、節點、元素與區域數量、交付網格的階數，以及邊長。Eigenmode 的自由度數字是估計值，不是 Palace 的計數；這些數字的意義見[四面體網格品質](mesh-quality.qmd)。
 
 ::: {#palace-run-schemas .callout-important title="不讀取較舊格式的 Palace 執行資料夾"}
-結果讀取只讀網格清單 `schema_version` 2、Palace 索引對照 `schema_version` 3，以及獨立 EPR 結果 `scgsim.palace.epr-result.v2`。較舊格式的執行資料夾或獨立結果會被拒絕，錯誤訊息會指出它的版本。要再次讀取這類計算，請以目前的套件重新準備並重新執行。
+結果讀取只讀網格清單 `schema_version` 2、Palace 索引對照 `schema_version` 3，以及獨立 EPR 結果 `scgsim.palace.epr-result.v3`。較舊格式的執行資料夾或獨立結果會被拒絕，錯誤訊息會指出它的版本。要再次讀取這類計算，請以目前的套件重新準備並重新執行。
 :::
 
 ## 視圖不評判什麼 {#research-interpretation-and-retained-observations}

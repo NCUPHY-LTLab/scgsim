@@ -9,7 +9,8 @@ interval, Net, material and priority, and builds its prisms:
   geometry (``z_min_um``/``z_max_um``, else ``z_um`` + ``thickness_um``), the fields
   ``primitives.entities.entity_z_range_um`` reads.  The automatic vacuum
   envelope takes the Z of its prepared enclosure.  Levels are exactly these values:
-  no Z threshold merges or drops any of them.
+  no Z threshold merges or drops any of them.  A sheet keeps the normal thickness its
+  film declares, which sizes the sheet's outline in the mesh.
 * **Net.**  A conductor without a declared Net is its own Net (a floating
   conductor): its entity id.  Two touching or overlapping entities without a shared
   declared Net therefore fail closed instead of being assumed connected.
@@ -25,7 +26,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from fractions import Fraction
-from typing import cast
+from typing import Any, cast
 
 from scgsim.geometry.exact.boundaries import RingKey
 from scgsim.geometry.exact.carriers import ArcCarrier
@@ -137,17 +138,53 @@ def physical_feature_kind(
     entity belongs to.  An entity authored with its own ``physical_layer`` payload is read the same
     way when the plan does not list it.  ``None`` means the entity has no declaration.
     """
+    declaration = _physical_declaration(entity, build_input, representation)
+    if declaration is not None and "feature_kind" in declaration:
+        return str(declaration["feature_kind"])
+    return None
+
+
+def sheet_film_thickness(
+    entity: SemanticEntitySpec,
+    build_input: GeometryBuildInput,
+    representation: RepresentationContext,
+) -> float | None:
+    """The normal thickness of the film a sheet conductor stands for, read from its declaration (never guessed).
+
+    Only a sheet has one: Route A collapses a film to a sheet at its attachment plane, and the sheet keeps the
+    film's ``physical_dimensions["normal_thickness_um"]``, the thickness the AEDT thin-film model gives the
+    sheet back.  ``None`` for an entity that is not a sheet.
+    """
+    record = representation.entities.get(entity.semantic_id)
+    if record is None or record.representation != "sheet":
+        return None
+    declaration = _physical_declaration(entity, build_input, representation)
+    dimensions = (
+        declaration.get("physical_dimensions") if declaration is not None else None
+    )
+    if not isinstance(dimensions, Mapping) or "normal_thickness_um" not in dimensions:
+        raise InputError(
+            f"{entity.semantic_id} is a sheet but its physical declaration states no "
+            "normal_thickness_um; interpret the physical geometry first"
+        )
+    return float(dimensions["normal_thickness_um"])
+
+
+def _physical_declaration(
+    entity: SemanticEntitySpec,
+    build_input: GeometryBuildInput,
+    representation: RepresentationContext,
+) -> Mapping[str, Any] | None:
+    """The entity's physical declaration: the plan's for the layer the context names, else the entity's own."""
     record = representation.entities.get(entity.semantic_id)
     layer_id = record.physical_layer_id if record is not None else None
     plan = build_input.metadata.get("physical_representation")
     declarations = plan.get("declarations", ()) if isinstance(plan, Mapping) else ()
     for declaration in declarations:
         if layer_id is not None and declaration.get("physical_layer_id") == layer_id:
-            return str(declaration["feature_kind"])
+            return declaration
     authored = entity.metadata.get(PHYSICAL_LAYER_FIELD)
-    if isinstance(authored, Mapping) and "feature_kind" in authored:
-        return str(authored["feature_kind"])
-    return None
+    return authored if isinstance(authored, Mapping) else None
 
 
 def entity_prisms(  # noqa: PLR0913 - an entity, its footprints, interval, bound rings and declaration
@@ -156,6 +193,7 @@ def entity_prisms(  # noqa: PLR0913 - an entity, its footprints, interval, bound
     interval: ZInterval,
     ring_primitives: RingPrimitives,
     feature_kind: str | None = None,
+    film_thickness_um: float | None = None,
 ) -> list[PrismRecord]:
     """One prism per connected source footprint of an entity."""
     kind = cast(MaterialKind, entity.material_kind)
@@ -176,6 +214,7 @@ def entity_prisms(  # noqa: PLR0913 - an entity, its footprints, interval, bound
                 polygon=source.polygon,
                 arcs=arcs,
                 feature_kind=feature_kind,
+                film_thickness_um=film_thickness_um,
                 occurrence=_source_occurrence(entity),
                 layer=_source_layer(entity),
             )

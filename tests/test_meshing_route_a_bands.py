@@ -1,7 +1,7 @@
 """Surface-EPR bands on Route A: the default recipe meshes the public SimplePad with bands clean.
 
-A Route A sheet has no film wall, so no film-wall size reaches its bands; before band edges were sized,
-this model stalled with every remaining bad element on a band boundary curve.  The test builds, meshes and
+A Route A sheet has no film wall: its outline takes the film-edge size, which does not reach the bands beside
+it; before band edges were sized, this model stalled with every remaining bad element on a band boundary curve.  The test builds, meshes and
 lowers the mesh for Palace (several seconds of Gmsh), so it is slow, and it needs the public PDK.
 """
 
@@ -76,5 +76,6 @@ def test_the_default_recipe_meshes_simplepad_on_route_a_with_bands_clean(tmp_pat
     assert meshing["recipe"]["version"] == FeatureRecipe.version
     assert meshing["stop"] == "clean"
     assert meshing["linear_mesh"]["min_quality"] >= DEFAULT_QUALITY_THRESHOLD
-    # Route A has no film walls and the outline rule is off: every sized curve is a band edge.
+    # Route A has no film walls and the outline rule is off: every sized curve is a band edge or the
+    # outline of a sheet.
     assert meshing["linear_mesh"]["sized_curves"] > 0

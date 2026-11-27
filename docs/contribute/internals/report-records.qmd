@@ -193,7 +193,8 @@ high-order elements.
 
 A recipe's version goes up only when the sizes it asks for change. `FeatureRecipe`
 went from `features/1` to `features/2` when it began to size every Surface-EPR
-band boundary curve. So two reports with the same recipe version and the same
+band boundary curve, and to `features/3` when it began to size the outline of
+every Route A conductor sheet. So two reports with the same recipe version and the same
 parameters asked for the same initial sizes, even when they were made by
 different package releases; a different recipe version means the meshes were
 made by different sizing rules. The recipe version covers the initial sizes

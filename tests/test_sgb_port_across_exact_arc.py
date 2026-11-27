@@ -17,7 +17,15 @@ from __future__ import annotations
 import math
 
 import pytest
-from sgb_scenes import GRID, chip_prisms, exact_band_areas, footprint, rect_um, units
+from sgb_scenes import (
+    GRID,
+    chip_prisms,
+    exact_band_areas,
+    film_of,
+    footprint,
+    rect_um,
+    units,
+)
 
 from scgsim.geometry.exact.carriers import Lineage, circle_arcs
 from scgsim.geometry.exact.grid import exact_z
@@ -70,6 +78,7 @@ def curved_port_scene(route: str) -> PrismCatalogue:
             "conductor",
             net_id="pad",
             arcs=pad_arcs,
+            film_thickness_um=film_of(exact_z(0), top),
         )
     )
     die = [
@@ -96,6 +105,7 @@ def curved_port_scene(route: str) -> PrismCatalogue:
             "conductor",
             net_id="Ground",
             arcs=ground_arcs,
+            film_thickness_um=film_of(exact_z(0), top),
         )
     )
     identity = PortIdentity(
