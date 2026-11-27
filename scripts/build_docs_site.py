@@ -674,7 +674,9 @@ def _render_versions(
     for entry in sources.entries:
         source = sources.sources[entry["slug"]]
         actual_presentation: _SourceIdentity
-        if "historical" in entry["branches"]:
+        # A stable release can already be pinned for retention ahead of the next promotion.
+        branches = entry["branches"]
+        if "historical" in branches and sources.policy["stable_ref"] not in branches:
             overlay_presentation(source, sources.presentation)
             actual_presentation = sources.presentation_identity
         elif "content_commit" in entry:
