@@ -100,11 +100,13 @@ Each lumped element of the plan
 Palace lumped port, numbered as the plan numbers it: `P1` is the first. A
 `LumpedElement` carries its R, L and C as Palace's `R`, `L` and `C`, a
 parallel circuit; a `LumpedPort` carries its impedance as `R`, a load, so the
-mode's Q is the loaded Q. No port is excited. An authored sheet the plan
-declares nothing on is not in the model. Palace needs each port to be a
-rectangle, so `mesh()`
-gives Palace the central rectangle of the drawn sheet and joins the two end
-pieces to the conductors they land on.
+mode's Q is the loaded Q. No port is excited. Palace reports a port with an
+inductance as a participation (`junction`) and a port with a resistance as a
+coupling Q (`external`); see [What a result holds](#results-and-offline-analysis).
+An authored sheet the plan declares nothing on is not in the model. Palace
+needs each port to be a rectangle, so `mesh()` gives Palace the central
+rectangle of the drawn sheet and joins the two end pieces to the conductors
+they land on.
 [Lumped ports are made rectangles](../supported-geometry.qmd#lumped-port-rectangle)
 shows how the cuts are chosen, with the Xmon's junction port as a worked
 example. The sheet must land on exactly two conductors of two Nets; otherwise
@@ -119,7 +121,7 @@ its place. A conductor without a Net counts as a Net of its own.
 |---|---|---|
 | `surface_interfaces` | Surface films | `"MA"` (metal-air), `"MS"` (metal-substrate), `"SA"` (substrate-air) |
 | `bulk_domain_ids` | Bulk regions | The SGB volume names of `Domains.Postprocessing.Energy` |
-| `port_names` | Ports | The names of the plan's lumped elements, their sheets' names |
+| `port_names` | Ports: an inductive port's participation, a resistive port's coupling Q | The names of the plan's lumped elements, their sheets' names |
 
 `None` selects everything, `()` selects nothing, and an unknown name is
 refused when the configuration is written or the result is read. For example,
@@ -217,13 +219,31 @@ more converged modes; SCGSim keeps modes 1 to `num_modes` in Palace's order. A
 table with fewer rows, or whose modes are not numbered 1, 2, … in order, is
 refused.
 
+Each row of `result.epr_result().rows` is one mode:
+
+| Key | What it holds |
+|---|---|
+| `mode`, `frequency_hz` | The mode's number and its frequency in hertz |
+| `surface` | One item per Surface-EPR row: its participation and, when the film has a loss tangent, its loss `inverse_q` (1/Q) |
+| `bulk` | One item per bulk region: its participation |
+| `junction` | One item per port with an inductance: its signed `participation` |
+| `external` | One item per port with a resistance (a `LumpedPort`, or a `LumpedElement` with `resistance_ohm`): `port_name` and its coupling loss `inverse_q`, 1/Q_ext |
+
+Each group lists what `set_epr_request` selects. A port with both an
+inductance and a resistance is in `junction` and in `external`; a run without
+a resistive port has an empty `external`. The `inverse_q` of `external` is
+positive whichever way the port's sheet is drawn, and the losses add: the two
+50 Ω feedline ports of a hanger resonator with `inverse_q` 4.43 × 10⁻⁵ and
+4.45 × 10⁻⁵ give it a coupling Q of 1 / (8.88 × 10⁻⁵) = 1.13 × 10⁴.
+
 ### An infinite Q {#native-eigenmode-q}
 
 When Palace reports a mode's Q as infinite (`+inf` in `eig.csv`, a mode with no
 loss in the model), the result keeps it and the report labels it
 **native-reported infinite Q**, with no finite Q for that mode. The mode's
-frequency and energies are read as usual. This is the only value of
-infinity SCGSim accepts in a Palace table.
+frequency and energies are read as usual. A port's coupling Q is infinite
+when the mode loses nothing through that port; its `external` item then has
+`inverse_q` 0. SCGSim accepts infinity in a Palace table only as a Q.
 
 Palace's port participation is signed and depends on the phase convention; it
 is not AEDT's pair of non-negative inductive and capacitive participations.

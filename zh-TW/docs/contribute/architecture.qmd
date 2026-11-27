@@ -72,7 +72,7 @@ Palace 與 AEDT 求解的模型出自同一個建構器：
 
 `write_config()` 把 `ConfigInput`（網格、材料、Surface-EPR 規格與數值控制）和該問題的 `EigenmodeSettings` 或 `ElectrostaticSettings` 交給設定建構器。建構器為每個設定區段回傳一筆索引紀錄（`PortEntry`、`TerminalEntry`、`EnergyEntry`、`SurfaceEprEntry`），存進 `palace_index_map.json`。
 
-每個階段都從同一個模組 `scgsim.contracts.palace_run_folder` 取得執行資料夾的配置：每個檔案的路徑與結構描述、交接寫出並由 `resolve_palace_result` 檢查的交接識別（`HandoffIdentity`），以及每種問題一筆紀錄（`PalaceProblem`：`EIGENMODE`、`ELECTROSTATIC`）。依問題而不同的程式碼讀這筆紀錄，而不是比較問題名稱；它的 `written_families` 決定一次執行必須回傳哪些表格。這個模組只匯入標準函式庫，所以 `palace/run` 可以把它複製進執行資料夾：收據紀錄器（`metadata/record_palace_return.py`），以及帶有收斂宣告時的收斂執行器（`metadata/run_palace_until_converged.py`），在求解主機上只需要 Python 直譯器。
+每個階段都從同一個模組 `scgsim.contracts.palace_run_folder` 取得執行資料夾的配置：每個檔案的路徑與結構描述、交接寫出並由 `resolve_palace_result` 檢查的交接識別（`HandoffIdentity`），以及每種問題一筆紀錄（`PalaceProblem`：`EIGENMODE`、`ELECTROSTATIC`）。依問題而不同的程式碼讀這筆紀錄，而不是比較問題名稱；它的 `written_families` 決定一次執行必須回傳哪些表格。只有當某個埠的電路讓它有一欄時，Palace 才會寫出該埠表格（`PortTable`）：帶電感的埠才有 `port-EPR`，帶電阻的埠才有 `port-Q`。這個模組只匯入標準函式庫，所以 `palace/run` 可以把它複製進執行資料夾：收據紀錄器（`metadata/record_palace_return.py`），以及帶有收斂宣告時的收斂執行器（`metadata/run_palace_until_converged.py`），在求解主機上只需要 Python 直譯器。
 
 執行之後，`palace/results` 把回傳的資料夾讀成檢查過的紀錄（`ResolvedRunData`），`palace/reports` 建立給人看的內容（`resolve_palace_result` 回傳 `ResolvedPalaceResult`，帶有信任度、物理與效能三種檢視）。所有公開名稱都從 `scgsim.palace` 匯入。
 

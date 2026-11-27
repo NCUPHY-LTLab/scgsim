@@ -24,7 +24,7 @@ prints.
 
 | Your code was written for | What changes most | Your checklist |
 |---|---|---|
-| 3.0.0rc5 or 3.0.0rc6 | Nothing in your code. Prepare your models again, and run Palace Route A again | [From 3.0.0rc5 or rc6](#from-3-0-0rc6) |
+| 3.0.0rc5 or 3.0.0rc6 | Nothing in your code. Prepare your models again, run Palace Route A again, and save Palace EPR results again | [From 3.0.0rc5 or rc6](#from-3-0-0rc6) |
 | 3.0.0rc4 | Junctions, lumped RLCs and Driven ports are declared on the plan, not on the simulation | [From 3.0.0rc4](#from-3-0-0rc4) |
 | 3.0.0rc3 | Surface EPR and the vacuum region are set on the plan, not on the simulation | [From 3.0.0rc3](#from-3-0-0rc3) |
 | 3.0.0rc1 or 3.0.0rc2 | The layout check takes the plan, and AEDT builds every 3D model from the plan | [From 3.0.0rc1 or rc2](#from-rc1-or-rc2) |
@@ -37,8 +37,8 @@ then follows From 2.0.
 ## From 3.0.0rc5 or rc6 {#from-3-0-0rc6}
 
 Nothing in your code changes. From 3.0.0rc6 on, an install without the `aedt`
-extra imports `scgsim.aedt` and `scgsim.visualization`. Two changes affect what
-you prepared or ran:
+extra imports `scgsim.aedt` and `scgsim.visualization`. Three changes affect
+what you prepared, ran or saved:
 
 - **Prepare it again.** An SGB model now says it is `scgsim.sgb.sidecar.v7`.
   A model, Palace run folder or AEDT handoff prepared with 3.0.0rc6 or earlier
@@ -54,6 +54,13 @@ you prepared or ran:
   Each film's edge is now meshed as on Route B, so a Route A mesh has about
   as many unknowns as Route B's.
   Route B and AEDT are not affected.
+- **Save Palace EPR results again.** Each Eigenmode EPR row now has an
+  `external` group, the coupling loss of each port with a resistance, and an
+  Eigenmode run whose ports are all resistive, such as 50 Ω feedline ports, is
+  read instead of refused. A detached EPR result saved with 3.0.0rc6 or
+  earlier (`scgsim.palace.epr-result.v2`) has no such group, so
+  `resolve_epr_result` refuses it; save `epr_result()` of the new run again
+  ([What a result holds](../reference/specs/palace-eigenmode.qmd#results-and-offline-analysis)).
 
 ## From 3.0.0rc4 {#from-3-0-0rc4}
 
@@ -391,7 +398,7 @@ Work through these steps in order, then continue with
    |---|---|
    | `SurfaceMaskEprRecord`, `SurfaceMaskEprSeriesSnapshot` | `SurfaceMarginEprRecord`, `SurfaceMarginEprSeriesSnapshot` |
    | `PhysicsQuantitiesReport.masked_snapshots` | `PhysicsQuantitiesReport.margin_snapshots` |
-   | `scgsim.palace.epr-result.v1` | `scgsim.palace.epr-result.v2` |
+   | `scgsim.palace.epr-result.v1` | `scgsim.palace.epr-result.v3` |
    | `surface-mask-Q.csv` and `surface-mask-energy.csv` | Margin rows are read from `surface-Q.csv` |
    :::
 
