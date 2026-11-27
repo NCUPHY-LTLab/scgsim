@@ -275,6 +275,9 @@ def test_versions_overlay_only_presentation_and_publish_after_all_renders(publis
     ]
     assert publisher.calls[-1] == ["rename", "site", "publication"]
     assert publisher.renders == 3
+    stable = json.loads((output / "v1.1.0/render-observation.json").read_text())
+    assert stable["_extensions/arfiligol/askr/theme.txt"] == "theme from stable"
+    assert build["versions"][1]["presentation_commit"] == STABLE
     historical = json.loads((output / "v1.0.0/render-observation.json").read_text())
     assert historical["docs/legacy.qmd"] == "Original historical legacy body.\n"
     assert "source-label: historical" in historical["_quarto.yml"]
