@@ -123,7 +123,7 @@ aliases:
 | 來源 | SHA-256 |
 |---|---|
 | `scripts/generate_knowledge_reference.py` | `a66b84bc16c213b694b20d3ef1c6f8867d3dfb30a7d6f9d5034ac2e292c0eb49` |
-| `docs/knowledge-sources.json` | `f2a3da9df72648132dc90a8a1dc3c97cbca3c8c7aed8a9681619e388d24fe589` |
+| `docs/knowledge-sources.json` | `afa18144ed9d129eb5641e6657f4228a8b0277dbc01c9e6f785c1bb1b0ea7d62` |
 | `src/scgsim/aedt/epr/workflow.py` | `67e0c56b737aa0b7d7804b8c2836ebe107af0850573c496fe432b8658eebd760` |
 | `docs/reference/api/analyze-epr-usage.md` | `99d31a61922a5b4938bb2b6d5f0bc094037045b51377ee711c1683c78cd7e728` |
 | `zh-TW/docs/reference/api/analyze-epr-usage.md` | `a91990007fa95a2979b3a2d039c4e70f3d4efcdb950835e552bee4c1a6fcf779` |
@@ -165,6 +165,7 @@ README 與英文 `docs/*.qmd` 會收錄於離線 bundle；以下文件僅保留�
 - `zh-TW/docs/guides/capacitance-palace.qmd`
 - `zh-TW/docs/guides/capacitance-q3d.qmd`
 - `zh-TW/docs/guides/convergence-and-reports.qmd`
+- `zh-TW/docs/guides/frequency-sweeps-palace.qmd`
 - `zh-TW/docs/guides/hpc-sweep.qmd`
 - `zh-TW/docs/guides/inspect-the-prepared-model.qmd`
 - `zh-TW/docs/guides/inspect-the-source.qmd`

@@ -108,6 +108,7 @@ website:
       - docs/guides/aedt-cpw-inputs.qmd
       - docs/guides/modes-hfss.qmd
       - docs/guides/s-parameters-palace.qmd
+      - docs/guides/frequency-sweeps-palace.qmd
       - docs/guides/s-parameters-hfss.qmd
       - docs/guides/line-parameters-q2d.qmd
     - section: Results
