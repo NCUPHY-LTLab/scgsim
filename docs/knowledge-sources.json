@@ -241,8 +241,17 @@
             "CriterionGroup",
             "ErrorIndicator",
             "ModeFrequency",
-            "SMatrix",
             "SurfaceEpr"
+          ]
+        },
+        {
+          "title": "Driven convergence",
+          "title_zh": "Driven 收斂",
+          "gloss": "Check Maximum Delta S at the refining frequencies.",
+          "gloss_zh": "檢查參與網格細化頻率的 Maximum Delta S。",
+          "page": "../guides/s-parameters-palace.qmd#settings-you-may-change",
+          "names": [
+            "SMatrix"
           ]
         },
         {

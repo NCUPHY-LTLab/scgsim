@@ -48,7 +48,11 @@ aliases:
 
 **收斂.** 宣告自適應細化何時算收斂。 [說明](specs/palace-electrostatic-sgb.qmd#convergence-declaration)
 
-`Capacitance`, `ConvergenceCheck`, `ConvergencePlan`, `ConvergenceVerdict`, `Criterion`, `CriterionGroup`, `ErrorIndicator`, `ModeFrequency`, `SMatrix`, `SurfaceEpr`.
+`Capacitance`, `ConvergenceCheck`, `ConvergencePlan`, `ConvergenceVerdict`, `Criterion`, `CriterionGroup`, `ErrorIndicator`, `ModeFrequency`, `SurfaceEpr`.
+
+**Driven 收斂.** 檢查參與網格細化頻率的 Maximum Delta S。 [說明](../guides/s-parameters-palace.qmd#settings-you-may-change)
+
+`SMatrix`.
 
 **讀取計算結果.** 讀取回傳的執行資料夾與其記錄。 [說明](specs/report-model.qmd)
 
@@ -123,7 +127,7 @@ aliases:
 | 來源 | SHA-256 |
 |---|---|
 | `scripts/generate_knowledge_reference.py` | `a66b84bc16c213b694b20d3ef1c6f8867d3dfb30a7d6f9d5034ac2e292c0eb49` |
-| `docs/knowledge-sources.json` | `cb3d6d97658af6779ef15db9e0e73191316b22de196b5432669ba01980ecf9ee` |
+| `docs/knowledge-sources.json` | `ff9c7f0410e6fa48799eb23ca858c9accfb218e97614e5e8f7aae3ead2f48174` |
 | `src/scgsim/aedt/epr/workflow.py` | `67e0c56b737aa0b7d7804b8c2836ebe107af0850573c496fe432b8658eebd760` |
 | `docs/reference/api/analyze-epr-usage.md` | `99d31a61922a5b4938bb2b6d5f0bc094037045b51377ee711c1683c78cd7e728` |
 | `zh-TW/docs/reference/api/analyze-epr-usage.md` | `a91990007fa95a2979b3a2d039c4e70f3d4efcdb950835e552bee4c1a6fcf779` |
