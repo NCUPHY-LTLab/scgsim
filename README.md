@@ -22,14 +22,14 @@ and per-length line parameters.
 ## Install
 
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and Git,
-then create a study project with SCGSim `3.0.0rc6` and the OrcaPen SC PDK, the
+then create a study project with SCGSim `3.0.0` and the OrcaPen SC PDK, the
 component library the examples draw their layouts with, each pinned to an exact
 revision:
 
 ```bash
 uv init --python 3.12 scgsim-study
 cd scgsim-study
-uv add 'scgsim[palace] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@v3.0.0rc6' \
+uv add 'scgsim[palace] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@v3.0.0' \
   'orcapen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@49e539fd59f3224ecda965d777c7ec3aadcc3b85'
 ```
 

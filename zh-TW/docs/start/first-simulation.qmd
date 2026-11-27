@@ -14,7 +14,7 @@ Capacitance matrix (fF): pad
      pad     112.54
 ```
 
-開始前，你需要一個研究專案，裝好 SCGSim `3.0.0rc6`（含 `palace` extra）以及負責畫出版圖的元件庫 OrcaPen SC PDK，做法見[安裝 SCGSim](install.qmd)；同一台電腦上也要裝好 Palace 0.18.1，見 [Palace 安裝說明](https://awslabs.github.io/palace/stable/install/)。整個過程不需要 AEDT 授權。
+開始前，你需要一個研究專案，裝好 SCGSim `3.0.0`（含 `palace` extra）以及負責畫出版圖的元件庫 OrcaPen SC PDK，做法見[安裝 SCGSim](install.qmd)；同一台電腦上也要裝好 Palace 0.18.1，見 [Palace 安裝說明](https://awslabs.github.io/palace/stable/install/)。整個過程不需要 AEDT 授權。
 
 ## 版圖 {#the-layout}
 

@@ -1,6 +1,6 @@
 ---
-title: "Upgrade to 3.0.0rc6"
-description: "Find the version your code was written for, then follow its checklist to 3.0.0rc6, with the final code."
+title: "Upgrade to 3.0.0"
+description: "Find the version your code was written for, then follow its checklist to 3.0.0, with the final code."
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/api-migration"
