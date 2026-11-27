@@ -29,6 +29,7 @@ from .config.convergence import (
     CriterionGroup,
     ErrorIndicator,
     ModeFrequency,
+    SMatrix,
     SurfaceEpr,
 )
 from .config.driven_sweep import Linear, Log, Points
@@ -83,6 +84,7 @@ __all__ = [
     "Linear",
     "Log",
     "ModeFrequency",
+    "SMatrix",
     "PalaceCost",
     "PalaceDrivenResult",
     "PalaceEprResult",

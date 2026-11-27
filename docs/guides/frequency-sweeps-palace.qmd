@@ -213,12 +213,17 @@ from 6.5 GHz took 1,431 s, and the resonator was mode 1:
   $1/Q - 1/Q_{\text{ext},1} - 1/Q_{\text{ext},2}$ gives
   $Q_i$ = 1.036 × 10⁶, the notch's.
 
-Palace completes such a run, but SCGSim does not yet read back an Eigenmode
-run whose lumped ports are all resistive
-([open issue](https://github.com/NCUPHY-LTLab/scgsim/issues/311)):
-`resolve_palace_result` marks it failed. Until it does, read the mode from
-`results/palace/eig.csv` and each port's $Q_\text{ext}$ from
-`results/palace/port-Q.csv` in the run folder.
+After resolving the Eigenmode run with `resolve_palace_result`, read the
+frequency and loaded Q from `result.tables["eig"].rows[0]`. For this mode,
+`result.epr_result().rows[0]["external"]` gives each resistive port's
+`port_name` and `inverse_q`, its contribution $1/Q_\text{ext}$. Include both
+feedline ports if you select ports with `set_epr_request(port_names=...)`.
+Take the reciprocal of their sum to get the combined coupling Q.
+
+```python
+external = result.epr_result().rows[0]["external"]
+q_ext = 1 / sum(port["inverse_q"] for port in external)
+```
 
 The runs and their raw numbers are in the
 [run record](https://github.com/NCUPHY-LTLab/scgsim/issues/307#issuecomment-7194872828).

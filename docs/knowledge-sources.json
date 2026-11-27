@@ -241,6 +241,7 @@
             "CriterionGroup",
             "ErrorIndicator",
             "ModeFrequency",
+            "SMatrix",
             "SurfaceEpr"
           ]
         },

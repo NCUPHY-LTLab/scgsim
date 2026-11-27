@@ -48,7 +48,7 @@ Every name below is importable from the package it is listed under. Each group l
 
 **Convergence.** Declare when adaptive refinement has converged. [Reference](specs/palace-electrostatic-sgb.qmd#convergence-declaration)
 
-`Capacitance`, `ConvergenceCheck`, `ConvergencePlan`, `ConvergenceVerdict`, `Criterion`, `CriterionGroup`, `ErrorIndicator`, `ModeFrequency`, `SurfaceEpr`.
+`Capacitance`, `ConvergenceCheck`, `ConvergencePlan`, `ConvergenceVerdict`, `Criterion`, `CriterionGroup`, `ErrorIndicator`, `ModeFrequency`, `SMatrix`, `SurfaceEpr`.
 
 **Read a run.** Read a returned run folder and its records. [Reference](specs/report-model.qmd)
 
@@ -123,14 +123,14 @@ Every name below is importable from the package it is listed under. Each group l
 | Source | SHA-256 |
 |---|---|
 | `scripts/generate_knowledge_reference.py` | `a66b84bc16c213b694b20d3ef1c6f8867d3dfb30a7d6f9d5034ac2e292c0eb49` |
-| `docs/knowledge-sources.json` | `afa18144ed9d129eb5641e6657f4228a8b0277dbc01c9e6f785c1bb1b0ea7d62` |
+| `docs/knowledge-sources.json` | `cb3d6d97658af6779ef15db9e0e73191316b22de196b5432669ba01980ecf9ee` |
 | `src/scgsim/aedt/epr/workflow.py` | `67e0c56b737aa0b7d7804b8c2836ebe107af0850573c496fe432b8658eebd760` |
 | `docs/reference/api/analyze-epr-usage.md` | `99d31a61922a5b4938bb2b6d5f0bc094037045b51377ee711c1683c78cd7e728` |
 | `zh-TW/docs/reference/api/analyze-epr-usage.md` | `a91990007fa95a2979b3a2d039c4e70f3d4efcdb950835e552bee4c1a6fcf779` |
 | `src/scgsim/aedt/__init__.py` | `e826ea4631ce25d51151e4d730793dea1b4672f19ebf672ff8b963e48e6039c8` |
 | `src/scgsim/aedt/specs/__init__.py` | `4a3e47c42a136f11ee1db472436411c715106c367cfe80e7d34342627814e15c` |
 | `src/scgsim/geometry/__init__.py` | `542d6fe45d106be73696e75f83c8ad555e5aca2fb690edfa5ff62acffc0f26cb` |
-| `src/scgsim/palace/__init__.py` | `2d26b520fa2fde5a884fae899c81084072fe2e2b1433d8bca7bc7a9d944a030c` |
+| `src/scgsim/palace/__init__.py` | `c641ee0a0bad2f4ccaa2e165d94098def309b5569f34ad21625e26f5ef095a8d` |
 | `src/scgsim/semantics/__init__.py` | `e9b198a8741516203f5dd77be7ee97d184fe1c70cfc32506e6536be609132e0a` |
 | `src/scgsim/visualization/__init__.py` | `89a6eb15003c49dc9243c7f2c9bf5cd4adfd8c4c2494b031d25e3cfef4feb8b7` |
 

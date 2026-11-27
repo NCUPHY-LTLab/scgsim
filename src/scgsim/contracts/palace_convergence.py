@@ -24,15 +24,19 @@ The module imports only the standard library and the run-folder contract, and ha
 so it can be copied into a run folder and run there without SCGSim, as the receipt recorder is.
 """
 
+import cmath
 import csv
 import json
 import math
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
+from functools import cached_property
 from pathlib import Path
 from typing import Any, Literal
 
-from scgsim.contracts.palace_run_folder import RunEnding
+from scgsim.contracts.palace_run_folder import DRIVEN, RunEnding
 
 PLAN_SCHEMA = "scgsim.palace.convergence-plan"
 PLAN_SCHEMA_VERSION = 2
@@ -48,13 +52,20 @@ measures is at most the threshold.
 """
 TESTS: tuple[Test, ...] = ("percent_change", "absolute_change", "at_most")
 
-Quantity = Literal["capacitance", "mode_frequency", "surface_epr", "error_indicator"]
+Quantity = Literal[
+    "capacitance", "mode_frequency", "surface_epr", "error_indicator", "s_matrix"
+]
 QUANTITIES: tuple[Quantity, ...] = (
     "capacitance",
     "mode_frequency",
     "surface_epr",
     "error_indicator",
+    "s_matrix",
 )
+
+_Combine = Literal["sum", "polar_db_deg"]
+_PORT_S = f"{DRIVEN.primary_table}.csv"
+_S_MAGNITUDE_HEADER = re.compile(r"\|(S\[[1-9][0-9]*\]\[[1-9][0-9]*\])\| \(dB\)")
 
 _WHERE_PLAN = (
     "the run folder's convergence plan: write it again with set_convergence() and write_config(), "
@@ -83,29 +94,35 @@ class TableRow:
 
 @dataclass(frozen=True)
 class PlannedValue:
-    """One number a criterion reads from each pass: the sum of ``columns`` on ``row`` of ``table``.
+    """One scalar or one scattering-matrix entry a criterion reads from each pass.
 
-    ``table`` is the file name of the table inside a pass folder (``terminal-C.csv``).  ``row`` is None for a
-    table with exactly one row (``error-indicators.csv``).  A capacitance or a frequency is one column; the
-    participation of an interface kind is the sum of the columns of its Surface-EPR rows.
+    ``table`` is the file name inside a pass folder. For ``sum``, the scalar is the sum of ``columns`` on
+    ``row``, which is None for a table with exactly one row (``error-indicators.csv``).
+    For ``polar_db_deg``, the two columns hold one S-parameter's magnitude in dB and phase in degrees.
+    ``row`` is None and ``expected_rows`` is the number of frequencies in that entry's full sweep.
     """
 
     label: str
     table: str
     row: TableRow | None
     columns: tuple[str, ...]
+    combine: _Combine = "sum"
+    expected_rows: int | None = None
 
     def to_payload(self) -> dict[str, Any]:
         """The value as the plan file holds it."""
-        return {
+        payload = {
             "label": self.label,
             "table": self.table,
             "row": None
             if self.row is None
             else {"column": self.row.column, "index": self.row.index},
             "columns": list(self.columns),
-            "combine": "sum",
+            "combine": self.combine,
         }
+        if self.combine == "polar_db_deg":
+            payload["expected_rows"] = self.expected_rows
+        return payload
 
 
 @dataclass(frozen=True)
@@ -221,8 +238,17 @@ def _criterion(payload: Any) -> PlannedCriterion:
                 f"has threshold {threshold!r}; it must be a positive finite number",
             )
         )
+    if quantity == "s_matrix" and test != "absolute_change":
+        raise ValueError(
+            _refused(
+                f"criterion {label!r} of the convergence plan",
+                "requires absolute_change for s_matrix",
+            )
+        )
+    combine: _Combine = "polar_db_deg" if quantity == "s_matrix" else "sum"
     values = tuple(
-        _value(item) for item in _list(criterion.get("values"), f"{label} values")
+        _value(item, combine)
+        for item in _list(criterion.get("values"), f"{label} values")
     )
     if not values:
         raise ValueError(
@@ -247,14 +273,14 @@ def _criterion(payload: Any) -> PlannedCriterion:
     )
 
 
-def _value(payload: Any) -> PlannedValue:
+def _value(payload: Any, combine: _Combine) -> PlannedValue:
     value = _mapping(payload, "a value of the convergence plan")
     label = _text(value.get("label"), "value label")
-    if value.get("combine") != "sum":
+    if value.get("combine") != combine:
         raise ValueError(
             _refused(
                 f"value {label!r} of the convergence plan",
-                f"combines its columns by {value.get('combine')!r}; this version sums them",
+                f"combines its columns by {value.get('combine')!r}; its criterion requires {combine!r}",
             )
         )
     columns = tuple(
@@ -266,9 +292,16 @@ def _value(payload: Any) -> PlannedValue:
             _refused(f"value {label!r} of the convergence plan", "names no column")
         )
     row = value.get("row")
+    table = _text(value.get("table"), f"{label} table")
+    expected_rows = None
+    if combine == "polar_db_deg":
+        _require_polar_columns(label, table, row, columns)
+        expected_rows = _positive_int(
+            value.get("expected_rows"), f"{label} expected_rows"
+        )
     return PlannedValue(
         label=label,
-        table=_text(value.get("table"), f"{label} table"),
+        table=table,
         row=None
         if row is None
         else TableRow(
@@ -276,7 +309,33 @@ def _value(payload: Any) -> PlannedValue:
             index=_positive_int(row.get("index"), f"{label} row index"),
         ),
         columns=columns,
+        combine=combine,
+        expected_rows=expected_rows,
     )
+
+
+def _require_polar_columns(
+    label: str, table: str, row: Any, columns: tuple[str, ...]
+) -> None:
+    if table != _PORT_S or row is not None:
+        raise ValueError(
+            _refused(
+                f"value {label!r} of the convergence plan",
+                f"must read the full {_PORT_S} frequency sweep",
+            )
+        )
+    magnitude = _S_MAGNITUDE_HEADER.fullmatch(columns[0])
+    if (
+        len(columns) != 2
+        or magnitude is None
+        or columns[1] != f"arg({magnitude[1]}) (deg.)"
+    ):
+        raise ValueError(
+            _refused(
+                f"value {label!r} of the convergence plan",
+                "must name the native dB and degree columns of the same S-parameter in that order",
+            )
+        )
 
 
 def _mapping(value: Any, name: str) -> Mapping[str, Any]:
@@ -637,7 +696,8 @@ class ValueAtPass:
     """One number of a criterion at one pass: the number, what the test measured, and whether it holds.
 
     ``measured`` is the change from the previous pass for a change test and the number itself for
-    ``at_most``.  ``unavailable`` says why ``value`` or ``measured`` is None.
+    ``at_most``. For an S-parameter, ``value`` is the largest magnitude and ``measured`` is the
+    largest absolute complex change, both across the sweep. ``unavailable`` says why a reading is None.
     """
 
     label: str
@@ -727,7 +787,7 @@ def check_convergence(
     passes: Sequence[PassFolder],
     set_aside: Sequence[SetAside] = (),
 ) -> ConvergenceCheck:
-    """Read the planned numbers of every pass, apply each criterion, and decide the verdict.
+    """Read the planned values of every pass, apply each criterion, and decide the verdict.
 
     ``passes`` are ``returned_passes``'s, in order of their numbers; ``set_aside`` its folders that are no
     pass, kept for the record.  A change is measured only between two readable passes whose numbers are
@@ -801,12 +861,38 @@ def _previous(
     return readings[position - 1]
 
 
-_Reading = tuple[float | None, str | None]
-"""One number read from a pass: the number, or None with why it could not be read."""
+@dataclass(frozen=True)
+class _PolarSeries:
+    """One complex scattering-matrix entry at each measured frequency of a pass."""
+
+    frequencies: tuple[Decimal, ...]
+    responses: tuple[complex, ...]
+    max_magnitude: float
+
+    def change_from(self, earlier: "_PolarSeries") -> float | str:
+        """The largest change at a shared frequency, or why the series cannot be compared."""
+        if self.frequencies != earlier.frequencies:
+            return f"{_PORT_S} {DRIVEN.series_index!r} frequencies differ from the previous pass"
+        try:
+            change = max(
+                abs(current - previous)
+                for current, previous in zip(
+                    self.responses, earlier.responses, strict=True
+                )
+            )
+        except OverflowError:
+            change = math.inf
+        if not math.isfinite(change):
+            return f"{_PORT_S} complex change is not finite"
+        return change
+
+
+_Reading = tuple[float | _PolarSeries | None, str | None]
+"""A scalar or an S-parameter series read from a pass, or None with why it could not be read."""
 
 
 def _read_pass(plan: ConvergencePlan, folder: Path) -> list[list[_Reading]]:
-    """Every planned number of one pass, by criterion and value; each table is read once."""
+    """Every planned value of one pass, by criterion and entry; each table is read once."""
     tables: dict[str, _Table | str] = {}
     readings: list[list[_Reading]] = []
     for criterion in plan.criteria:
@@ -815,7 +901,7 @@ def _read_pass(plan: ConvergencePlan, folder: Path) -> list[list[_Reading]]:
             if value.table not in tables:
                 tables[value.table] = _read_table(folder / value.table)
             table = tables[value.table]
-            row.append((None, table) if isinstance(table, str) else table.sum(value))
+            row.append((None, table) if isinstance(table, str) else table.read(value))
         readings.append(row)
     return readings
 
@@ -828,8 +914,13 @@ class _Table:
     headers: tuple[str, ...]
     rows: tuple[tuple[str, ...], ...]
 
-    def sum(self, value: PlannedValue) -> _Reading:
-        """The sum of ``value``'s columns on its row, or None with why it cannot be read."""
+    def read(self, value: PlannedValue) -> _Reading:
+        """Read a scalar or an S-parameter series, or give the reason it is unavailable."""
+        if value.combine == "polar_db_deg":
+            return self._polar_series(value)
+        return self._sum(value)
+
+    def _sum(self, value: PlannedValue) -> _Reading:
         cells = self._row(value.row)
         if isinstance(cells, str):
             return None, cells
@@ -842,6 +933,51 @@ class _Table:
                 return None, f"{self.name} {column!r} is not a finite number"
             total += number
         return total, None
+
+    def _polar_series(self, value: PlannedValue) -> _Reading:
+        if len(self.rows) != value.expected_rows:
+            return None, (
+                f"{self.name} has {len(self.rows)} frequency rows where {value.expected_rows} are expected"
+            )
+        frequencies = self._frequencies
+        if isinstance(frequencies, str):
+            return None, frequencies
+        for column in value.columns:
+            if column not in self.headers:
+                return None, f"{self.name} has no column {column!r}"
+        magnitude, phase = (self.headers.index(column) for column in value.columns)
+        responses: list[complex] = []
+        max_magnitude = 0.0
+        for frequency, cells in zip(frequencies, self.rows, strict=True):
+            response = _polar_response(cells[magnitude], cells[phase])
+            if isinstance(response, str):
+                return None, f"{self.name} {value.label} at {frequency} GHz: {response}"
+            responses.append(response)
+            try:
+                max_magnitude = max(max_magnitude, abs(response))
+            except OverflowError:
+                return (
+                    None,
+                    f"{self.name} {value.label} at {frequency} GHz: magnitude is out of range",
+                )
+        return _PolarSeries(frequencies, tuple(responses), max_magnitude), None
+
+    @cached_property
+    def _frequencies(self) -> tuple[Decimal, ...] | str:
+        column = DRIVEN.series_index
+        if column not in self.headers:
+            return f"{self.name} has no frequency column {column!r}"
+        position = self.headers.index(column)
+        frequencies: list[Decimal] = []
+        for row, cells in enumerate(self.rows, start=1):
+            # Palace prints rounded frequencies. Decimal preserves the exact identities in the file.
+            frequency = _frequency(cells[position])
+            if frequency is None:
+                return f"{self.name} row {row} {column!r} is not a positive finite frequency"
+            if frequencies and frequency <= frequencies[-1]:
+                return f"{self.name} row {row} {column!r} frequencies must be strictly increasing"
+            frequencies.append(frequency)
+        return tuple(frequencies)
 
     def _row(self, row: TableRow | None) -> tuple[str, ...] | str:
         if row is None:
@@ -899,6 +1035,33 @@ def _number(cell: str) -> float | None:
     return number if math.isfinite(number) else None
 
 
+def _frequency(cell: str) -> Decimal | None:
+    try:
+        frequency = Decimal(cell)
+    except InvalidOperation:
+        return None
+    return frequency if frequency.is_finite() and frequency > 0 else None
+
+
+def _polar_response(db: str, degrees: str) -> complex | str:
+    phase = _number(degrees)
+    if phase is None:
+        return "phase is not a finite number"
+    # Palace writes -inf dB for a scattering amplitude of exactly zero.
+    if db.lower() == "-inf":
+        return 0j
+    magnitude_db = _number(db)
+    if magnitude_db is None:
+        return "magnitude in dB is not a finite number or -inf"
+    try:
+        magnitude = 10.0 ** (magnitude_db / 20.0)
+    except OverflowError:
+        return "magnitude is out of range"
+    phase = math.remainder(phase, 360.0)
+    # Use one angle for the negative real axis so +180 and -180 give the same reading.
+    return cmath.rect(magnitude, math.radians(180.0 if phase == -180.0 else phase))
+
+
 def _criterion_at_pass(
     criterion: PlannedCriterion,
     readings: list[_Reading],
@@ -925,9 +1088,10 @@ def _value_at_pass(
     reading: _Reading,
     previous: _Reading | str,
 ) -> ValueAtPass:
-    value, unavailable = reading
-    if value is None:
+    current, unavailable = reading
+    if current is None:
         return ValueAtPass(label, None, None, False, unavailable)
+    value = current.max_magnitude if isinstance(current, _PolarSeries) else current
     if criterion.test == "at_most":
         return ValueAtPass(label, value, value, value <= criterion.threshold)
     if isinstance(previous, str):
@@ -937,21 +1101,31 @@ def _value_at_pass(
         return ValueAtPass(
             label, value, None, False, f"previous pass: {earlier_unavailable}"
         )
-    change = abs(value - earlier)
-    if criterion.test == "percent_change":
-        if value == 0.0:
-            if earlier != 0.0:
-                return ValueAtPass(
-                    label,
-                    value,
-                    None,
-                    False,
-                    "percent change undefined: the value is zero",
-                )
-            # Both passes read zero: nothing changed.
-            return ValueAtPass(label, value, 0.0, True)
-        change = 100.0 * change / abs(value)
-    return ValueAtPass(label, value, change, change <= criterion.threshold)
+    change = _measure_change(criterion.test, current, earlier)
+    if isinstance(change, str):
+        return ValueAtPass(label, value, None, False, change)
+    # HFSS Maximum Delta S requires each change to be below its threshold.
+    holds = (
+        change < criterion.threshold
+        if criterion.quantity == "s_matrix"
+        else change <= criterion.threshold
+    )
+    return ValueAtPass(label, value, change, holds)
+
+
+def _measure_change(
+    test: Test, current: float | _PolarSeries, earlier: float | _PolarSeries
+) -> float | str:
+    if isinstance(current, _PolarSeries):
+        assert isinstance(earlier, _PolarSeries)
+        return current.change_from(earlier)
+    assert isinstance(earlier, float)
+    change = abs(current - earlier)
+    if test != "percent_change":
+        return change
+    if current == 0.0:
+        return 0.0 if earlier == 0.0 else "percent change undefined: the value is zero"
+    return 100.0 * change / abs(current)
 
 
 def _verdict(plan: ConvergencePlan, checks: list[PassCheck]) -> ConvergenceVerdict:

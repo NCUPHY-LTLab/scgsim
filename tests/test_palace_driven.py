@@ -18,6 +18,7 @@ from palace_driven_support import mesh_without_gmsh
 from test_simulation_drc import BANDED, layout_plan, two_pads
 
 from scgsim.contracts.palace_run_folder import (
+    CONVERGENCE_PLAN,
     HANDOFF_METADATA,
     PORT_INFORMATION,
     palace_problem,
@@ -30,6 +31,7 @@ from scgsim.palace import (
     Linear,
     Log,
     Points,
+    SMatrix,
 )
 from scgsim.palace.config.driven_sweep import palace_frequencies_ghz
 from scgsim.palace.config.numerical import NumericalControls
@@ -611,13 +613,44 @@ def test_amr_is_off_by_default_and_needs_its_tolerance_when_turned_on():
         sim.numerical.check_ready_for("Driven")
 
 
-def test_a_convergence_declaration_is_refused():
-    """Driven has no convergence quantity yet, so no criterion is taken; removing a declaration still works."""
-    sim = DrivenSim()
-    with pytest.raises(ValueError, match="DrivenSim takes no convergence quantity yet"):
-        sim.set_convergence(ErrorIndicator().below(0.1))
+def test_driven_seals_the_maximum_delta_s_and_indicator(monkeypatch, tmp_path):
+    """The public declaration names the config's full solves and only its excited physical ports."""
+    sim = meshed(monkeypatch, tmp_path, driven_plan(monkeypatch))
+    sim.set_numerical(amr_max_passes=3, amr_update_fraction=0.7)
+    sim.set_convergence(SMatrix().within(delta_s=0.02), ErrorIndicator().below(0.1))
+    config = written_config(sim, frequencies=[Points([2e9, 6e9])])
+    plan = json.loads((sim.write_config().parent / CONVERGENCE_PLAN).read_text())
+    assert config["Model"]["Refinement"]["SaveAdaptIterations"] is True
+    criterion, indicator = plan["criteria"]
+    assert (criterion["quantity"], criterion["test"], criterion["threshold"]) == (
+        "s_matrix",
+        "absolute_change",
+        0.02,
+    )
+    assert criterion["values"] == [
+        {
+            "label": "S[1][1]",
+            "table": "port-S.csv",
+            "row": None,
+            "columns": ["|S[1][1]| (dB)", "arg(S[1][1]) (deg.)"],
+            "combine": "polar_db_deg",
+            "expected_rows": 2,
+        }
+    ]
+    assert indicator["quantity"] == "error_indicator"
     sim.set_convergence(None)
     assert sim.convergence is None
+
+
+def test_maximum_delta_s_requires_full_solves(monkeypatch, tmp_path):
+    """A reduced-model sweep does not give a field solve at every frequency being compared."""
+    sim = meshed(monkeypatch, tmp_path, driven_plan(monkeypatch))
+    sim.set_numerical(amr_max_passes=3, amr_update_fraction=0.7)
+    sim.set_convergence(SMatrix().within(delta_s=0.02))
+    with pytest.raises(ValueError, match="requires full solves"):
+        written_config(sim, frequencies=[Linear(2e9, 6e9, 5)], adaptive_tolerance=1e-3)
+    sim.set_convergence(ErrorIndicator().below(0.1))
+    written_config(sim, frequencies=[Linear(2e9, 6e9, 5)], adaptive_tolerance=1e-3)
 
 
 # ---- What it reports -------------------------------------------------------------------------------------
@@ -706,8 +739,8 @@ def test_the_handoff_records_driven_and_the_tables_palace_writes(monkeypatch, tm
     metadata = json.loads((handoff.run_dir / HANDOFF_METADATA).read_text())
     assert metadata["problem"] == "Driven"
     assert palace_problem("Driven").written_families(
-        lumped_ports=True, surfaces=True
+        lumped_ports=[{"Index": 1}], surfaces=True
     ) == ("port-S", "port-I", "port-V", "domain-E", "surface-Q", "error-indicators")
     assert palace_problem("Driven").written_families(
-        lumped_ports=True, surfaces=False
+        lumped_ports=[{"Index": 1}], surfaces=False
     ) == ("port-S", "port-I", "port-V", "domain-E", "error-indicators")

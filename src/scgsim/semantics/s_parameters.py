@@ -108,7 +108,7 @@ class SParameters:
             object.__setattr__(self, field, MappingProxyType(dict(value)))
 
     @property
-    def reference_ohm(self) -> tuple[float, ...]:
+    def reference_impedances_ohm(self) -> tuple[float, ...]:
         """Each port's reference impedance in ohms, in port order: the impedance its waves are measured against."""
         return tuple(port.impedance_ohm for port in self.ports)
 
@@ -142,7 +142,7 @@ class SParameters:
                     f"must end in {suffix}, the suffix of a {len(self.ports)}-port file"
                 )
             )
-        references = set(self.reference_ohm)
+        references = set(self.reference_impedances_ohm)
         if len(references) != 1:
             raise ValueError(
                 Declared("the record's ports", _WHERE_TOUCHSTONE).refusal(

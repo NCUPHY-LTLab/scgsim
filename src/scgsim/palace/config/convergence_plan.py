@@ -22,6 +22,8 @@ from scgsim.contracts.palace_convergence import (
 )
 from scgsim.contracts.palace_run_folder import (
     EIGENMODE,
+    PORT_S_MAGNITUDE_COLUMN,
+    PORT_S_PHASE_COLUMN,
     palace_problem,
     table_name,
 )
@@ -33,10 +35,12 @@ from .convergence import (
     Criterion,
     ErrorIndicator,
     ModeFrequency,
+    SMatrix,
     SurfaceEpr,
     element_label,
     quantity_name,
 )
+from .driven_sweep import DrivenSweep
 from .index import IndexEntry, SurfaceEprEntry, TerminalEntry
 
 _FREQUENCY_COLUMN = "Re{f} (GHz)"
@@ -47,12 +51,14 @@ _UNITS: dict[type, str] = {
     ModeFrequency: "GHz",
     SurfaceEpr: "1",
     ErrorIndicator: "1",
+    SMatrix: "1",
 }
 _QUANTITY_NAMES: dict[type, Quantity] = {
     Capacitance: "capacitance",
     ModeFrequency: "mode_frequency",
     SurfaceEpr: "surface_epr",
     ErrorIndicator: "error_indicator",
+    SMatrix: "s_matrix",
 }
 
 
@@ -68,6 +74,8 @@ class PlanContext:
     entries: Sequence[IndexEntry]
     num_modes: int | None = None
     surface_interfaces: tuple[str, ...] | None = None
+    driven_sweep: DrivenSweep | None = None
+    driven_excitations: tuple[int, ...] = ()
 
     @property
     def terminals(self) -> dict[str, int]:
@@ -102,6 +110,8 @@ def _criterion(criterion: Criterion, context: PlanContext) -> PlannedCriterion:
         values = _frequency_values(quantity, context)
     elif isinstance(quantity, SurfaceEpr):
         values = _surface_values(quantity, context)
+    elif isinstance(quantity, SMatrix):
+        values = _s_matrix_values(context)
     else:
         values = (
             PlannedValue(
@@ -119,6 +129,35 @@ def _criterion(criterion: Criterion, context: PlanContext) -> PlannedCriterion:
         unit=_UNITS[type(quantity)],
         values=values,
         group=quantity.group if isinstance(quantity, SurfaceEpr) else "",
+    )
+
+
+def _s_matrix_values(context: PlanContext) -> tuple[PlannedValue, ...]:
+    """Plan one native column pair per matrix entry at every full-solve frequency."""
+    sweep = context.driven_sweep
+    if sweep is None or sweep.adaptive:
+        raise ValueError(
+            Declared(
+                "Maximum Delta S", "the calls to set_driven and set_convergence"
+            ).refusal(
+                "requires full solves at the same frequencies on every AMR pass: "
+                "give the refining sweep without adaptive_tolerance"
+            )
+        )
+    return tuple(
+        PlannedValue(
+            f"S[{output}][{excitation}]",
+            table_name("port-S"),
+            None,
+            (
+                PORT_S_MAGNITUDE_COLUMN.format(o=output, e=excitation),
+                PORT_S_PHASE_COLUMN.format(o=output, e=excitation),
+            ),
+            combine="polar_db_deg",
+            expected_rows=sweep.frequency_count,
+        )
+        for output in context.driven_excitations
+        for excitation in context.driven_excitations
     )
 
 

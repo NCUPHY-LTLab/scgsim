@@ -483,6 +483,7 @@ def _driven_trust_report(
         else check_passes(read_plan(root, run.handoff, run.problem), root),
         result=detached,
         readback_refusal=refusal,
+        solver_end=None if resolved is None else resolved.solver_end,
         theme=checked_theme(theme),
     )
 

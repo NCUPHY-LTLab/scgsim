@@ -3,7 +3,8 @@
 A criterion is a quantity and a threshold.  The quantities are the Maxwell capacitance matrix
 (``Capacitance``, Electrostatic), the frequency of the modes (``ModeFrequency``, Eigenmode), the Surface-EPR
 participation of one interface kind (``SurfaceEpr``, both problems; ``MA`` metal-air, ``MS``
-metal-substrate, ``SA`` substrate-air) and Palace's error indicator (``ErrorIndicator``, both problems)::
+metal-substrate, ``SA`` substrate-air), Palace's error indicator (``ErrorIndicator``, all three problems)
+and the change of complex S-parameters (``SMatrix``, Driven)::
 
     sim.set_convergence(
         Capacitance.diagonal().within(percent=0.1),
@@ -413,7 +414,7 @@ class SurfaceEprKinds:
 
 @dataclass(frozen=True)
 class ErrorIndicator:
-    """The norm of Palace's AMR error indicator (``Norm`` of ``error-indicators.csv``), unitless, on both problems."""
+    """Palace's unitless AMR error indicator (``Norm`` in ``error-indicators.csv``)."""
 
     tests: ClassVar[tuple[Test, ...]] = _VALUE_TESTS
 
@@ -435,7 +436,26 @@ class ErrorIndicator:
         )
 
 
-ConvergenceQuantity = Capacitance | ModeFrequency | SurfaceEpr | ErrorIndicator
+@dataclass(frozen=True)
+class SMatrix:
+    """HFSS Maximum Delta S over the excited ports and full-solve frequencies of a Driven AMR pass."""
+
+    tests: ClassVar[tuple[Test, ...]] = ("absolute_change",)
+
+    label: ClassVar[str] = "Maximum Delta S"
+
+    def within(self, *, delta_s: float) -> Criterion:
+        """Bound the largest magnitude of the complex S difference between consecutive passes."""
+        return checked_criterion(
+            Criterion(self, "absolute_change", delta_s),
+            "the call to SMatrix.within",
+            "delta_s",
+        )
+
+
+ConvergenceQuantity = (
+    Capacitance | ModeFrequency | SurfaceEpr | ErrorIndicator | SMatrix
+)
 
 
 def quantity_name(quantity: ConvergenceQuantity) -> str:
@@ -458,28 +478,21 @@ class Criterion:
 
     @property
     def label(self) -> str:
-        """How the report names the criterion: its quantity's label."""
+        """The report label of the criterion."""
         return self.quantity.label
 
 
 def checked_criterion(
     criterion: Any, where: str, threshold_name: str = "threshold"
 ) -> Criterion:
-    """``criterion`` with its threshold as a float, after the one check every criterion goes through.
-
-    The quantity must be one of the four, the test one the quantity offers (a change for ``Capacitance``,
-    ``ModeFrequency`` and ``SurfaceEpr``, a value for ``ErrorIndicator``) and the threshold positive and
-    finite.  ``within``, ``below`` and ``set_convergence`` all call it; ``where`` names the call to change.
-
-    Raises:
-        ValueError: ``criterion`` is not a ``Criterion``, or one of those does not hold.
-    """
+    """Return a criterion with a supported test and a positive, finite threshold as a float."""
     if not isinstance(criterion, Criterion) or not isinstance(
-        criterion.quantity, (Capacitance, ModeFrequency, SurfaceEpr, ErrorIndicator)
+        criterion.quantity,
+        (Capacitance, ModeFrequency, SurfaceEpr, ErrorIndicator, SMatrix),
     ):
         raise ValueError(
             Declared("set_convergence() argument", where).refusal(
-                "takes criteria, a quantity of Capacitance, ModeFrequency, SurfaceEpr or ErrorIndicator "
+                "takes criteria, a quantity of Capacitance, ModeFrequency, SurfaceEpr, ErrorIndicator or SMatrix "
                 f"with its threshold, such as ErrorIndicator().below(...); {found_text(type(criterion).__name__)}"
             )
         )
@@ -487,12 +500,7 @@ def checked_criterion(
     if criterion.test not in quantity.tests:
         raise ValueError(
             Declared(f"{quantity_name(quantity)} criterion", where).refusal(
-                f"tests {criterion.test!r}, and {type(quantity).__name__} offers {list(quantity.tests)}: "
-                + (
-                    "bound its value with ErrorIndicator().below(...)"
-                    if isinstance(quantity, ErrorIndicator)
-                    else "bound its change with .within(percent=...) or its absolute form"
-                )
+                f"tests {criterion.test!r}, and {type(quantity).__name__} offers {list(quantity.tests)}"
             )
         )
     if not _positive_finite(criterion.threshold):
@@ -511,21 +519,21 @@ class CriterionGroup:
     criteria: tuple[Criterion, ...]
 
 
-# How each problem's controls lose a stated amr_tolerance: Electrostatic's set_numerical resets an omitted
-# control to its default, Eigenmode's keeps the current value, so only new controls drop it there.
+# Electrostatic resets an omitted tolerance. Eigenmode and Driven keep it.
+_PRESERVED_TOLERANCE = (
+    "build the simulation with numerical controls that leave amr_tolerance out, since "
+    "{}.set_numerical keeps an omitted amr_tolerance"
+)
 _WITHOUT_TOLERANCE = {
     ELECTROSTATIC.name: "call set_numerical() without amr_tolerance",
-    EIGENMODE.name: (
-        "build the simulation with numerical controls that leave amr_tolerance out, since "
-        "EigenmodeSim.set_numerical keeps an omitted amr_tolerance"
-    ),
+    EIGENMODE.name: _PRESERVED_TOLERANCE.format("EigenmodeSim"),
+    DRIVEN.name: _PRESERVED_TOLERANCE.format("DrivenSim"),
 }
 
-# The quantities each problem takes: the tables Palace writes for it.  Driven's S-matrix quantity is not written yet.
 _QUANTITIES: dict[str, tuple[type, ...]] = {
     ELECTROSTATIC.name: (Capacitance, SurfaceEpr, ErrorIndicator),
     EIGENMODE.name: (ModeFrequency, SurfaceEpr, ErrorIndicator),
-    DRIVEN.name: (),
+    DRIVEN.name: (SMatrix, ErrorIndicator),
 }
 
 
@@ -549,19 +557,10 @@ class ConvergenceDeclaration:
         """Check ``set_convergence``'s arguments for a ``problem`` simulation and hold them.
 
         Raises:
-            ValueError: the problem takes no convergence quantity, no criterion is given, an argument is not
+            ValueError: no criterion is given, an argument is not
                 a criterion, a quantity does not fit the problem, or ``minimum_converged_passes`` is not an
                 integer of at least 1.
         """
-        if not _QUANTITIES[problem]:
-            raise ValueError(
-                Declared(
-                    f"{simulation}.set_convergence()", _WHERE_SET_CONVERGENCE
-                ).refusal(
-                    f"{simulation} takes no convergence quantity yet: leave set_convergence out; the run "
-                    "then solves on the mesh mesh() writes, with the refinement set_numerical sets"
-                )
-            )
         flat = tuple(
             checked_criterion(item, _WHERE_SET_CONVERGENCE)
             for argument in criteria
@@ -793,6 +792,7 @@ __all__ = [
     "CriterionGroup",
     "ErrorIndicator",
     "ModeFrequency",
+    "SMatrix",
     "SurfaceEpr",
     "SurfaceEprKinds",
     "checked_criterion",

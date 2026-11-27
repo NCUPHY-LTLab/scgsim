@@ -268,9 +268,11 @@ SA::D0_SUBSTRATE|VACUUM_REGION__interface p = 1.558e-04
   :::
 - **自適應掃頻的上限。** `adaptive_max_samples` 限制每個埠的求解次數；不給時套用 Palace 自己的上限 20。若某個埠在模型達到容許誤差之前就用完上限，Palace 的記錄檔會記下這件事，`driven_result()` 會拒絕這次計算並指出是哪個埠：請以較大的上限重新執行。
 - **更多埠，或其他元件。** 版圖有幾片薄片，就可以給幾個 `LumpedPort`；第 i 個就是埠 i，每個埠都會輪流被驅動。`write_touchstone` 要求所有埠使用同一個阻抗，因為 Touchstone 1.1 只有一個參考阻抗。計畫中與埠並列的 `LumpedElement`（例如接面的電感）會以它的 R、L、C 當作負載求解，但從不被驅動；S 矩陣只包含各埠，所以一個埠加一個元件會得到單埠結果與 `.s1p` 檔（[集總元件](../reference/specs/geometry-plan.qmd#lumped-elements)）。
-- **網格細化。** 除非開啟細化 `set_numerical(amr_max_passes=..., amr_tolerance=..., amr_update_fraction=...)`，Palace 都在 `mesh()` 寫出的網格上求解。每個細化回合都會重新求解整個掃描，每個埠、每個頻率都算一次，所以請在只有幾個點的短掃描上細化。Driven 計算目前還不接受收斂宣告：`set_convergence` 會拒絕，細化回合在 `amr_max_passes` 或 Palace 的 `amr_tolerance` 處停止。
+- **網格細化。** Palace 使用 `mesh()` 寫出的網格求解。用 `set_numerical(amr_max_passes=..., amr_update_fraction=...)` 啟用細化後，每個回合（pass）都會重新求解掃描。若要像 HFSS 一樣比較網格細化的結果，請指定少數幾個頻率，例如 `sim.set_driven([Points([2e9, 6e9, 10e9])])`。省略 `adaptive_tolerance` 時，Palace 會在這些頻率對每個埠完整求解。密集掃頻請另外執行。
+
+  從 `scgsim.palace` 匯入 `Points` 與 `SMatrix`。用 `sim.set_convergence(SMatrix().within(delta_s=delta_s_limit))` 宣告 Maximum Delta S，並省略 `amr_tolerance`。從第 2 回合開始，SCGSim 比較相鄰回合中相同頻率的複數 S 參數。所有頻率與矩陣元素的複數差值中，最大的絕對值若低於你設定的 `delta_s_limit`，就符合這項收斂條件。`ErrorIndicator().below(...)` 檢查 Palace 本身的誤差估計。若要依 Palace 原生的停止條件執行，請在沒有收斂宣告時設定 `amr_tolerance`。如何讀取收斂宣告的判定結果，請看[收斂與報告](convergence-and-reports.qmd#declare-convergence)。
 - **外邊界。** 真空區域的外表面不給邊界條件，Palace 把它當成理想磁導體，與共振器相同：模型是一個幾乎沒有損耗的封閉盒子。這樣的盒子有自己的共振，晶片較大時，這些共振可能落在掃描範圍內，在 S 參數中顯現為元件本身沒有的特徵。
-- **把金屬當成薄片。** 在 `mesh()` 之前呼叫 `sim.set_route("A")`，與電容計算相同（[把金屬當成薄片](capacitance-palace.qmd#select-the-geometry-approximation-and-build-inputs)）。
+- **把金屬當成薄片。** 在 `mesh()` 之前呼叫 `sim.set_route("A")`，即可採用[薄片近似](capacitance-palace.qmd#select-the-geometry-approximation-and-build-inputs)。建網格時會依疊層中的金屬厚度設定導體薄片邊緣的網格尺寸。在本頁的雙 launcher 直通線範例中，Route A 與 Route B 在 2、6、10 GHz 的 S21 相位差都在 0.2° 以內。[路線比較](https://github.com/NCUPHY-LTLab/scgsim/issues/309#issuecomment-7193230531)
 - **HFSS。** [以 HFSS 計算 S 參數](s-parameters-hfss.qmd)以相同方式為 HFSS Driven Terminal 宣告兩個埠，使用的計畫不帶 Surface EPR。
 
 ### 在需要處密集取樣 {#dense-sampling}

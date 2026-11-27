@@ -19,7 +19,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from scgsim.contracts.palace_index_map import LUMPED_PORT_SECTION
-from scgsim.contracts.palace_run_folder import DRIVEN, confined_path
+from scgsim.contracts.palace_run_folder import (
+    DRIVEN,
+    PORT_S_MAGNITUDE_COLUMN,
+    PORT_S_PHASE_COLUMN,
+    confined_path,
+)
 from scgsim.palace.config.driven_sweep import DrivenSweep
 from scgsim.palace.results.artifacts import checked_number, expect_mapping
 from scgsim.palace.results.driven_records import (
@@ -70,8 +75,8 @@ def driven_result(run: ResolvedRunData) -> PalaceDrivenResult:
     return PalaceDrivenResult(
         ports=ports,
         frequencies_hz=frequencies_hz,
-        magnitude_db=_s_matrices(port_s, excitations, "|S[{o}][{e}]| (dB)"),
-        phase_deg=_s_matrices(port_s, excitations, "arg(S[{o}][{e}]) (deg.)"),
+        magnitude_db=_s_matrices(port_s, excitations, PORT_S_MAGNITUDE_COLUMN),
+        phase_deg=_s_matrices(port_s, excitations, PORT_S_PHASE_COLUMN),
         sweep=sweep.to_payload(),
         provenance=_provenance(run, sweep),
         surface_epr=_surface_epr(run, excitations, frequencies_hz),

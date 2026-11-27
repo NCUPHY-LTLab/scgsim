@@ -377,20 +377,34 @@ participation, so SCGSim derives no Q or T1 from it. A film's
   the ports, so one port and one element give a one-port result and an
   `.s1p` file ([Lumped elements](../reference/specs/geometry-plan.qmd#lumped-elements)).
 - **Mesh refinement.** Palace runs on the mesh `mesh()` writes unless you
-  turn on refinement, `set_numerical(amr_max_passes=..., amr_tolerance=...,
-  amr_update_fraction=...)`. Each refinement pass solves the whole sweep
-  again, every port at every frequency, so refine on a short sweep of a few
-  points. A driven run does not yet take a convergence declaration:
-  `set_convergence` refuses one, and the passes stop at `amr_max_passes` or
-  at Palace's `amr_tolerance`.
+  enable refinement with `set_numerical(amr_max_passes=..., amr_update_fraction=...)`.
+  Each pass solves the sweep again. To compare mesh passes as in HFSS, give a
+  few explicit frequencies, for example `sim.set_driven([Points([2e9, 6e9, 10e9])])`.
+  With `adaptive_tolerance` omitted, Palace solves every port in full at
+  each of these frequencies. Run a dense frequency sweep separately.
+
+  Import `Points` and `SMatrix` from `scgsim.palace`. Declare Maximum Delta S
+  with `sim.set_convergence(SMatrix().within(delta_s=delta_s_limit))` and
+  leave `amr_tolerance` unset. From pass 2, SCGSim compares complex
+  S-parameters at matching frequencies on successive passes. The criterion
+  holds when the largest absolute difference across all frequencies and matrix
+  entries is below the `delta_s_limit` you chose.
+  `ErrorIndicator().below(...)` checks Palace's own error estimate. For
+  Palace's native stopping rule, set `amr_tolerance` without a convergence
+  declaration. To read the verdict of a declaration, see
+  [Convergence and reports](convergence-and-reports.qmd#declare-convergence).
 - **The outer boundary.** The faces of the vacuum region get no boundary
   condition, which Palace treats as a perfect magnetic conductor, as for a
   resonator: the model is a closed box with almost no loss. Such a box has
   resonances of its own, and on a large chip they can fall inside the
   sweep, where they show in the S-parameters as features the device does
   not have.
-- **Metal as sheets.** `sim.set_route("A")` before `mesh()`, as for
-  capacitance ([Metal as sheets](capacitance-palace.qmd#select-the-geometry-approximation-and-build-inputs)).
+- **Metal as sheets.** Call `sim.set_route("A")` before `mesh()` to use the
+  [sheet approximation](capacitance-palace.qmd#select-the-geometry-approximation-and-build-inputs).
+  The mesher sizes the conductor-sheet edges using the metal thickness from
+  the stack. In the launcher-to-launcher example, the two routes' S21 phases
+  differed by at most 0.2° at 2, 6 and 10 GHz.
+  [Route comparison](https://github.com/NCUPHY-LTLab/scgsim/issues/309#issuecomment-7193230531)
 - **HFSS.** [S-parameters with HFSS](s-parameters-hfss.qmd) declares two
   ports the same way for HFSS Driven Terminal, on a plan without Surface
   EPR.

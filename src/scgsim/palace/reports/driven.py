@@ -26,7 +26,7 @@ from scgsim.contracts.palace_convergence import ConvergenceCheck
 from scgsim.contracts.palace_run_folder import DRIVEN
 from scgsim.palace.config.driven_sweep import DrivenSweep, FrequencyRange, Log, Points
 from scgsim.palace.mesh.summary import MeshSummary
-from scgsim.palace.reports.convergence import verdict_card
+from scgsim.palace.reports.convergence import declared_html, verdict_card
 from scgsim.palace.reports.driven_figures import (
     s_parameter_figures,
     surface_epr_figures,
@@ -48,6 +48,7 @@ from scgsim.palace.reports.plotting import (
 from scgsim.palace.reports.trust import failure_notice_html, provenance_html
 from scgsim.palace.reports.trust_records import ReportIdentity, ReportProvenance
 from scgsim.palace.reports.views import DrivenBenchmarkData, SimulationBenchmarkReport
+from scgsim.palace.results.convergence import SolverEnd
 from scgsim.palace.results.driven_records import PalaceDrivenResult
 from scgsim.palace.results.inspection import failure_payload
 from scgsim.palace.results.inspection_records import PalaceFailureDiagnosis
@@ -82,6 +83,7 @@ class DrivenTrustReport:
     convergence: ConvergenceCheck
     result: PalaceDrivenResult | None
     readback_refusal: str | None = None
+    solver_end: SolverEnd | None = None
     theme: ReportTheme = "light"
     show_details: bool = False
 
@@ -184,11 +186,16 @@ class DrivenTrustReport:
             ("Sampling", _sampling_text(self.sweep)),
             ("FEM order", fmt(self.finite_element_order)),
             ("Mesh elements", fmt(self.cost.get("mesh_elements"))),
-            ("Convergence", verdict_card(self.convergence)),
+            ("Convergence", verdict_card(self.convergence, self.solver_end)),
         ]
+        passes = "".join(
+            declared_html(
+                self.convergence, self.solver_end, show_details=self.show_details
+            )
+        )
         return (
             f"<section><h3>Convergence</h3>{cards_html(cards)}"
-            f"{self._refusal_html()}{self._sampling_table_html()}</section>"
+            f"{self._refusal_html()}{passes}{self._sampling_table_html()}</section>"
         )
 
     def _refusal_html(self) -> str:

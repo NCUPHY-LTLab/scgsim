@@ -404,6 +404,11 @@ EIGENMODE = PalaceProblem(
     snapshot_tables=("eig", "port-EPR", "port-Q", "surface-Q", "error-indicators"),
     fem_space="ND",
 )
+PORT_S_MAGNITUDE_COLUMN = "|S[{o}][{e}]| (dB)"
+"""Palace Driven port-S column template for the magnitude of output o under excitation e."""
+PORT_S_PHASE_COLUMN = "arg(S[{o}][{e}]) (deg.)"
+"""Palace Driven port-S column template for the phase of output o under excitation e."""
+
 # Driven solves the field at each frequency of the sweep with one lumped port excited at a time; ``port-S``
 # holds the S-matrix, one column pair per (port, excitation).
 DRIVEN = PalaceProblem(

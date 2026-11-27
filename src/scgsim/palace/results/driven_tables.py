@@ -16,7 +16,12 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from typing import Any, NamedTuple
 
-from scgsim.contracts.palace_run_folder import CONFIG, DRIVEN
+from scgsim.contracts.palace_run_folder import (
+    CONFIG,
+    DRIVEN,
+    PORT_S_MAGNITUDE_COLUMN,
+    PORT_S_PHASE_COLUMN,
+)
 from scgsim.palace.config.driven_sweep import (
     PRINTED_DIGITS,
     DrivenSweep,
@@ -211,8 +216,8 @@ def _port_s_columns(excitation: int, _suffix: str, counts: _Counts) -> list[str]
         column
         for port in range(1, counts.ports + 1)
         for column in (
-            f"|S[{port}][{excitation}]| (dB)",
-            f"arg(S[{port}][{excitation}]) (deg.)",
+            PORT_S_MAGNITUDE_COLUMN.format(o=port, e=excitation),
+            PORT_S_PHASE_COLUMN.format(o=port, e=excitation),
         )
     ]
 

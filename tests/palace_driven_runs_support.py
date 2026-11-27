@@ -123,7 +123,7 @@ def fixture_result(root: Path) -> ResolvedPalaceResult:
     counts = count_index_entries(index_map)
     tables = {
         family: read_result_table(root / output_table(family), "Driven", counts, config)
-        for family in output_families("Driven", counts)
+        for family in output_families("Driven", config, counts)
     }
     returned = [
         *(output_table(family) for family in tables),

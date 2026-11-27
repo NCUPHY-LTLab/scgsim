@@ -143,8 +143,8 @@ class DrivenSim(PalaceSimulation):
         ``order`` is the FEM order of the Nédélec space; a ``DrivenSim`` solves with second-order elements,
         because at first order the phase of the S-parameters comes out too coarse on the mesh ``mesh()``
         writes.  ``amr_max_passes`` is Palace ``MaxIts``; a ``DrivenSim`` starts at 0, no AMR.  An AMR pass solves the whole sweep again, every port at every
-        frequency, so refine on a short sweep.  Enabled AMR needs ``amr_tolerance`` and
-        ``amr_update_fraction`` stated.  As in ``EigenmodeSim.set_numerical``, an omitted AMR, Krylov or
+        frequency, so refine on a short sweep. Enabled AMR needs ``amr_update_fraction`` and either
+        ``amr_tolerance`` or a declaration from ``set_convergence()``.  As in ``EigenmodeSim.set_numerical``, an omitted AMR, Krylov or
         nonconformal-level control keeps its current value; explicit ``ksp_type="Default"`` uses Palace's
         default.
 
@@ -218,8 +218,15 @@ class DrivenSim(PalaceSimulation):
     # ---- The core's questions ------------------------------------------------------------------------
 
     def _plan_context(self, entries: Sequence[IndexEntry]) -> PlanContext:
-        """The config's entries; ``set_convergence`` refuses every Driven criterion, so nothing reads them yet."""
-        return PlanContext(problem=self.problem, entries=entries)
+        """The full-solve sweep and physical network ports to check between AMR passes."""
+        return PlanContext(
+            problem=self.problem,
+            entries=entries,
+            driven_sweep=self.sweep,
+            driven_excitations=tuple(
+                port.index for port in self._resolved_ports if port.excited
+            ),
+        )
 
     def _lumped_ports(self, plan: GeometryPlanSnapshot) -> list[RequestedPort]:
         """Every lumped element of ``plan``, in its number's order, each port excited: element n is ``P<n>``."""

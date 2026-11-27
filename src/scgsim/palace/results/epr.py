@@ -190,21 +190,15 @@ def epr_result(
     """
 
     if not isinstance(result, ResolvedRunData) or result.problem != EIGENMODE.name:
+        problem = getattr(result, "problem", type(result).__name__)
+        detail = found_text(problem, EIGENMODE.name)
+        if problem == DRIVEN.name:
+            detail += "; a Driven run's Surface EPR is in driven_result().surface_epr"
         raise TypeError(
             Declared(
                 "epr_result requires a resolved Palace Eigenmode run",
                 _WHERE_EPR_RESULT_CALL,
-            ).refusal(
-                found_text(
-                    getattr(result, "problem", type(result).__name__), EIGENMODE.name
-                )
-                # A Driven run has its own result, with the Surface EPR at each frequency and excited port.
-                + (
-                    "; a Driven run's Surface EPR is in driven_result().surface_epr"
-                    if getattr(result, "problem", None) == DRIVEN.name
-                    else ""
-                )
-            )
+            ).refusal(detail)
         )
     output_prefix = OUTPUT_DIR
     if palace_iteration is not None:

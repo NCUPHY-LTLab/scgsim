@@ -34,6 +34,7 @@ from scgsim.palace import (
     Linear,
     PalaceDrivenResult,
     Points,
+    SMatrix,
     resolve_palace_result,
 )
 
@@ -91,11 +92,20 @@ def _parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="cut the Surface-EPR films as bands at 0.5 and 1.0 um, as the roster does",
     )
+    parser.add_argument(
+        "--delta-s", type=float, help="Maximum Delta S for a full-solve AMR run"
+    )
+    parser.add_argument(
+        "--amr-max-passes", type=int, help="refinement limit for --delta-s"
+    )
     parser.add_argument("--route", choices=("A", "B"), default="B")
     parser.add_argument("--processes", type=int, default=8)
     parser.add_argument("--palace", default=os.environ.get("PALACE_EXECUTABLE"))
     parser.add_argument("--mpi-bin", default=os.environ.get("PALACE_MPI_BIN"))
-    return parser.parse_args()
+    args = parser.parse_args()
+    if (args.delta_s is None) != (args.amr_max_passes is None):
+        parser.error("--delta-s and --amr-max-passes are set together")
+    return args
 
 
 # --------------------------------------------------------------------------- prepare
@@ -134,7 +144,15 @@ def prepare(output: Path, args: argparse.Namespace) -> None:
     if args.full_solve_hz:
         frequencies.append(Points(args.full_solve_hz, full_solve=True))
     sim.set_driven(frequencies, adaptive_tolerance=args.adaptive_tolerance)
-    sim.set_numerical(order=args.order)
+    if args.delta_s is None:
+        sim.set_numerical(order=args.order)
+    else:
+        sim.set_numerical(
+            order=args.order,
+            amr_max_passes=args.amr_max_passes,
+            amr_update_fraction=0.7,
+        )
+        sim.set_convergence(SMatrix().within(delta_s=args.delta_s))
     started = time.perf_counter()
     sim.mesh()
     summary = sim.mesh_summary()
@@ -181,6 +199,8 @@ def _settings(args: argparse.Namespace) -> dict[str, Any]:
         "points": args.points,
         "adaptive_tolerance": args.adaptive_tolerance,
         "full_solve_hz": args.full_solve_hz or [],
+        "delta_s": args.delta_s,
+        "amr_max_passes": args.amr_max_passes,
         "bands_um": [0.5, 1.0] if args.bands else [],
         "processes": args.processes,
     }
@@ -211,9 +231,8 @@ def readback(output: Path) -> None:
     """Read the run back through ``driven_result()``, write its Touchstone file, and record the checks."""
     handoff = _read(output / "prepare.json")["handoff"]
     run_dir = Path(handoff["run_dir"])
-    result = resolve_palace_result(
-        run_dir, expected_handoff_id=handoff["handoff_id"]
-    ).driven_result()
+    resolved = resolve_palace_result(run_dir, expected_handoff_id=handoff["handoff_id"])
+    result = resolved.driven_result()
     touchstone = result.write_touchstone(
         output / f"{OUTPUT_PREFIX}.s{len(result.ports)}p"
     )
@@ -241,8 +260,26 @@ def readback(output: Path) -> None:
             }
             for sampling in result.adaptive_sampling
         ],
-        "palace": _palace_facts(run_dir),
+        "palace": _palace_facts(resolved.provenance.palace_json),
     }
+    if resolved.convergence.plan is not None:
+        check = resolved.convergence
+        record["convergence"] = {
+            "verdict": check.verdict.state,
+            "pass_number": check.verdict.pass_number,
+            "ending": resolved.solver_end.ending,
+            "maximum_delta_s": {
+                item.number: max(
+                    (
+                        value.measured
+                        for value in item.criteria[0].values
+                        if value.measured is not None
+                    ),
+                    default=None,
+                )
+                for item in check.passes
+            },
+        }
     _write(output / "report.json", record)
     print(json.dumps(record, indent=1))
 
@@ -323,9 +360,8 @@ def _surface_epr(result: PalaceDrivenResult) -> dict[str, Any]:
     }
 
 
-def _palace_facts(run_dir: Path) -> dict[str, Any]:
-    """What Palace reports of its own run in ``palace.json``: build, size, time and memory."""
-    facts = _read(run_dir / "results" / "palace" / "palace.json")
+def _palace_facts(facts: dict[str, Any]) -> dict[str, Any]:
+    """The build, size, time and memory from the resolved pass's Palace metadata."""
     problem = facts["Problem"]
     return {
         "git_tag": facts["GitTag"],
