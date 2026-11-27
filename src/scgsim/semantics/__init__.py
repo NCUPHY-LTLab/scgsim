@@ -2,7 +2,8 @@
 
 This internal package is standard-library only.  It holds plain, already-valid facts and never imports SGB,
 Palace, AEDT, native backends, or callbacks: the revision-bound snapshot (``snapshot``), the Route A
-projection (``route_a``) and the EPR records (``epr``).
+projection (``route_a``), the EPR records (``epr``) and the S-parameter record every driven solver returns,
+with its Touchstone writer (``s_parameters``).
 """
 
 from .snapshot import (

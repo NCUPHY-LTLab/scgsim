@@ -266,6 +266,10 @@ class ObservedIdentity(TypedDict):
 # ---- Problems -----------------------------------------------------------------------------------------
 
 
+ProblemName = Literal["Electrostatic", "Eigenmode", "Driven"]
+"""The ``Problem.Type`` of each Palace problem SCGSim writes, the names of ``PROBLEMS``."""
+
+
 @dataclass(frozen=True)
 class PortTable:
     """A table Palace writes from a run's lumped ports, and which ports have a column in it.
@@ -302,28 +306,31 @@ class PalaceProblem:
 
     ``name`` is the problem's ``Problem.Type`` and the key of its ``Solver`` block in ``config.json``.
     ``output_families`` are the tables Palace can write for it, in the order the recorder lists them;
-    ``port_tables`` say which of them the lumped ports decide (``PortTable``), and ``surface-Q`` is written
-    only when the config has Surface-EPR rows.  ``excitation`` is the ``Boundaries`` block whose rows drive the
-    problem and ``excitation_section`` its index-map section.  ``series`` says what one row of a table is: a
-    ``mode`` (rows ``m`` = 1..N of the requested modes) or an ``excitation`` (rows ``i``, one per terminal).
+    ``port_tables`` say which tables the lumped ports decide (``PortTable``). The config writes ``surface-Q``
+    when it has Surface-EPR rows. ``excitation`` names the ``Boundaries`` block whose rows drive the problem
+    and ``excitation_section`` names its index-map section. ``series`` describes one row of a table: a mode,
+    a terminal excitation or a frequency. ``series_index`` is the first column of those tables.
     ``primary_table`` holds the problem's physics, ``snapshot_tables`` the files that make one result
     snapshot complete, and ``fem_space`` the finite-element space of its unknowns.
     """
 
-    name: str
+    name: ProblemName
     output_families: tuple[str, ...]
     port_tables: tuple[PortTable, ...]
     excitation: str
     excitation_section: str
-    series: Literal["mode", "excitation"]
-    series_index: Literal["m", "i"]
+    series: Literal["mode", "excitation", "frequency"]
+    series_index: Literal["m", "i", "f (GHz)"]
     primary_table: str
     snapshot_tables: tuple[str, ...]
     fem_space: Literal["ND", "H1"]
 
     @property
     def solves_modes(self) -> bool:
-        """Whether each table row is a mode (Eigenmode) rather than an excitation (Electrostatic)."""
+        """Whether each table row is a mode (Eigenmode) rather than an excitation (Electrostatic).
+
+        Only the readers of Electrostatic and Eigenmode runs ask it; they refuse a Driven run first.
+        """
         return self.series == "mode"
 
     def port_columns(
@@ -397,7 +404,33 @@ EIGENMODE = PalaceProblem(
     snapshot_tables=("eig", "port-EPR", "port-Q", "surface-Q", "error-indicators"),
     fem_space="ND",
 )
-PROBLEMS = {problem.name: problem for problem in (ELECTROSTATIC, EIGENMODE)}
+PORT_S_MAGNITUDE_COLUMN = "|S[{o}][{e}]| (dB)"
+"""Palace Driven port-S column template for the magnitude of output o under excitation e."""
+PORT_S_PHASE_COLUMN = "arg(S[{o}][{e}]) (deg.)"
+"""Palace Driven port-S column template for the phase of output o under excitation e."""
+
+# Driven solves the field at each frequency of the sweep with one lumped port excited at a time; ``port-S``
+# holds the S-matrix, one column pair per (port, excitation).
+DRIVEN = PalaceProblem(
+    name="Driven",
+    output_families=(
+        "port-S",
+        "port-I",
+        "port-V",
+        "domain-E",
+        "surface-Q",
+        "error-indicators",
+    ),
+    port_tables=(PortTable("port-S"), PortTable("port-I"), PortTable("port-V")),
+    excitation="LumpedPort",
+    excitation_section="Boundaries.LumpedPort",
+    series="frequency",
+    series_index="f (GHz)",
+    primary_table="port-S",
+    snapshot_tables=("port-S", "surface-Q", "error-indicators"),
+    fem_space="ND",
+)
+PROBLEMS = {problem.name: problem for problem in (ELECTROSTATIC, EIGENMODE, DRIVEN)}
 
 
 def palace_problem(name: Any) -> PalaceProblem:

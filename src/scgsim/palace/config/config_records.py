@@ -1,8 +1,8 @@
 """The values a Palace config is built from and the records it returns, with the scalar readers they share.
 
-``ConfigInput`` is what both problems' configs are built from; ``EigenmodeSettings`` and
-``ElectrostaticSettings`` are what each problem adds.  Each checks its values when it is built, so the config
-builders start from values already refused or accepted.
+``ConfigInput`` is what every problem's config is built from; ``EigenmodeSettings`` and ``ElectrostaticSettings``
+are what Eigenmode and Electrostatic add, and ``DrivenSweep`` (``driven_sweep``) what Driven adds.  Each checks its
+values when it is built, so the config builders start from values already refused or accepted.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, TypedDict
 
+from scgsim.contracts.palace_run_folder import ProblemName
 from scgsim.refusal import Declared, found_text
 
 from ..mesh.physical_groups import Groups
@@ -57,7 +58,7 @@ class ConfigInput:
     of Palace's tolerance.  Building it refuses numerical controls the ``problem`` cannot be written from.
     """
 
-    problem: Literal["Eigenmode", "Electrostatic"]
+    problem: ProblemName
     groups: Groups
     mesh_path: Path
     materials: Mapping[str, Mapping[str, Any]]
@@ -171,8 +172,8 @@ class ElectrostaticConfigBuildResult:
 
 
 @dataclass(frozen=True)
-class EigenmodeConfigBuildResult:
-    """Eigenmode config, its index entries and the records derived from it."""
+class PortConfigBuildResult:
+    """A config with lumped ports (Eigenmode, Driven), its index entries and the records derived from it."""
 
     config: dict[str, Any]
     port_information: list[dict[str, Any]]
@@ -191,10 +192,10 @@ def optional_string(value: Any) -> str | None:
 __all__ = [
     "MODEL_L0_M",
     "ConfigInput",
-    "EigenmodeConfigBuildResult",
     "EigenmodeSettings",
     "ElectrostaticConfigBuildResult",
     "ElectrostaticSettings",
+    "PortConfigBuildResult",
     "TerminalBinding",
     "optional_string",
 ]

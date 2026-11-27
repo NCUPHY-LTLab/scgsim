@@ -35,6 +35,7 @@ from scgsim.contracts.palace_run_folder import (
     SEALED_WHEN_PRESENT,
     SLURM_SCRIPT,
     HandoffIdentity,
+    ProblemName,
     read_json,
     script_name,
     sha256,
@@ -160,7 +161,7 @@ def prepare_handoff(  # noqa: PLR0913 -- established public handoff API
     resources: Mapping[str, Any] | None = None,
     setup_commands: Sequence[str] = (),
     petsc_options: Sequence[str] = (),
-    problem: Literal["Electrostatic", "Eigenmode"],
+    problem: ProblemName,
 ) -> HandoffPlan:
     """Write the run script, metadata, receipt recorder and archive; the caller names the executable and the resources.
 

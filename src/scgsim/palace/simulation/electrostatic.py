@@ -74,7 +74,7 @@ class ElectrostaticSim(PalaceSimulation):
     problem = "Electrostatic"
     # AMR off by default, conformal when enabled, with a tolerance of 0.01.
     numerical_defaults: ClassVar[ProblemDefaults] = ProblemDefaults(
-        amr_max_passes=0, amr_nonconformal=False, amr_tolerance=1e-2
+        order=1, amr_max_passes=0, amr_nonconformal=False, amr_tolerance=1e-2
     )
 
     def add_terminal(self, name: str, *, net_id: str) -> None:

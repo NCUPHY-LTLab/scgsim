@@ -18,6 +18,7 @@ aliases:
 | 電容 | Palace Electrostatic | `GeometryPlan`、端子與接地 Net | 依端子順序的電容矩陣 | [以 Palace 計算電容](../guides/capacitance-palace.qmd) |
 | 共振模態 | Palace Eigenmode | `GeometryPlan`，連同其上的集總元件（若有） | 模態頻率與 Q、能量；要求時另有 EPR | [以 Palace 計算模態](../guides/modes-palace.qmd) |
 | 共振模態 | HFSS Eigenmode | `GeometryPlan`，連同其上的集總元件（若有）、`modeling` | 模態頻率與 Q；要求時另有 EPR | [以 HFSS 計算模態](../guides/modes-hfss.qmd) |
+| S 參數 | Palace Driven | 帶有 `LumpedPort` 的 `GeometryPlan` | 依規劃中埠順序、隨頻率變化的複數 S 參數，以及 Touchstone 檔；每個埠與頻率的 Surface EPR | [以 Palace 計算 S 參數](../guides/s-parameters-palace.qmd) |
 | S 參數 | HFSS Driven Terminal | 帶兩個 `LumpedPort` 的 `GeometryPlan`、`modeling` | 複數 S 參數，CSV 與 Touchstone | [以 HFSS 計算 S 參數](../guides/s-parameters-hfss.qmd) |
 | 電容與電導 | Q3D | `GeometryPlan`、`modeling` | C/G 矩陣 | [以 Q3D 計算電容](../guides/capacitance-q3d.qmd) |
 | 傳輸線參數 | Q2D | 截面的矩形及其導體分組 | 單位長度的 C、G、L 與 R | [以 Q2D 計算傳輸線參數](../guides/line-parameters-q2d.qmd) |
@@ -31,14 +32,15 @@ aliases:
 - []{#palace-executable-capabilities}[]{#palace-執行檔功能}**Palace：**原版 Palace 0.18.1 就足夠，Surface EPR 也是。Palace 使用 [Route A 或 Route B](../concepts/routes.qmd)（`set_route`）。
 - **AEDT：**明確的 `aedt_version`，`"2023.2"` 或 `"2024.2"`，兩者都透過 PyAEDT 1.3.0，且 AEDT Desktop 與 SCGSim 在同一台主機上；每個 HFSS 與 Q3D 要求都要明確的 `modeling="solid"` 或 `"thin_film"` （[AEDT：solid 還是 thin_film](specs/aedt-runtime.qmd#aedt-solid-thin-film)）。
 - **曲線：**直邊與圓弧會精確建立；spline 必須畫成多邊形（[來源曲線](specs/geometry-plan.qmd#source-curves)）。
-- []{#energy-participation-and-loss}**Surface EPR** 在規劃上宣告一次，即 `plan.set_surface_epr(specs)`。Palace Eigenmode 與 Electrostatic 以及 HFSS Eigenmode 會讀取它，並把邊距切成條帶；HFSS Driven Terminal 與 Q3D 不讀取。Palace 與 HFSS 都在所宣告類型每一列的所有面上積分，包含側壁，除非規格的 `face_kinds` 把側壁排除。計算的內容見 [Surface EPR](../concepts/surface-epr.qmd)。
+- []{#energy-participation-and-loss}**Surface EPR** 在規劃上宣告一次，即 `plan.set_surface_epr(specs)`。Palace Eigenmode、Driven 與 Electrostatic 以及 HFSS Eigenmode 會讀取它，並把邊距切成條帶；Palace Driven 對每個被驅動的埠、在每個頻率回報它。HFSS Driven Terminal 與 Q3D 不讀取。Palace 與 HFSS 都在所宣告類型每一列的所有面上積分，包含側壁，除非規格的 `face_kinds` 把側壁排除。計算的內容見 [Surface EPR](../concepts/surface-epr.qmd)。
 - []{#lumped-elements}**集總元件**（接面、電阻、電容，以及量測所驅動的埠）在規劃上宣告一次，即 `plan.set_lumped_elements([...])`（[方式](specs/geometry-plan.qmd#lumped-elements)）。每種計算盡其所能使用它們：
 
   | 計算 | `LumpedElement`（R、L、C） | `LumpedPort` |
   |---|---|---|
   | Palace Eigenmode | 帶有其 R、L、C 的集總埠；其能量參與比依名稱回報 | 阻值等於其阻抗的電阻，所以 Q 是有載 Q |
+  | Palace Driven | 帶有其 R、L、C、但從不被驅動的集總埠：一個負載，不在 S 矩陣中 | 一個激發：S 矩陣的埠 *i*，依規劃的順序，以其阻抗終接 |
   | HFSS Eigenmode | 只有電感、沒有電阻的元件是接面，在 EPR 要求中以其埠片命名；其他元件是 Lumped RLC | 阻抗的 Lumped RLC，與 Palace 相同 |
-  | HFSS Driven Terminal | 依名稱拒絕：Driven 設計中尚未提供 | 兩個集總 Terminal 埠之一，依規劃的順序 |
+  | HFSS Driven Terminal | 依名稱拒絕：HFSS Driven 設計中尚未提供 | 兩個集總 Terminal 埠之一，依規劃的順序 |
   | Palace Electrostatic、Q3D | 保持開路：電容只是導體本身的 | 保持開路 |
 
   `simulation_drc` 與 `input_summary()` 會說明模擬把每個元件做成什麼。規劃沒有宣告任何元件的集總埠片，不屬於 Palace 或 HFSS 的模型。
@@ -48,7 +50,6 @@ aliases:
 
 - HFSS Driven Modal 與 Driven Terminal 的 wave port：含有它們的要求會被拒絕。追蹤於 [issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135)。
 - Q3D AC/RL：Q3D 只萃取 C 與 G。追蹤於 [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265)。
-- Palace Driven。追蹤於 [issue #187](https://github.com/NCUPHY-LTLab/scgsim/issues/187)。
 - Palace Magnetostatic 與 Transient。
 - 把 spline 當成曲線讀取。
 

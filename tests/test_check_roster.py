@@ -1,11 +1,29 @@
-"""The nightly roster check fails when any roster layout fails a stage, and only then (no PDK needed)."""
+"""The nightly roster check fails when any roster layout fails a stage, and only then (no PDK needed); and the
+Driven case builds and passes ``simulation_drc`` as the nightly check runs it (PDK)."""
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import pytest
 
-from scripts import check_roster
-from scripts.check_roster import STAGES, failed_cases
+# The roster lives in scripts/; CI's pdk-tests job runs `python -I`, which puts neither it nor the checkout on
+# sys.path.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+
+import check_roster  # noqa: E402
+from check_roster import STAGES, failed_cases  # noqa: E402
+from roster_cases import (  # noqa: E402
+    ROSTER,
+    configured_simulation,
+    geometry_plan,
+    prepare_plan,
+    simulation_class,
+    surface_epr_specs,
+)
+
+from scgsim.palace import DrivenSim  # noqa: E402
 
 
 def _record(case: str, **results: str) -> check_roster.CaseRecord:
@@ -72,3 +90,34 @@ def test_the_run_fails_when_a_layout_fails_after_every_layout_ran(
         capsys.readouterr().out.splitlines()[-1]
         == f"roster: {passed}/{len(ran)} passed"
     )
+
+
+@pytest.mark.pdk
+def test_the_driven_case_passes_simulation_drc_with_its_two_ports_as_the_nightly_check_runs_it():
+    """The launcher-to-launcher case, built with its bands, passes both stages with its sheets as ports 1 and 2.
+
+    It goes through the roster's own calls, as ``check_roster`` makes them; the nightly check also meshes it.
+    """
+    pytest.importorskip("gdsfactory", reason="the launcher layout needs gdsfactory")
+    orcapen_sc_pdk = pytest.importorskip(
+        "orcapen_sc_pdk", reason="public OrcaPen SC PDK is not installed"
+    )
+    orcapen_sc_pdk.activate()
+    material_records = orcapen_sc_pdk.get_material_records()
+    specs = surface_epr_specs(bands=True)
+    layout = ROSTER["launcher_to_launcher"]()
+
+    report = simulation_class(layout).simulation_drc(
+        geometry_plan(layout, material_records, specs)
+    )
+
+    assert report.geometry.passed
+    assert report.meshing.passed
+    assert [line.split(":")[0] for line in report.lumped_elements] == [
+        "P1 chip/o_lumped_left",
+        "P2 chip/o_lumped_right",
+    ]
+    simulation = configured_simulation(
+        layout, prepare_plan(layout, material_records, specs)
+    )
+    assert isinstance(simulation, DrivenSim)

@@ -1,6 +1,6 @@
 ---
 title: "Palace Electrostatic、網格與收斂"
-description: "ElectrostaticSim 依序的呼叫、兩種 Palace 模擬共用的網格設定、收斂宣告與收斂時的停止，以及 Electrostatic 的預設值與接地。"
+description: "ElectrostaticSim 依序的呼叫、所有 Palace 模擬共用的網格設定、收斂宣告與收斂時的停止，以及 Electrostatic 的預設值與接地。"
 scgsim-kind: "contract"
 scgsim-status: "ACCEPTED"
 scgsim-id: "docs/specs/palace-electrostatic-sgb"
@@ -9,7 +9,7 @@ aliases:
   - ../../specs/palace-electrostatic-sgb.html
 ---
 
-`ElectrostaticSim` 以 Palace 計算版圖的電容矩陣。本頁是它的呼叫、兩種 Palace 模擬共用的網格設定，以及兩者共用的收斂宣告的參考。完整計算見[以 Palace 計算電容](../../guides/capacitance-palace.qmd)；如何宣告收斂並讀取結果，見[收斂與報告](../../guides/convergence-and-reports.qmd)。Eigenmode 有自己的頁面 [Palace Eigenmode](palace-eigenmode.qmd)。
+`ElectrostaticSim` 以 Palace 計算版圖的電容矩陣。本頁是它的呼叫、所有 Palace 模擬共用的網格設定，以及 Electrostatic 與 Eigenmode 共用的收斂宣告的參考。完整計算見[以 Palace 計算電容](../../guides/capacitance-palace.qmd)；如何宣告收斂並讀取結果，見[收斂與報告](../../guides/convergence-and-reports.qmd)。Eigenmode 有自己的頁面 [Palace Eigenmode](palace-eigenmode.qmd)。
 
 ## 依序的呼叫 {#electrostatic-calls}
 
@@ -135,7 +135,7 @@ Electrostatic 讀取與 Eigenmode 相同的 Surface-EPR 規格，在 `prepare()`
 
 ## 收斂宣告 {#convergence-declaration}
 
-`set_convergence(*criteria, minimum_converged_passes=1)` 宣告自適應計算何時算收斂。兩種 Palace 模擬都接受它。一個條件是一個物理量加上一個門檻；門檻沒有預設值：
+`set_convergence(*criteria, minimum_converged_passes=1)` 宣告自適應計算何時算收斂。`ElectrostaticSim` 與 `EigenmodeSim` 都接受它；在 S 參數有收斂量之前，`DrivenSim` 會拒絕它。一個條件是一個物理量加上一個門檻；門檻沒有預設值：
 
 ```python
 from scgsim.palace import Capacitance, ErrorIndicator, SurfaceEpr

@@ -18,6 +18,8 @@ aliases:
 
 [Eigenmode（本徵模態）]{#term-eigenmode}：計算模型的共振模態，每個模態有頻率、Q 與場。共振模態不是驅動響應。見[問題類型](../concepts/problems.qmd#resonance-modes-of-a-field-and-circuit-model)。
 
+[Driven（驅動）]{#term-driven}：在一段頻率掃描上逐一驅動每個埠、回傳 S 參數的計算：Palace Driven 或 HFSS Driven Terminal。見[問題類型](../concepts/problems.qmd#driven-response-excite-a-port-at-a-frequency)。
+
 [Driven Terminal]{#term-driven-terminal}：HFSS 的計算，以參考導體激發各埠，回傳複數 S 參數。
 
 [Driven Modal]{#term-driven-modal}：使用模態埠的 HFSS 計算。此版本 SCGSim 不提供（[不支援](specs/aedt-runtime.qmd#current-exclusions)）。

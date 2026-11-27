@@ -38,7 +38,7 @@ Palace 與 AEDT 求解的模型出自同一個建構器：
 
 ## 語意事實 {#internal-semantic-facts}
 
-`scgsim.semantics` 保存與求解器無關的事實：與修訂版本綁定的快照、Route A 投影，以及 EPR 紀錄。它只使用標準函式庫，不匯入 SGB、Palace、AEDT 或原生程式碼。修訂版本不符的事實會被拒絕，而不是重新綁定。後端回報的原生標記只是觀察資料，從來不決定接觸或識別。
+`scgsim.semantics` 保存與求解器無關的事實：與修訂版本綁定的快照、Route A 投影、EPR 紀錄，以及 `SParameters`：每個 Driven 求解器都回傳的 S 參數紀錄，連同唯一的 Touchstone 寫出器。各後端把自己的檔案讀成這份紀錄。它只使用標準函式庫，不匯入 SGB、Palace、AEDT 或原生程式碼。修訂版本不符的事實會被拒絕，而不是重新綁定。後端回報的原生標記只是觀察資料，從來不決定接觸或識別。
 
 ## Notebook 與網格品質 {#notebook-and-implementation-boundaries}
 
@@ -46,7 +46,7 @@ Palace 與 AEDT 求解的模型出自同一個建構器：
 
 ## Palace 準備生命週期 {#palace-preparation-lifecycle}
 
-`ElectrostaticSim` 與 `EigenmodeSim` 各自負責可變的網格、設定、已解析的埠與交接狀態。兩者都是同一個私有基底類別 `scgsim.palace.simulation.core.PalaceSimulation` 的子類別，它持有兩者共用的部分：`set_plan`、`set_output_dir`、`set_route`、`set_mesh`、`input_summary()`、`mesh()`、`simulation_drc`、`mesh_summary()` 與 `prepare_handoff()`。每個問題檔（`simulation/electrostatic.py`、`simulation/eigenmode.py`）只加上自己的 setter、數值預設值與 `write_config()`。真空區域與 Surface-EPR 規格屬於 plan（`GeometryPlan.set_vacuum_region`、`GeometryPlan.set_surface_epr`）；模擬從它綁定的快照讀取它們。
+`ElectrostaticSim`、`EigenmodeSim` 與 `DrivenSim` 各自負責可變的網格、設定、已解析的埠與交接狀態。三者都是同一個私有基底類別 `scgsim.palace.simulation.core.PalaceSimulation` 的子類別，它持有三者共用的部分：`set_plan`、`set_output_dir`、`set_route`、`set_mesh`、`input_summary()`、`mesh()`、`simulation_drc`、`mesh_summary()` 與 `prepare_handoff()`。每個問題檔（`simulation/electrostatic.py`、`simulation/eigenmode.py`、`simulation/driven.py`）只加上自己的 setter、數值預設值與 `write_config()`。真空區域與 Surface-EPR 規格屬於 plan（`GeometryPlan.set_vacuum_region`、`GeometryPlan.set_surface_epr`）；模擬從它綁定的快照讀取它們。
 
 生命週期是一張表，`scgsim.palace.simulation.lifecycle`：
 

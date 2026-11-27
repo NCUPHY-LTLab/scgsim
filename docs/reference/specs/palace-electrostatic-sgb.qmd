@@ -1,6 +1,6 @@
 ---
 title: "Palace Electrostatic, mesh and convergence"
-description: "The ElectrostaticSim calls in order, the mesh settings both Palace simulations share, the convergence declaration and its stop, and the Electrostatic defaults and grounds."
+description: "The ElectrostaticSim calls in order, the mesh settings every Palace simulation shares, the convergence declaration and its stop, and the Electrostatic defaults and grounds."
 scgsim-kind: "contract"
 scgsim-status: "ACCEPTED"
 scgsim-id: "docs/specs/palace-electrostatic-sgb"
@@ -9,8 +9,9 @@ aliases:
 ---
 
 `ElectrostaticSim` computes the capacitance matrix of a layout with Palace.
-This page is the reference of its calls, of the mesh settings that both Palace
-simulations share, and of the convergence declaration that both use. The
+This page is the reference of its calls, of the mesh settings that every Palace
+simulation shares, and of the convergence declaration that Electrostatic and
+Eigenmode use. The
 [capacitance guide](../../guides/capacitance-palace.qmd) runs a full study, and
 [Convergence and reports](../../guides/convergence-and-reports.qmd) shows how
 to declare convergence and read the result. Eigenmode has its own page,
@@ -214,8 +215,9 @@ keys and rows. A plan without specs gets no bands and no Surface-EPR rows.
 ## Convergence declaration {#convergence-declaration}
 
 `set_convergence(*criteria, minimum_converged_passes=1)` declares when an
-adaptive run has converged. Both Palace simulations take it. A criterion is a
-quantity and a threshold; no threshold has a default:
+adaptive run has converged. `ElectrostaticSim` and `EigenmodeSim` take it;
+`DrivenSim` refuses it until S-parameters have a convergence quantity. A
+criterion is a quantity and a threshold; no threshold has a default:
 
 ```python
 from scgsim.palace import Capacitance, ErrorIndicator, SurfaceEpr

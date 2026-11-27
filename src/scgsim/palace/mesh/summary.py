@@ -191,7 +191,8 @@ def mesh_summary(
     manifest_sha256: str | None = None,
 ) -> MeshSummary:
     """Detach recorded observations and a separately labeled FEM topology estimate."""
-    observed = manifest.get("meshing")
+    # A meshing record with nothing in it records no observation, as one that is absent.
+    observed = manifest.get("meshing") or None
     fem_space = palace_problem(problem).fem_space
     result = MeshSummary(
         status="recorded" if observed is not None else "not_recorded",

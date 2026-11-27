@@ -1,0 +1,136 @@
+---
+lang: zh-TW
+title: "選擇 Palace 的頻率掃描"
+description: "依你要算的東西選擇 Palace S 參數計算的頻率掃描：寬頻響應、窄共振的頻率與 Q，或少數幾個指定頻率，並附上每種做法在一個 hanger 型共振器上的成本。"
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/palace-driven-sweeps"
+---
+
+本頁告訴你：依你要算的東西，Palace 的 S 參數計算該給哪一種頻率掃描，以及每一種做法在同一個共振器上花了多少、得到什麼。
+
+有兩個詞會反覆出現。**完整求解**是在一個頻率上求解電場，每個埠各一次。**自適應掃頻**（`set_driven` 的 `adaptive_tolerance=`）會對每個埠做少數幾次完整求解，由這些解建立一個小模型，再在你列出的每個頻率上計算這個模型（[以 Palace 計算 S 參數](s-parameters-palace.qmd#the-script)）。下面的數字來自一個位在饋線旁、約 7.36 GHz 的 hanger 型共振器，它的共振在 |S21| 上顯現為一個窄的凹口（[完整範例](#the-hanger-resonator)）：$f_0$ 是共振頻率，Q 是品質因子，$f_0/Q$ 是線寬。
+
+每一列給的是 `set_driven` 的清單；除了最後一列，其餘都另外設定 `adaptive_tolerance=1e-3`。
+
+| 你要的 | 設定 | 在 hanger 上 |
+|----------|----------------------|--------------------|
+| 寬頻響應 | `[Linear(4e9, 9e9, points=2500)]` | 9 次與 4 次完整求解（埠 1 與埠 2），3,940 秒。頻率點相距 2.0 MHz：沒有一點落在共振的凹口裡，最近的一點在 $f_0$ 上方 0.68 MHz，\|S21\| 是 −0.94 dB。 |
+| 窄共振的 $f_0$ 與 Q | `[Linear(4e9, 9e9, points=501), Linear(f0 - w, f0 + w, points=2001)]`，其中 `w = 20 * f0 / Q` | 9 次與 4 次完整求解，3,948 秒。擬合凹口得到 $f_0$ 與 Q；S21 與最後一列的完整求解相差在 2.4 × 10⁻⁶ 以內。 |
+| 同上，且已知 $f_0$ | 在上面的清單加上 `Points([f0], full_solve=True)` | 5 次與 5 次完整求解，其中包含 $f_0$，3,588 秒：建立模型花了 921 秒，而不是 1,190 秒。S21 與上一列相差在 1.4 × 10⁻⁵ 以內。 |
+| 少數幾個指定頻率，不用自適應掃頻 | `[Points([...])]`，不給 `adaptive_tolerance`；在高 Q 共振附近再加上 `set_numerical(tolerance=1e-9)` | 每個頻率都完整求解，每個埠每次 117 到 119 秒：$f_0$ 附近的 9 個頻率花了 2,137 秒，擬合出與第二列相同的凹口。 |
+
+計算共振器時，請從第二列開始：一次計算就同時得到寬頻響應與共振，而且只需要大約的 $f_0$ 與 Q 來放置窄頻段。上面的窄頻段涵蓋 ±20 個線寬，每個線寬 50 個點。範圍要怎麼給、怎麼組合，以及 `full_solve` 的頻率與另一個範圍的頻率重合時怎麼算，請看[在需要處密集取樣](s-parameters-palace.qmd#dense-sampling)。
+
+## 掃描的成本 {#what-a-sweep-costs}
+
+自適應掃頻的成本有兩部分。第一部分是它的模型，也就是那些完整求解：在 hanger 上，9 次與 4 次完整求解共花了 1,190 秒。不論中間的範圍怎麼給，模型都涵蓋你列出的最低到最高頻率，所以密集的窄頻段不會改變模型的建法：頻段加窄頻段的掃描，與第一列均勻的 2,500 點，選了相同的 9 次與 4 次完整求解。
+
+第二部分是每個列出的頻率、每個埠都要花的固定時間，Palace 在這裡計算模型，並算出這個頻率要寫出的結果：在 hanger 上是 0.548 與 0.555 秒，在[以 Palace 計算 S 參數](s-parameters-palace.qmd)那個較小的晶片上約 0.17 秒。在 hanger 上，3,948 秒的頻段加窄頻段計算中，Palace 的後處理就占了 2,254 秒。所以掃描的成本，就是你列出的頻率。窄頻段能讓頻率點保持很少，均勻的網格做不到：若 4 到 9 GHz 全都以 10 kHz 為間距，就有 500,001 個頻率。
+
+## 應避免的做法 {#what-to-avoid}
+
+### 更嚴格的自適應容許誤差 {#a-tighter-adaptive-tolerance}
+
+請維持 `adaptive_tolerance=1e-3`。在 hanger 上，改用 `1e-5` 並沒有換來更高的準確度。兩個埠都在模型達到容許誤差之前，就用完 Palace 預設的上限 20 次完整求解，花了 7,428 秒，而 `driven_result()` 會拒絕這樣的計算（[自適應掃頻的上限](s-parameters-palace.qmd#settings-you-may-change)）。加上 `adaptive_max_samples=40` 後，它以 32 次與 15 次完整求解收斂，花了 8,352 秒，是 `1e-3` 的 3,948 秒的 2.1 倍，S21 與 `1e-3` 的計算最多相差 3.2 × 10⁻⁶。兩者與 `tolerance=1e-9` 的完整求解分別相差在 2.5 × 10⁻⁶ 與 2.4 × 10⁻⁶ 以內，凹口擬合出的 $f_0$、$Q_l$ 與 $|Q_c|$ 也都相同。
+
+### 非常密的均勻網格 {#a-very-fine-uniform-grid}
+
+整個頻段都取得很密，每個點都要付固定的時間。4 到 9 GHz 取 25,000 點、間距 200 kHz，建立模型同樣要 1,190 秒，接著在各頻率上要 25,000 × (0.544 + 0.556) 秒 = 27,500 秒：共 28,690 秒，約 8 小時，而頻段加窄頻段只要 3,948 秒。這是由 2,500 點計算實測的成本推算的；25,000 點的計算並沒有實際執行。
+
+### 以預設容許誤差完整求解 {#full-solves-at-the-default-tolerance}
+
+在高 Q 共振附近完整求解，需要比預設 10⁻⁶ 更嚴格的線性求解容許誤差：`set_numerical(tolerance=1e-9)`。以預設值計算時，$f_0$ 附近的 9 個頻率每個埠每次花 87 到 88 秒，但 S21 最多偏差 4.5 × 10⁻³，在 $f_0$ 處最大。由它們擬合出的凹口給出 $Q_l$ = 11,056.4，低了 0.8 %；$Q_i$ = 7.219 × 10⁵，比自適應掃頻的 1.036 × 10⁶ 低了 30 %。改用 `1e-9` 後，每次花 117 到 119 秒，與自適應掃頻相差在 2.4 × 10⁻⁶ 以內。自適應掃頻不需要更嚴格的容許誤差：在預設值下，與完整求解相符的正是它的 S21。
+
+### 為了省時間關掉 Surface EPR {#surface-epr-off}
+
+不呼叫 `set_surface_epr` 省下的時間很少：約 4 %，每個頻率、每個埠從 0.548 與 0.555 秒降為 0.528 與 0.532 秒，整個計算從 3,948 秒降為 3,842 秒。S21 不變，差異在 1.6 × 10⁻⁹ 以內，因為薄膜是在求解之後才由電場算出的。
+
+## hanger 型共振器 {#the-hanger-resonator}
+
+完整範例是一個位在饋線旁的四分之一波長共振器，就像讀取線上的共振器。在共振附近，共振器會從饋線取走功率，所以 |S21| 會出現一個窄的凹口；凹口的寬度與深度給出各個 Q 值。版圖由 OrcaPen SC PDK 的元件組成：
+
+| 部分 | 數值 |
+|---|---|
+| 饋線 | PDK 的 `cpw_6_10_6`，10 µm 的訊號線、6 µm 的間隙，在兩個 PDK `launcher` 之間長 800 µm |
+| 埠 | 每個 launcher 的 150 µm 焊墊後方有一片 85 × 150 µm 的埠薄片；兩個 50 Ω 的 `LumpedPort` 接到 `ground`，左邊的是埠 1 |
+| 共振器 | PDK 的 `resonator()`，使用預設值：4000 µm 長的 `cpw_6_10_6`，一端短路、另一端開路；它有一段 200 µm 的耦合直線段位在饋線旁，兩者的間隙之間隔著 5 µm 的接地 |
+| Net | `signal` 是饋線與兩個 launcher；`ground` 是接地面與共振器，共振器短路到接地面 |
+| 晶片 | 1870 × 2058 µm 的矽，厚 500 µm，上有 0.1 µm 的鋁（PDK 的單晶片疊層） |
+| Surface EPR | PDK 的 `LiteratureCentral` MA、MS 與 SA 預設值 |
+| 模型 | 金屬為實體（[Route B](../concepts/routes.qmd)），二階元素，521,337 個四面體、3,677,860 個未知數；Palace 以 8 個 MPI 行程執行 |
+
+計畫的建立方式與[S 參數腳本](s-parameters-palace.qmd#the-script)的第 1、2 段相同，只是換成這個版圖。掃描是頻段加窄頻段，窄頻段由同一個計畫的本徵模態計算所得的共振模態來放置：
+
+```python
+from scgsim.palace import DrivenSim, Linear
+
+# The resonator mode of the Eigenmode run.
+f0, q = 7.356647804e9, 13947.6
+w = 20 * f0 / q  # 20 linewidths, 10.55 MHz
+
+sim = DrivenSim()
+sim.set_plan(plan.prepare())
+sim.set_driven(
+    [
+        # The band, 10 MHz apart.
+        Linear(4e9, 9e9, points=501),
+        # The window, 10.55 kHz apart.
+        Linear(f0 - w, f0 + w, points=2001),
+    ],
+    adaptive_tolerance=1e-3,
+)
+```
+
+這個 Q 高了 25 %（[見下文](#check-against-eigenmode)），但窄頻段仍涵蓋共振實際線寬的 ±16 倍：大約的 Q 就夠了。
+
+**擬合。** SCGSim 給你 S21，凹口要由你自己擬合。這裡用的是 [Probst et al., Rev. Sci. Instrum. 86, 024706 (2015)](https://doi.org/10.1063/1.4907935) 的 hanger 模型，擬合窄頻段內 2,003 個列出頻率上的 S21：
+
+$$
+S_{21}(f) = a\,e^{i\alpha}\,e^{-2\pi i f\tau}
+\left[1 - \frac{(Q_l/|Q_c|)\,e^{i\phi}}{1 + 2iQ_l\,(f/f_0 - 1)}\right],
+$$
+
+$$
+\frac{1}{Q_i} = \frac{1}{Q_l} - \frac{\cos\phi}{|Q_c|}.
+$$
+
+負載 Q（$Q_l$）決定凹口的寬度 $f_0/Q_l$。耦合 Q（$Q_c$）描述共振器交給饋線的功率，內部 Q（$Q_i$）描述模型內部損耗的功率。傳輸線的延遲 τ 是 14.64 ps，由頻段中遠離共振處的相位求得，並在擬合前扣除。
+
+| | 頻段加窄頻段 | `tolerance=1e-9` 的 9 次完整求解 |
+|---|---:|---:|
+| $f_0$ | 7.356663911 GHz | 7.356663906 GHz |
+| $Q_l$ | 11,140.8 | 11,140.8 |
+| $\lvert Q_c\rvert$ | 11,261.8 | 11,261.8 |
+| $Q_i$ | 1.036 × 10⁶ | 1.036 × 10⁶ |
+| 頻率數 | 2,502 | 9 |
+| 每個埠的完整求解 | 9 與 4 | 9 與 9 |
+| 時間 | 3,948 秒 | 2,137 秒 |
+| 記憶體峰值 | 35,738 MB | 34,233 MB |
+
+在兩者共有的 9 個頻率上，S21 相差在 2.4 × 10⁻⁶ 以內。這裡完整求解比較便宜，是因為只有 9 個頻率；但它們不給寬頻響應，而且你必須先知道 $f_0$ 才能放置它們。
+
+$Q_i$ 來自 $1/Q_l$ 與耦合部分之間的一個小差值，所以 S21 的小誤差對它影響最大（[例子](#full-solves-at-the-default-tolerance)）。它包含求解之內的損耗。薄膜的表面損耗不在其中，關掉 Surface EPR 時 S21 不變就說明了這點（[見上文](#surface-epr-off)）；這部分損耗來自 Surface EPR 的各列（[表面參與率](s-parameters-palace.qmd#surface-participation)）。
+
+## 與本徵模態比對 {#check-against-eigenmode}
+
+對同一個計畫做本徵模態計算、把兩個埠當成 50 Ω 的負載，就能直接找到共振器的模態（[以 Palace 計算共振模態](modes-palace.qmd)）。在 hanger 上，從 6.5 GHz 起求 4 個模態花了 1,431 秒，共振器是模態 1：
+
+| 比對 | 本徵模態 | 凹口擬合 |
+|--------------------|----------:|----------:|
+| $f_0$ | 7.356647804 GHz | 7.356663911 GHz |
+| 耦合：兩個埠合起來的 $Q_\text{ext}$，與 $\lvert Q_c\rvert$ | 11,258.2 | 11,261.8 |
+| `tolerance=1e-9` 時模態的 Q，與 $Q_l$ | 11,141.7 | 11,140.8 |
+
+- **$f_0$** 在預設容許誤差下相差 16.1 kHz，即 2.2 ppm；在 `tolerance=1e-9` 下，模態位在 7.356663931 GHz，與凹口相差 20 Hz。
+- **透過耦合 Q 比對 Q。** Palace 會給出每個埠的 $Q_\text{ext}$，也就是假設這個埠是模態唯一的損耗時，模態會有的 Q；兩個埠合起來是 $1/Q_\text{ext} = 1/Q_{\text{ext},1} + 1/Q_{\text{ext},2}$。它在預設容許誤差下就準確：11,258.2，與 $|Q_c|$ 相差在 0.03 % 以內。
+- **或透過模態的 Q 比對，但要用更嚴格的線性容許誤差。** 對高 Q 模態，Palace 由模態複數頻率算出的 Q 需要 `set_numerical(tolerance=1e-9)`。這個複數頻率的虛部遠小於實部，求解器的近似線性求解會讓虛部大幅偏移，卻幾乎不影響頻率：在預設容許誤差下，這裡得到 13,947.6，高了 25 %。在 `1e-9` 下，它與 $Q_l$ 相差 0.008 %，而 $1/Q - 1/Q_{\text{ext},1} - 1/Q_{\text{ext},2}$ 給出 $Q_i$ = 1.036 × 10⁶，與凹口相同。
+
+用 `resolve_palace_result` 讀回本徵模態計算後，從 `result.tables["eig"].rows[0]` 取得頻率與有載 Q。這個模態的 `result.epr_result().rows[0]["external"]` 列出每個電阻性埠的 `port_name` 與 `inverse_q`，後者是該埠貢獻的 $1/Q_\text{ext}$。如果用 `set_epr_request(port_names=...)` 選擇埠，請選入饋線的兩個埠。把兩個埠的貢獻相加後取倒數，就得到總耦合 Q。
+
+```python
+external = result.epr_result().rows[0]["external"]
+q_ext = 1 / sum(port["inverse_q"] for port in external)
+```
+
+這些計算與原始數據記錄在[計算紀錄](https://github.com/NCUPHY-LTLab/scgsim/issues/307#issuecomment-7194872828)中。

@@ -44,7 +44,7 @@ Capacitance matrix (fF): pad
 |---|---|---|
 | 焊盤與電極的電容矩陣 | [Palace：端子電容](docs/guides/capacitance-palace.qmd) | [AEDT：Q3D 擷取](docs/guides/capacitance-q3d.qmd) |
 | 共振模態的頻率、Q 值與能量參與率 | [Palace：共振模態](docs/guides/modes-palace.qmd) | [AEDT：HFSS Eigenmode](docs/guides/modes-hfss.qmd) |
-| 雙埠元件的 S 參數 | SCGSim 未提供 | [AEDT：HFSS Driven Terminal](docs/guides/s-parameters-hfss.qmd) |
+| 雙埠元件的 S 參數 | [Palace：S 參數](docs/guides/s-parameters-palace.qmd) | [AEDT：HFSS Driven Terminal](docs/guides/s-parameters-hfss.qmd) |
 | 線路橫截面的單位長度 C、G、L、R | SCGSim 未提供 | [AEDT：Q2D 橫截面擷取](docs/guides/line-parameters-q2d.qmd) |
 
 [選擇模擬](docs/start/choose-a-simulation.qmd)為每一項補上 OrcaPen SC PDK 的筆記本。<span id="使用範例用一支腳本完成-simplepad-電容抽取"></span>[AEDT：Q3D 擷取](docs/guides/capacitance-q3d.qmd)一開始就是第一個模擬的 AEDT 版本：一支腳本完成 Q3D 電容計算的準備、執行與讀取。

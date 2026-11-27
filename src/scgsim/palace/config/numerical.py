@@ -5,9 +5,9 @@ refinement (AMR) and the field outputs.  It checks its values when it is built. 
 ``build_refinement`` and ``build_output_formats`` lower it into ``Solver.Linear``, ``Model.Refinement`` and
 ``Problem.OutputFormats``.  Mesh controls are not numerical controls: ``set_mesh`` holds those.
 
-Three controls have a default that depends on the problem (``ProblemDefaults``): a record leaves them at
-``PROBLEM_DEFAULT`` until the simulation fills them with ``with_defaults``, which both the constructor and
-``set_numerical`` go through.  A record with a control left at ``PROBLEM_DEFAULT`` is not written anywhere.
+Four controls have a default that depends on the problem (``ProblemDefaults``), the FEM order and three AMR
+controls: a record leaves them at ``PROBLEM_DEFAULT`` until the simulation fills them with ``with_defaults``,
+which both the constructor and ``set_numerical`` go through.  A record with a control left at ``PROBLEM_DEFAULT`` is not written anywhere.
 """
 
 from __future__ import annotations
@@ -17,9 +17,14 @@ import sys
 from dataclasses import dataclass, replace
 from enum import Enum
 from numbers import Real
-from typing import Any, Literal
+from typing import Any
 
-from scgsim.contracts.palace_run_folder import EIGENMODE, ELECTROSTATIC
+from scgsim.contracts.palace_run_folder import (
+    DRIVEN,
+    EIGENMODE,
+    ELECTROSTATIC,
+    ProblemName,
+)
 from scgsim.refusal import Declared, found_text
 
 _WHERE_NUMERICAL = "the call to set_numerical"
@@ -27,6 +32,20 @@ _WHERE_NUMERICAL = "the call to set_numerical"
 _KSP_TYPES = {"Default", "CG", "MINRES", "GMRES", "FGMRES", "BiCGSTAB"}
 _SOLVER_TYPES = {"Default", "SuperLU", "STRUMPACK", "MUMPS"}
 _PRECONDITIONERS = {"Default", "AMS", "BoomerAMG"}
+# The problems whose AMR tolerance and update fraction have no SCGSim default: enabling AMR needs both stated.
+_STATED_AMR_PROBLEMS = (EIGENMODE.name, DRIVEN.name)
+# The controls whose default is the problem's (``ProblemDefaults``), each a field of both records.
+_PROBLEM_CONTROLS = ("order", "amr_max_passes", "amr_nonconformal", "amr_tolerance")
+# The controls an omitted set_numerical keyword leaves as they are (``NumericalControls.with_given``); every
+# other omitted keyword is written as given.
+_KEPT_WHEN_OMITTED = (
+    "ksp_type",
+    "amr_max_passes",
+    "amr_nonconformal",
+    "amr_nc_levels",
+    "amr_tolerance",
+    "amr_update_fraction",
+)
 
 DECLARED_CONVERGENCE_TOL = sys.float_info.min
 """``Model.Refinement.Tol`` of a run with a convergence declaration: small enough never to end the run.
@@ -49,12 +68,15 @@ PROBLEM_DEFAULT = ProblemDefault.PROBLEM_DEFAULT
 
 @dataclass(frozen=True)
 class ProblemDefaults:
-    """The defaults of the AMR controls that differ by problem: pass limit, conformity and tolerance.
+    """The defaults of the controls that differ by problem: the FEM order and the AMR pass limit, conformity and tolerance.
 
-    Eigenmode leaves the pass limit and tolerance to choose (None) and refines nonconformally; Electrostatic
-    disables AMR (0 passes), refines conformally and uses a tolerance of 0.01.
+    Eigenmode and Electrostatic solve with first-order elements, Driven with second-order ones.  Eigenmode
+    leaves the pass limit and tolerance to choose (None) and refines nonconformally; Electrostatic disables AMR
+    (0 passes), refines conformally and uses a tolerance of 0.01; Driven disables AMR (0 passes), refines
+    nonconformally when enabled, and leaves the tolerance to choose.
     """
 
+    order: int
     amr_max_passes: int | None
     amr_nonconformal: bool
     amr_tolerance: float | None
@@ -69,11 +91,11 @@ class NumericalControls:
     a config does not inherit Palace's ``true`` default.  ``amr_nc_levels`` sets ``MaxNCLevels``; 0 means no
     limit.  ``ksp_type`` None keeps SCGSim's problem-specific Krylov default; ``"Default"`` selects Palace's.
     Every other None leaves its Palace key out.  With the MUMPS direct solver ``max_iterations`` is held as 1.
-    ``amr_max_passes``, ``amr_nonconformal`` and ``amr_tolerance`` default to ``PROBLEM_DEFAULT``: the simulation
-    fills them with its ``ProblemDefaults``.
+    ``order``, ``amr_max_passes``, ``amr_nonconformal`` and ``amr_tolerance`` default to ``PROBLEM_DEFAULT``:
+    the simulation fills them with its ``ProblemDefaults``.
     """
 
-    order: int = 1
+    order: int | ProblemDefault = PROBLEM_DEFAULT
     tolerance: float = 1e-6
     max_iterations: int = 400
     solver_type: str = "Default"
@@ -112,14 +134,33 @@ class NumericalControls:
             self,
             **{
                 name: getattr(defaults, name)
-                for name in ("amr_max_passes", "amr_nonconformal", "amr_tolerance")
+                for name in _PROBLEM_CONTROLS
                 if getattr(self, name) is PROBLEM_DEFAULT
             },
         )
 
+    def with_given(self, **given: Any) -> NumericalControls:
+        """The controls one ``set_numerical`` call gives, an omitted Krylov, AMR or NC-level control keeping its value here.
+
+        ``given`` holds every keyword of the call.  A None for a control of ``_KEPT_WHEN_OMITTED`` means it was
+        omitted, so its value in these controls is kept; every other control is taken as given, and None leaves
+        its Palace key out.  ``EigenmodeSim`` and ``DrivenSim`` set their controls with it; ``ElectrostaticSim``
+        gives an omitted control its default instead.
+
+        Raises:
+            ValueError: a given control is out of its range or choices.
+            TypeError: a given control has the wrong type.
+        """
+        kept = {
+            name: getattr(self, name)
+            for name in _KEPT_WHEN_OMITTED
+            if given.get(name) is None
+        }
+        return NumericalControls(**{**given, **kept})
+
     def check_ready_for(
         self,
-        problem: Literal["Eigenmode", "Electrostatic"],
+        problem: ProblemName,
         *,
         convergence_declared: bool = False,
     ) -> None:
@@ -129,7 +170,7 @@ class NumericalControls:
         AMR then needs only its update fraction.
 
         Raises:
-            ValueError: ``amr_max_passes`` was never chosen, or Eigenmode AMR is enabled without its
+            ValueError: ``amr_max_passes`` was never chosen, or Eigenmode or Driven AMR is enabled without its
                 tolerance (unless convergence is declared) and update fraction.
         """
         _refuse_problem_defaults(self)
@@ -140,7 +181,7 @@ class NumericalControls:
                 )
             )
         if (
-            problem == EIGENMODE.name
+            problem in _STATED_AMR_PROBLEMS
             and isinstance(self.amr_max_passes, int)
             and self.amr_max_passes > 0
             and convergence_declared
@@ -148,13 +189,13 @@ class NumericalControls:
         ):
             raise ValueError(
                 Declared(
-                    "Enabled Eigenmode AMR requires explicit amr_update_fraction: call "
+                    f"Enabled {problem} AMR requires explicit amr_update_fraction: call "
                     "set_numerical(amr_update_fraction=...) before write_config()",
                     _WHERE_NUMERICAL,
                 ).refusal(found_text({"amr_update_fraction": self.amr_update_fraction}))
             )
         if (
-            problem == EIGENMODE.name
+            problem in _STATED_AMR_PROBLEMS
             and isinstance(self.amr_max_passes, int)
             and self.amr_max_passes > 0
             and not convergence_declared
@@ -162,7 +203,7 @@ class NumericalControls:
         ):
             raise ValueError(
                 Declared(
-                    "Enabled Eigenmode AMR requires explicit amr_tolerance and amr_update_fraction: call "
+                    f"Enabled {problem} AMR requires explicit amr_tolerance and amr_update_fraction: call "
                     "set_numerical(amr_tolerance=..., amr_update_fraction=...) before write_config()",
                     _WHERE_NUMERICAL,
                 ).refusal(
@@ -206,14 +247,12 @@ class NumericalControls:
 def _refuse_problem_defaults(controls: NumericalControls) -> None:
     """Refuse a record whose problem-dependent controls were never filled by a simulation."""
     open_names = [
-        name
-        for name in ("amr_max_passes", "amr_nonconformal", "amr_tolerance")
-        if getattr(controls, name) is PROBLEM_DEFAULT
+        name for name in _PROBLEM_CONTROLS if getattr(controls, name) is PROBLEM_DEFAULT
     ]
     if open_names:
         raise ValueError(
             Declared(f"NumericalControls {open_names}", _WHERE_NUMERICAL).refusal(
-                "still wait for the problem's defaults: hand the record to EigenmodeSim(numerical=...) or ElectrostaticSim(numerical=...), which fill them, or set them"
+                "still wait for the problem's defaults: hand the record to EigenmodeSim(numerical=...), ElectrostaticSim(numerical=...) or DrivenSim(numerical=...), which fill them, or set them"
             )
         )
 
@@ -231,7 +270,9 @@ def _positive_finite(value: Any) -> bool:
 def _check_solver_controls(controls: NumericalControls) -> None:
     """Refuse an invalid FEM order, linear tolerance, iteration limit, solver, preconditioner or device."""
     order = controls.order
-    if not isinstance(order, int) or isinstance(order, bool) or not 1 <= order <= 4:
+    if order is not PROBLEM_DEFAULT and (
+        not isinstance(order, int) or isinstance(order, bool) or not 1 <= order <= 4
+    ):
         raise ValueError(
             Declared(
                 "order must be an integer from 1 through 4: call set_numerical(order=1..4)",

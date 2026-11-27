@@ -518,7 +518,7 @@ def _measured_words(criterion: PlannedCriterion) -> str:
     if criterion.test == "percent_change":
         return _DELTA_NAMES.get(criterion.quantity, "Delta %")
     if criterion.test == "absolute_change":
-        return "Max Delta"
+        return "Max Delta S" if criterion.quantity == "s_matrix" else "Max Delta"
     return "value"
 
 
@@ -538,7 +538,8 @@ def _axis_words(criterion: PlannedCriterion) -> str:
 
 def _threshold_words(criterion: PlannedCriterion) -> str:
     """The declared threshold as a heading states it: ``≤ 0.5 %``, ``change ≤ 0.001 GHz``, ``≤ 0.045``."""
-    bound = f"≤ {_number(criterion.threshold, criterion)}"
+    relation = "<" if criterion.quantity == "s_matrix" else "≤"
+    bound = f"{relation} {_number(criterion.threshold, criterion)}"
     return f"change {bound}" if criterion.test == "absolute_change" else bound
 
 

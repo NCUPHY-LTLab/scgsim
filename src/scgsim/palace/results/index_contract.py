@@ -39,7 +39,7 @@ from scgsim.palace.results.surface_contract import (
     validate_surface_epr_config,
 )
 from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
-from scgsim.refusal import Declared, found_text
+from scgsim.refusal import Declared, found_text, internal
 
 
 def require_manifest_schema(manifest: Mapping[str, Any]) -> None:
@@ -244,7 +244,7 @@ def validate_config_index_correspondence(
 
 
 class _Excitations(NamedTuple):
-    """The configured Terminal rows of an Electrostatic config, or the LumpedPort rows of an Eigenmode one."""
+    """The configured Terminal rows of an Electrostatic config, or the LumpedPort rows of an Eigenmode or Driven one."""
 
     terminals: list[Any]
     ports: list[Any]
@@ -256,8 +256,16 @@ def _configured_excitations(
     index_counts: dict[str, int],
     problem: str,
 ) -> _Excitations:
-    """Read the problem's excitation rows and check that the index map counts as many."""
-    if not palace_problem(problem).solves_modes:
+    """Read the problem's excitation rows and check that the index map counts as many.
+
+    Electrostatic excites Terminal rows; Eigenmode and Driven configure LumpedPort rows.
+    """
+    excitation = palace_problem(problem).excitation
+    if excitation not in {"Terminal", "LumpedPort"}:
+        raise ValueError(
+            internal(f"no index check reads the excitation rows {excitation!r}")
+        )
+    if excitation == "Terminal":
         terminals = expect_list(
             boundaries.get("Terminal"), "config.Boundaries.Terminal"
         )

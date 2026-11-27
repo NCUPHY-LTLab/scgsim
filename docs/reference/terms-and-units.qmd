@@ -22,6 +22,11 @@ conductor for given voltages; it returns a capacitance matrix. See
 each with its frequency, Q and fields. A mode is not a driven response. See
 [the problems](../concepts/problems.qmd#resonance-modes-of-a-field-and-circuit-model).
 
+[Driven]{#term-driven}: a calculation that drives each port in turn over a
+frequency sweep and returns the S-parameters: Palace Driven or HFSS Driven
+Terminal. See
+[the problems](../concepts/problems.qmd#driven-response-excite-a-port-at-a-frequency).
+
 [Driven Terminal]{#term-driven-terminal}: the HFSS calculation that excites
 ports referenced to conductors and returns complex S-parameters.
 

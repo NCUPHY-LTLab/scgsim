@@ -7,13 +7,13 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/concepts/problems"
 ---
 
-從同一個版圖，SCGSim 可以算出三種答案：電容矩陣、共振模態，或埠上訊號的響應。請選輸出正好是你需要的電路量的那一種。以下例子都是[第一個模擬](../start/first-simulation.qmd)的焊墊：200 µm 見方的焊墊，位在接地金屬中 20 µm 的間隙裡，晶片 1000 µm 見方。
+從同一個版圖，SCGSim 可以算出三種答案：電容矩陣、共振模態，或埠上訊號的響應。請選輸出正好是你需要的電路量的那一種。電容與模態的例子是[第一個模擬](../start/first-simulation.qmd)的焊墊：200 µm 見方的焊墊，位在接地金屬中 20 µm 的間隙裡，晶片 1000 µm 見方。驅動響應的例子是一條直通傳輸線：以 900 µm 共平面波導相連的兩個 launcher。
 
 | 問題 | 它問什麼 | 它回傳什麼 | 求解器 | 例子 |
 |---|---|---|---|---|
 | 電容 | 每個導體每伏特帶多少電荷 | 電容矩陣，單位為法拉 | Palace Electrostatic、Q3D | 焊墊與接地金屬之間 112.54 fF（[第一個模擬](../start/first-simulation.qmd)；第一個網格上解一次） |
 | 共振模態 | 版圖在哪些頻率共振，能量在哪裡 | 每個模態的頻率與 $Q$；要求時另有能量參與率 | Palace Eigenmode、HFSS Eigenmode | 間隙上接 10 nH 接面時，模態 1 為 5.135702 GHz（[Palace 執行紀錄](https://github.com/NCUPHY-LTLab/scgsim/issues/84#issuecomment-6789403273)；最多兩次細化） |
-| 驅動響應 | 版圖在每個頻率下，對埠上訊號如何響應 | 隨頻率變化的複數 S 參數，輸出 CSV 與 Touchstone | HFSS Driven Terminal | 這些頁面還沒有記錄的結果 |
+| 驅動響應 | 版圖在每個頻率下，對埠上訊號如何響應 | 隨頻率變化的複數 S 參數，附 Touchstone 檔 | Palace Driven、HFSS Driven Terminal | 2 到 10 GHz 間 \|S21\| 高於 −0.006 dB、\|S11\| 低於 −29.8 dB（[以 Palace 計算 S 參數](../guides/s-parameters-palace.qmd)；二階元素） |
 
 第四種計算 Q2D，給出傳輸線截面的每單位長度性質；見[下文](#finite-extraction-versus-a-cross-section)。
 
@@ -29,7 +29,7 @@ Palace 與 HFSS 都能執行本徵模態計算。要求時，它們也會算能�
 
 ## 驅動響應 {#driven-response-excite-a-port-at-a-frequency}
 
-驅動計算在埠上加訊號，算出掃頻中每個頻率的響應。HFSS Driven Terminal 以版圖埠片上的兩個集總埠做這件事，回傳 S 參數。驅動響應中的峰值與本徵模態頻率是兩種不同的結果，不能互相取代。Palace Driven 尚未實作；HFSS 有哪些埠可用，見[支援的計算](../reference/supported-calculations.qmd)。
+驅動計算在埠上加訊號，算出掃頻中每個頻率的響應。Palace Driven 與 HFSS Driven Terminal 以版圖埠片上的集總埠做這件事，回傳 S 參數。驅動響應中的峰值與本徵模態頻率是兩種不同的結果，不能互相取代。各求解器接受哪些埠，見[支援的計算](../reference/supported-calculations.qmd)。
 
 ## 截面 {#finite-extraction-versus-a-cross-section}
 

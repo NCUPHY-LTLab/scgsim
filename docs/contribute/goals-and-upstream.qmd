@@ -15,11 +15,11 @@ builder, solver adapters and result readers.
 
 ## Scope {#scope}
 
-SCGSim computes with Palace Electrostatic and Eigenmode, and with AEDT HFSS
-Eigenmode, HFSS Driven Terminal, Q3D and Q2D;
+SCGSim computes with Palace Electrostatic, Eigenmode and Driven, and with
+AEDT HFSS Eigenmode, HFSS Driven Terminal, Q3D and Q2D;
 [Supported calculations](../reference/supported-calculations.qmd) lists the
-input and the returned quantity of each. Palace Driven, Magnetostatic and
-Transient are not implemented, and Meep is outside the scope. The public
+input and the returned quantity of each. Palace Magnetostatic and Transient
+are not implemented, and Meep is outside the scope. The public
 component notebooks belong to OrcaPen SC PDK.
 
 SCGSim does not install a native solver, does not run a prepared handoff on

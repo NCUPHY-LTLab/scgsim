@@ -56,7 +56,7 @@ Capacitance matrix (fF): pad
 |---|---|---|
 | The capacitance matrix of pads and electrodes | [Palace: terminal capacitance](docs/guides/capacitance-palace.qmd) | [AEDT: Q3D extraction](docs/guides/capacitance-q3d.qmd) |
 | The frequency, Q and energy participation of resonant modes | [Palace: resonant modes](docs/guides/modes-palace.qmd) | [AEDT: HFSS Eigenmode](docs/guides/modes-hfss.qmd) |
-| The S-parameters of a two-port | not in SCGSim | [AEDT: HFSS Driven Terminal](docs/guides/s-parameters-hfss.qmd) |
+| The S-parameters of a two-port | [Palace: S-parameters](docs/guides/s-parameters-palace.qmd) | [AEDT: HFSS Driven Terminal](docs/guides/s-parameters-hfss.qmd) |
 | The per-length C, G, L and R of a line's cross-section | not in SCGSim | [AEDT: Q2D cross-section extraction](docs/guides/line-parameters-q2d.qmd) |
 
 [Choose a simulation](docs/start/choose-a-simulation.qmd) adds the OrcaPen SC

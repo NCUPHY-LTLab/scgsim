@@ -42,25 +42,20 @@ from scgsim.palace.reports.observations import (
     union_mapping_keys,
 )
 from scgsim.palace.reports.plotting import (
-    COLORWAY,
-    PLOT_TICK_FONT,
-    FigureStyle,
     LinePlot,
-    PlotTheme,
     ReferenceLine,
     ReportTheme,
     Trace,
-    axis_title,
+    card_html,
     checked_ranking_limit,
     checked_show_details,
     checked_theme,
+    elapsed_time_figure,
     fmt,
     fmt_mb,
     fmt_seconds,
     html_cell,
-    plotly,
     show_figure,
-    theme_tokens,
     yaxis_type,
 )
 from scgsim.palace.reports.surface_figures import (
@@ -91,23 +86,6 @@ from .views import (
     InspectedBenchmarkData,
     PhysicsQuantitiesReport,
     SimulationBenchmarkReport,
-)
-
-_DURATION_BARS = (
-    "MeshPreprocessing",
-    "Setup",
-    "Construction",
-    "OperatorConstruction",
-    "Preconditioner",
-    "LinearSolve",
-    "EigenvalueSolve",
-    "Div.-FreeProjection",
-    "Solve",
-    "Adaptation",
-    "Rebalancing",
-    "Postprocessing",
-    "Paraview",
-    "DiskIO",
 )
 
 
@@ -225,18 +203,9 @@ class PalaceTrustReport:
         )
         display(trust.show_simulation_benchmark(theme=theme, show_details=show_details))
 
-    def _tokens(self) -> PlotTheme:
-        return theme_tokens(self.theme)
-
     def card_html(self, label: str, value: Any) -> str:
         """Escape and render one identity or cost label/value card."""
-        return (
-            "<div style='min-width:11rem;flex:1 1 11rem;border:1px solid var(--border,#d0d7de);"
-            "border-radius:8px;padding:0.6rem 0.75rem;margin:0.25rem;'>"
-            f"<div style='font-size:0.75rem;opacity:0.7'>{html.escape(str(label))}</div>"
-            "<div style='font-size:0.95rem;font-weight:600;overflow-wrap:anywhere'>"
-            f"{html.escape(str(value))}</div></div>"
-        )
+        return card_html(label, value)
 
     def _ipython_display_(self) -> None:
         from IPython.display import HTML, display  # noqa: PLC0415 -- IPython is optional; detached result reading needs no notebook runtime.
@@ -265,7 +234,7 @@ class PalaceTrustReport:
             else:
                 show_figure(item)
         if self.show_details:
-            display(HTML(self._provenance_html()))
+            display(HTML(provenance_html(self.provenance)))
 
     def show_physics_quantities(
         self,
@@ -339,21 +308,7 @@ class PalaceTrustReport:
                 f"{html.escape(self.selection.integrity)}.</div>"
             )
         if self.failure is not None:
-            notices.append(
-                "<div style='border-left:4px solid #cf222e;background:rgba(207,34,46,0.10);"
-                "padding:0.65rem 0.8rem;margin:0.7rem 0'>"
-                f"<strong>Run failed — {html.escape(self.failure.category.replace('_', ' '))}</strong><br>"
-                f"{html.escape(self.failure.summary)}<br>"
-                f"Stage: {fmt(self.failure.execution_stage)}; preflight: "
-                f"{fmt(self.failure.preflight_exit_code)}; solver invoked: "
-                f"{fmt(self.failure.solver_invoked)}; exit: "
-                f"{fmt(self.failure.exit_code)}; solver: "
-                f"{fmt(self.failure.solver_exit_code)}; output capture: "
-                f"{fmt(self.failure.tee_exit_code)}."
-                "<details><summary>Failure evidence</summary><code>"
-                f"{html.escape(json.dumps(self.failure.evidence, sort_keys=True))}"
-                "</code></details></div>"
-            )
+            notices.append(failure_notice_html(self.failure))
         if self.selection.reason == "latest_complete_iteration_after_failed_attempt":
             source = self.selection.selected_source or "unavailable"
             path = self.selection.selected_path
@@ -561,46 +516,7 @@ class PalaceTrustReport:
 
     def benchmark_time_figure(self) -> Any:
         """Plot recorded elapsed categories separately from mesh and convergence evidence."""
-        labels: list[str] = []
-        values: list[float] = []
-        for name in _DURATION_BARS:
-            duration = self.durations.get(name)
-            if duration is None or duration <= 0:
-                continue
-            labels.append(name)
-            values.append(duration)
-        if not labels:
-            return (
-                "<p style='opacity:0.75'>Palace elapsed-time timers are unavailable "
-                "in this run folder.</p>"
-            )
-        tokens = self._tokens()
-        go = plotly()
-        fig = go.Figure(
-            data=[
-                go.Bar(
-                    x=values,
-                    y=labels,
-                    orientation="h",
-                    marker={"color": COLORWAY[0], "opacity": 0.88},
-                    text=[fmt_seconds(value) for value in values],
-                    textposition="outside",
-                    textfont={"color": tokens.muted, "size": PLOT_TICK_FONT},
-                    hovertemplate="%{x:.3g} s<extra>%{y}</extra>",
-                )
-            ]
-        )
-        FigureStyle(
-            title="Elapsed time by Palace timer",
-            height=max(320, 42 * len(labels) + 110),
-            margin={"l": 196, "r": 88, "t": 56, "b": 52},
-            hovermode="closest",
-            showlegend=False,
-            theme=self.theme,
-        ).apply(fig)
-        fig.update_xaxes(title=axis_title("seconds", tokens), rangemode="tozero")
-        fig.update_yaxes(categoryorder="total ascending")
-        return fig
+        return elapsed_time_figure(self.durations, self.theme)
 
     def pass_cost_records(self) -> tuple[PassCostRecord, ...]:
         """Detach pass costs while only differencing adjacent native iterations."""
@@ -718,15 +634,6 @@ class PalaceTrustReport:
             figures.append(dof_cost)
         return figures
 
-    def _provenance_html(self) -> str:
-        payload = html.escape(json.dumps(self.provenance, indent=2, sort_keys=True))
-        return (
-            "<section><h3>Provenance</h3>"
-            "<p style='opacity:0.75;margin-top:0'>Exact source, Palace, input, and "
-            "returned-run identities recorded in the run folder.</p>"
-            f"<pre style='white-space:pre-wrap'>{payload}</pre></section>"
-        )
-
     def _eigenmode_convergence_items(self, xs: tuple[int, ...]) -> list[Any]:
         """The native modal columns across the passes in header order, the declared change after the frequency."""
         items: list[Any] = []
@@ -763,3 +670,33 @@ class PalaceTrustReport:
                     change_figures(self.convergence, self.theme, "mode_frequency")
                 )
         return items
+
+
+def failure_notice_html(failure: PalaceFailureDiagnosis) -> str:
+    """The notice of a failed run: its category and summary, the receipt's exit codes, and the evidence."""
+    return (
+        "<div style='border-left:4px solid #cf222e;background:rgba(207,34,46,0.10);"
+        "padding:0.65rem 0.8rem;margin:0.7rem 0'>"
+        f"<strong>Run failed — {html.escape(failure.category.replace('_', ' '))}</strong><br>"
+        f"{html.escape(failure.summary)}<br>"
+        f"Stage: {fmt(failure.execution_stage)}; preflight: "
+        f"{fmt(failure.preflight_exit_code)}; solver invoked: "
+        f"{fmt(failure.solver_invoked)}; exit: "
+        f"{fmt(failure.exit_code)}; solver: "
+        f"{fmt(failure.solver_exit_code)}; output capture: "
+        f"{fmt(failure.tee_exit_code)}."
+        "<details><summary>Failure evidence</summary><code>"
+        f"{html.escape(json.dumps(failure.evidence, sort_keys=True))}"
+        "</code></details></div>"
+    )
+
+
+def provenance_html(provenance: ReportProvenance) -> str:
+    """The source, Palace, input and returned-run identities the run folder records, as JSON."""
+    payload = html.escape(json.dumps(provenance, indent=2, sort_keys=True))
+    return (
+        "<section><h3>Provenance</h3>"
+        "<p style='opacity:0.75;margin-top:0'>Exact source, Palace, input, and "
+        "returned-run identities recorded in the run folder.</p>"
+        f"<pre style='white-space:pre-wrap'>{payload}</pre></section>"
+    )

@@ -1,7 +1,7 @@
-"""The lifecycle of both Palace simulations: which call needs which stage, and how far each call falls back.
+"""The lifecycle of the Palace simulations: which call needs which stage, and how far each call falls back.
 
 The rules are the table in ``scgsim.palace.simulation.lifecycle``; these tests drive them through the public
-calls of ``EigenmodeSim`` and ``ElectrostaticSim`` and check each refusal names the call that fixes it.
+calls of ``EigenmodeSim``, ``ElectrostaticSim`` and ``DrivenSim`` and check each refusal names the call that fixes it.
 No test here meshes: a stage that needs a mesh is reached by standing in for ``mesh()``'s outputs.
 """
 
@@ -12,11 +12,11 @@ import inspect
 import pytest
 from test_palace_mesh_controls import two_pad_snapshot
 
-from scgsim.palace import EigenmodeSim, ElectrostaticSim
+from scgsim.palace import DrivenSim, EigenmodeSim, ElectrostaticSim, Linear
 from scgsim.palace.simulation.core import PalaceSimulation
 from scgsim.palace.simulation.lifecycle import CALLS, Stage
 
-SIMS = [EigenmodeSim, ElectrostaticSim]
+SIMS = [EigenmodeSim, ElectrostaticSim, DrivenSim]
 
 
 def handed_off(sim):
@@ -101,6 +101,8 @@ def test_a_geometry_setter_falls_back_to_bound(sim_type, monkeypatch, tmp_path):
         (ElectrostaticSim, lambda sim: sim.set_electrostatic(save_fields=1)),
         (EigenmodeSim, lambda sim: sim.set_numerical(amr_max_passes=0)),
         (ElectrostaticSim, lambda sim: sim.set_numerical()),
+        (DrivenSim, lambda sim: sim.set_driven([Linear(2e9, 10e9, points=5)])),
+        (DrivenSim, lambda sim: sim.set_numerical(order=2)),
     ],
 )
 def test_a_problem_setter_keeps_the_mesh(sim_type, setter, monkeypatch):

@@ -19,6 +19,7 @@ from scgsim.contracts.palace_index_map import (
 )
 from scgsim.contracts.palace_run_folder import (
     CONFIG,
+    DRIVEN,
     EIGENMODE,
     EPR_SELECTION_SCHEMA,
     INDEX_MAP,
@@ -189,15 +190,15 @@ def epr_result(
     """
 
     if not isinstance(result, ResolvedRunData) or result.problem != EIGENMODE.name:
+        problem = getattr(result, "problem", type(result).__name__)
+        detail = found_text(problem, EIGENMODE.name)
+        if problem == DRIVEN.name:
+            detail += "; a Driven run's Surface EPR is in driven_result().surface_epr"
         raise TypeError(
             Declared(
                 "epr_result requires a resolved Palace Eigenmode run",
                 _WHERE_EPR_RESULT_CALL,
-            ).refusal(
-                found_text(
-                    getattr(result, "problem", type(result).__name__), EIGENMODE.name
-                )
-            )
+            ).refusal(detail)
         )
     output_prefix = OUTPUT_DIR
     if palace_iteration is not None:

@@ -24,6 +24,7 @@
     "docs/guides/capacitance-palace.qmd",
     "docs/guides/capacitance-q3d.qmd",
     "docs/guides/convergence-and-reports.qmd",
+    "docs/guides/frequency-sweeps-palace.qmd",
     "docs/guides/hpc-sweep.qmd",
     "docs/guides/inspect-the-prepared-model.qmd",
     "docs/guides/inspect-the-source.qmd",
@@ -35,6 +36,7 @@
     "docs/guides/preview-the-geometry.qmd",
     "docs/guides/run-elsewhere.qmd",
     "docs/guides/s-parameters-hfss.qmd",
+    "docs/guides/s-parameters-palace.qmd",
     "docs/guides/saved-fields.qmd",
     "docs/guides/upgrade.qmd",
     "docs/guides/xmon/aedt.qmd",
@@ -75,6 +77,7 @@
     "zh-TW/docs/guides/capacitance-palace.qmd",
     "zh-TW/docs/guides/capacitance-q3d.qmd",
     "zh-TW/docs/guides/convergence-and-reports.qmd",
+    "zh-TW/docs/guides/frequency-sweeps-palace.qmd",
     "zh-TW/docs/guides/hpc-sweep.qmd",
     "zh-TW/docs/guides/inspect-the-prepared-model.qmd",
     "zh-TW/docs/guides/inspect-the-source.qmd",
@@ -86,6 +89,7 @@
     "zh-TW/docs/guides/preview-the-geometry.qmd",
     "zh-TW/docs/guides/run-elsewhere.qmd",
     "zh-TW/docs/guides/s-parameters-hfss.qmd",
+    "zh-TW/docs/guides/s-parameters-palace.qmd",
     "zh-TW/docs/guides/saved-fields.qmd",
     "zh-TW/docs/guides/upgrade.qmd",
     "zh-TW/docs/guides/xmon/aedt.qmd",
@@ -199,14 +203,27 @@
         {
           "title": "Simulations",
           "title_zh": "模擬",
-          "gloss": "Set up, check and prepare a capacitance or eigenmode run.",
-          "gloss_zh": "設定、檢查並準備電容或本徵模態計算。",
+          "gloss": "Set up, check and prepare a capacitance, eigenmode or S-parameter run.",
+          "gloss_zh": "設定、檢查並準備電容、本徵模態或 S 參數計算。",
           "page": "specs/palace-electrostatic-sgb.qmd",
           "names": [
+            "DrivenSim",
             "EigenmodeSim",
             "ElectrostaticSim",
             "SimulationDrcError",
             "SimulationDrcReport"
+          ]
+        },
+        {
+          "title": "Frequency sweep",
+          "title_zh": "頻率掃描",
+          "gloss": "The frequency ranges of an S-parameter sweep: evenly spaced, log-spaced or chosen frequencies.",
+          "gloss_zh": "S 參數掃描的頻率範圍：等間距、對數等間距，或指定的頻率。",
+          "page": "../guides/s-parameters-palace.qmd#dense-sampling",
+          "names": [
+            "Linear",
+            "Log",
+            "Points"
           ]
         },
         {
@@ -225,6 +242,16 @@
             "ErrorIndicator",
             "ModeFrequency",
             "SurfaceEpr"
+          ]
+        },
+        {
+          "title": "Driven convergence",
+          "title_zh": "Driven 收斂",
+          "gloss": "Check Maximum Delta S at the refining frequencies.",
+          "gloss_zh": "檢查參與網格細化頻率的 Maximum Delta S。",
+          "page": "../guides/s-parameters-palace.qmd#settings-you-may-change",
+          "names": [
+            "SMatrix"
           ]
         },
         {
@@ -253,6 +280,8 @@
           "gloss_zh": "結果的執行、物理量與成本三個視圖。",
           "page": "specs/report-model.qmd#common-envelope",
           "names": [
+            "DrivenPhysicsReport",
+            "DrivenTrustReport",
             "PalaceCost",
             "PalacePerformance",
             "PalaceTrustReport",
@@ -275,6 +304,20 @@
             "reanalyze_epr",
             "resolve_epr_result",
             "show_epr"
+          ]
+        },
+        {
+          "title": "S-parameters",
+          "title_zh": "S 參數",
+          "gloss": "Detach a Driven run's S-parameters, with its Surface EPR, and write its Touchstone file.",
+          "gloss_zh": "取出 Driven 計算的 S 參數與表面 EPR，並寫出 Touchstone 檔。",
+          "page": "../guides/s-parameters-palace.qmd",
+          "names": [
+            "AdaptiveSampling",
+            "DrivenSurfaceEpr",
+            "PalaceDrivenResult",
+            "SParameterPort",
+            "SParameters"
           ]
         }
       ]

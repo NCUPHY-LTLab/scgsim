@@ -2,10 +2,12 @@
 
 The plan declares each element once (``GeometryPlan.set_lumped_elements``); here a Palace problem realizes it.
 Eigenmode writes every element as a not excited Palace ``LumpedPort`` ``P<number>`` with its R, L and C, and an
-excitation port as its impedance, a resistance: a load, so the Eigenmode Q is the loaded Q.  An authored sheet
-that carries no element is not modeled.  Electrostatic realizes none: its capacitance matrix is the
-conductors', with every lumped element open, and the sheets stay as authored.  What each problem does with an
-element is one line of ``simulation_drc``'s report and one entry of ``input_summary()``.
+excitation port as its impedance, a resistance: a load, so the Eigenmode Q is the loaded Q.  Driven writes the
+same rows, and excites each port by itself, numbered as the port is, so port *i* is row and column *i* of the
+S-matrix; a plan with no port has nothing to drive and is refused.  An authored sheet that carries no element
+is not modeled.  Electrostatic realizes none: its capacitance matrix is the conductors', with every lumped
+element open, and the sheets stay as authored.  What each problem does with an element is one line of
+``simulation_drc``'s report and one entry of ``input_summary()``.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from typing import Any
 
 from scgsim.geometry import LumpedElementRecord, LumpedPort
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
+from scgsim.refusal import Declared
 
 from .ports import RequestedPort
 
@@ -39,17 +42,49 @@ def eigenmode_ports(plan: GeometryPlanSnapshot) -> list[RequestedPort]:
     ]
 
 
-def eigenmode_report(plan: GeometryPlanSnapshot) -> tuple[str, ...]:
-    """One line per element of ``plan`` and per authored sheet that carries none, as Eigenmode realizes them."""
-    lines = [
-        f"P{record.number} {record.name}: {eigenmode_realization(record)}"
+def driven_ports(plan: GeometryPlanSnapshot) -> list[RequestedPort]:
+    """Every lumped element of ``plan`` as the Palace port Driven makes it, in its number's order: element n is ``P<n>``.
+
+    Each port is excited by itself, its ``Direction`` from its signal conductor to its reference; every other
+    element is written as Eigenmode writes it, not excited.
+
+    Raises:
+        ValueError: ``plan`` declares no ``LumpedPort``.
+    """
+    if not any(record.is_port for record in plan.lumped_elements):
+        raise ValueError(
+            Declared(
+                "the plan of a DrivenSim",
+                "the call to GeometryPlan.set_lumped_elements",
+            ).refusal(
+                "declares no LumpedPort, so a Driven run has nothing to excite: declare each port as "
+                "LumpedPort(sheet, reference_net=..., impedance_ohm=...), in the S-matrix's order"
+            )
+        )
+    return [
+        RequestedPort(
+            name=record.name,
+            layer=record.target_layer,
+            circuit=_palace_circuit(record),
+            excited=record.is_port,
+            # Palace's sign convention: a lumped port's Direction points from its signal conductor to its
+            # reference, as a wave port's voltage path does.  The authored direction points from ``start`` to
+            # ``end``, so a sheet drawn from the reference to the signal is reversed.  The sign of a port is
+            # the sign of its S_ij (i != j).
+            reverses_direction=record.is_port and record.signal == record.end,
+        )
         for record in plan.lumped_elements
     ]
-    lines.extend(
-        f"{name}: no lumped element on the plan; not modeled"
-        for name in _undeclared_sheets(plan)
-    )
-    return tuple(lines)
+
+
+def eigenmode_report(plan: GeometryPlanSnapshot) -> tuple[str, ...]:
+    """One line per element of ``plan`` and per authored sheet that carries none, as Eigenmode realizes them."""
+    return _report(plan, eigenmode_realization)
+
+
+def driven_report(plan: GeometryPlanSnapshot) -> tuple[str, ...]:
+    """One line per element of ``plan`` and per authored sheet that carries none, as Driven realizes them."""
+    return _report(plan, driven_realization)
 
 
 def electrostatic_report(plan: GeometryPlanSnapshot) -> tuple[str, ...]:
@@ -62,13 +97,21 @@ def electrostatic_report(plan: GeometryPlanSnapshot) -> tuple[str, ...]:
 
 def eigenmode_realization(record: LumpedElementRecord) -> str:
     """What Eigenmode makes of ``record``: a not excited Palace ``LumpedPort`` with its circuit keys."""
-    keys = ", ".join(
-        f"{key} {value!r} {_SI_UNITS[key]}"
-        for key, value in _palace_circuit(record).items()
-    )
+    keys = _circuit_text(record)
     if record.is_port:
         return f"LumpedPort, {keys}: the excitation port as its impedance, a load (the Q is the loaded Q)"
     return f"LumpedPort, {keys}"
+
+
+def driven_realization(record: LumpedElementRecord) -> str:
+    """What Driven makes of ``record``: a port excited by itself, or a not excited ``LumpedPort`` as in Eigenmode."""
+    keys = _circuit_text(record)
+    if record.is_port:
+        return (
+            f"LumpedPort, {keys}, excitation {record.number}: port {record.number} of the S-matrix, "
+            f"driven from {record.signal.source_entity_id} to {record.reference.source_entity_id}"
+        )
+    return f"LumpedPort, {keys}, not excited"
 
 
 def electrostatic_realization(record: LumpedElementRecord) -> str:  # noqa: ARG001 -- every record is left open alike
@@ -84,6 +127,29 @@ def summarized_elements(
         {**record.to_payload(), "realization": realization(record)}
         for record in plan.lumped_elements
     ]
+
+
+def _report(
+    plan: GeometryPlanSnapshot, realization: Callable[[LumpedElementRecord], str]
+) -> tuple[str, ...]:
+    """One line per element of ``plan`` as ``realization`` makes it, then one per authored sheet that carries none."""
+    lines = [
+        f"P{record.number} {record.name}: {realization(record)}"
+        for record in plan.lumped_elements
+    ]
+    lines.extend(
+        f"{name}: no lumped element on the plan; not modeled"
+        for name in _undeclared_sheets(plan)
+    )
+    return tuple(lines)
+
+
+def _circuit_text(record: LumpedElementRecord) -> str:
+    """The Palace circuit keys of ``record`` as a report prints them (``R 50.0 ohm``)."""
+    return ", ".join(
+        f"{key} {value!r} {_SI_UNITS[key]}"
+        for key, value in _palace_circuit(record).items()
+    )
 
 
 def _palace_circuit(record: LumpedElementRecord) -> dict[str, float]:
@@ -105,6 +171,9 @@ def _undeclared_sheets(plan: GeometryPlanSnapshot) -> list[str]:
 
 
 __all__ = [
+    "driven_ports",
+    "driven_realization",
+    "driven_report",
     "eigenmode_ports",
     "eigenmode_realization",
     "eigenmode_report",

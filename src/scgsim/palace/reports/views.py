@@ -132,12 +132,41 @@ class InspectedBenchmarkData(TypedDict):
     pass_cost_records: list[dict[str, Any]]
 
 
+class DrivenRunState(TypedDict):
+    """The route, problem and state of a Driven run: its receipt, complete or partial, and its failure."""
+
+    route: str
+    problem: str
+    status: str | None
+    completeness: Literal["complete", "partial"]
+    failure: dict[str, Any] | None
+
+
+class DrivenBenchmarkData(TypedDict):
+    """The machine data of a Driven run's benchmark, complete or partial.
+
+    ``full_solves`` is Palace's count of linear solves, one per excited port and frequency it solved the
+    field at: every swept frequency of a uniform sweep, the samples of an adaptive one.
+    """
+
+    full_solves: int | None
+    cost: CostCards
+    durations: dict[str, float]
+    mesh_summary: MeshSummary
+    resources: BenchmarkResources
+    run_state: DrivenRunState
+
+
 @dataclass(frozen=True)
 class SimulationBenchmarkReport:
-    """Human-readable simulation cost with complete machine data in ``data``."""
+    """Human-readable simulation cost with complete machine data in ``data``.
+
+    ``trust`` is the run's trust report, an Electrostatic or Eigenmode run's ``PalaceTrustReport`` or a Driven
+    run's ``DrivenTrustReport``: it draws the cards, the timers and the cost of each AMR pass.
+    """
 
     trust: Any
-    data: ResolvedBenchmarkData | InspectedBenchmarkData
+    data: ResolvedBenchmarkData | InspectedBenchmarkData | DrivenBenchmarkData
     show_details: bool = False
 
     def _ipython_display_(self) -> None:
@@ -156,7 +185,10 @@ class SimulationBenchmarkReport:
             display(HTML(timing))
         else:
             show_figure(timing)
-        display(HTML(self.trust.benchmark_pass_table_html()))
+        # A Driven run reads no AMR pass of its own, so it has no table of them.
+        pass_table = self.trust.benchmark_pass_table_html()
+        if pass_table:
+            display(HTML(pass_table))
         for figure in self.trust.benchmark_pass_figures():
             show_figure(figure)
         if self.show_details:

@@ -1,0 +1,229 @@
+---
+title: "Choose a frequency sweep with Palace"
+description: "Choose the frequency sweep of a Palace S-parameter run for what you want to compute: a broadband response, the frequency and Q of a narrow resonance, or a few exact frequencies, with what each cost on a hanger resonator."
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/palace-driven-sweeps"
+---
+
+This page tells you which frequency sweep to give a Palace S-parameter run
+for what you want to compute, and what each one cost and gave on one
+resonator.
+
+Two words recur. A **full solve** solves the field at one frequency, once
+per port. An **adaptive sweep**, `adaptive_tolerance=` in `set_driven`, makes
+a few full solves per port, builds a small model from them and evaluates the
+model at every frequency you list
+([S-parameters with Palace](s-parameters-palace.qmd#the-script)). The
+numbers below are from a hanger resonator at 7.36 GHz beside a feedline,
+whose resonance shows as a narrow notch in |S21|
+([the worked example](#the-hanger-resonator)): $f_0$ is its resonance
+frequency, Q its quality factor and $f_0/Q$ its linewidth.
+
+Each row gives the list for `set_driven`; all but the last also set
+`adaptive_tolerance=1e-3`.
+
+| You want | Set | On the hanger |
+|----------|----------------------|--------------------|
+| A broadband response | `[Linear(4e9, 9e9, points=2500)]` | 9 and 4 full solves (ports 1 and 2), 3,940 s. The points are 2.0 MHz apart: none falls in the resonance's notch, and the nearest, 0.68 MHz above $f_0$, shows \|S21\| at −0.94 dB. |
+| The $f_0$ and Q of a narrow resonance | `[Linear(4e9, 9e9, points=501), Linear(f0 - w, f0 + w, points=2001)]` with `w = 20 * f0 / Q` | 9 and 4 full solves, 3,948 s. A fit of the notch gives $f_0$ and Q; S21 agrees with the full solves of the last row to 2.4 × 10⁻⁶. |
+| The same, when you know $f_0$ | add `Points([f0], full_solve=True)` to that list | 5 and 5 full solves, $f_0$ among them, 3,588 s: the model took 921 s to build instead of 1,190 s. S21 agrees with the row above to 1.4 × 10⁻⁵. |
+| A few exact frequencies, without an adaptive sweep | `[Points([...])]`, without `adaptive_tolerance`; near a high-Q resonance also `set_numerical(tolerance=1e-9)` | Every frequency in full, 117 to 119 s each per port: 9 frequencies around $f_0$ took 2,137 s and fit the same notch as the second row. |
+
+For a resonator, start from the second row: one run gives the broadband
+response and the resonance, and it needs only a rough $f_0$ and Q to place
+the window. The window above spans ±20 linewidths with 50 points per
+linewidth. How to give and combine ranges, and how a `full_solve` frequency
+shares a frequency with another range, is in
+[Dense sampling where it matters](s-parameters-palace.qmd#dense-sampling).
+
+## What a sweep costs {#what-a-sweep-costs}
+
+An adaptive sweep costs two things. The first is its model: the full
+solves, which on the hanger took 1,190 s for 9 and 4 of them. The model
+covers the lowest to the highest frequency you list, whatever the ranges
+between them are, so a dense window does not change how it is built: the
+band-and-window sweep and the uniform 2,500 points of the first row chose
+the same 9 and 4 full solves.
+
+The second is a fixed time at every listed frequency and port, where Palace
+evaluates the model and computes what it writes out for that frequency:
+0.548 and 0.555 s on the hanger, and about 0.17 s on the smaller chip of
+[S-parameters with Palace](s-parameters-palace.qmd). On the hanger, Palace's
+postprocessing took 2,254 s of the 3,948 s band-and-window run. So the
+frequencies you list are what the sweep costs. A window keeps them few where
+a uniform grid cannot: 10 kHz apart across 4 to 9 GHz would be 500,001
+frequencies.
+
+## What to avoid {#what-to-avoid}
+
+### A tighter adaptive tolerance {#a-tighter-adaptive-tolerance}
+
+Keep `adaptive_tolerance=1e-3`. On the hanger, `1e-5` bought no accuracy.
+Both ports reached Palace's default cap of 20 full solves before the model
+agreed to the tolerance, after 7,428 s, and `driven_result()` refuses such a
+run ([the adaptive sweep's limit](s-parameters-palace.qmd#settings-you-may-change)).
+With `adaptive_max_samples=40` it converged with 32 and 15 full solves in
+8,352 s, 2.1 times the 3,948 s at `1e-3`, and its S21 differed from the
+`1e-3` run by at most 3.2 × 10⁻⁶. Both agree with the full solves at
+`tolerance=1e-9` to 2.5 × 10⁻⁶ and 2.4 × 10⁻⁶, and the notch fits gave the
+same $f_0$, $Q_l$ and $|Q_c|$.
+
+### A very fine uniform grid {#a-very-fine-uniform-grid}
+
+A fine grid across a whole band pays the fixed time at every point. 25,000
+points from 4 to 9 GHz, 200 kHz apart, would take the same 1,190 s to build
+the model, then 25,000 × (0.544 + 0.556) s = 27,500 s at the frequencies:
+28,690 s, about 8 hours, against 3,948 s for the band and the window. This
+is projected from the measured costs of the 2,500-point run; the
+25,000-point run was not made.
+
+### Full solves at the default tolerance {#full-solves-at-the-default-tolerance}
+
+Near a high-Q resonance, full solves need `set_numerical(tolerance=1e-9)`,
+a tighter linear-solver tolerance than the default 10⁻⁶. At the default the
+9 frequencies around $f_0$ took 87 to 88 s each per port, but their S21 was
+off by up to 4.5 × 10⁻³, most at $f_0$. The notch fitted to them gave
+$Q_l$ = 11,056.4, 0.8 % low, and $Q_i$ = 7.219 × 10⁵, 30 % below the
+adaptive sweep's 1.036 × 10⁶. At `1e-9` they took 117 to 119 s each and
+agree with the adaptive sweep to 2.4 × 10⁻⁶. The adaptive sweep needs no
+tighter tolerance: at the default, its S21 is the one that agrees.
+
+### Surface EPR off, to save time {#surface-epr-off}
+
+Leaving `set_surface_epr` out saves little: about 4 %, 0.528 and 0.532 s per
+frequency and port instead of 0.548 and 0.555 s, and 3,842 s instead of
+3,948 s for the whole run. S21 stayed the same to 1.6 × 10⁻⁹, because the
+thin films are computed from the field after the solve.
+
+## The hanger resonator {#the-hanger-resonator}
+
+The worked example is a quarter-wave resonator beside a feedline, as on a
+readout line. Near the resonance the resonator takes power from the line,
+so |S21| dips in a narrow notch; its width and depth give the Q values. The
+layout is built from OrcaPen SC PDK cells:
+
+| Part | Value |
+|---|---|
+| Feedline | the PDK's `cpw_6_10_6`, a 10 µm signal line in 6 µm gaps, 800 µm between two PDK `launcher`s |
+| Ports | an 85 × 150 µm port sheet behind each launcher's 150 µm pad; two 50 Ω `LumpedPort`s to `ground`, the left one port 1 |
+| Resonator | the PDK `resonator()` at its defaults: 4000 µm of `cpw_6_10_6`, shorted at one end and open at the other, with a 200 µm coupling straight beside the feedline and 5 µm of ground between their gaps |
+| Nets | `signal`, the feedline and the launchers; `ground`, the ground plane and the resonator, which is shorted to it |
+| Die | 1870 × 2058 µm of silicon, 500 µm thick, with 0.1 µm of aluminium (the PDK's single-die stack) |
+| Surface EPR | the PDK's `LiteratureCentral` MA, MS and SA presets |
+| Model | metal as solids ([Route B](../concepts/routes.qmd)), second-order elements, 521,337 tetrahedra and 3,677,860 unknowns; Palace with 8 MPI processes |
+
+The plan is built as in sections 1 and 2 of
+[the S-parameter script](s-parameters-palace.qmd#the-script), for this
+layout. The sweep is the band and the window, placed from the resonator
+mode of an Eigenmode run of the same plan:
+
+```python
+from scgsim.palace import DrivenSim, Linear
+
+# The resonator mode of the Eigenmode run.
+f0, q = 7.356647804e9, 13947.6
+w = 20 * f0 / q  # 20 linewidths, 10.55 MHz
+
+sim = DrivenSim()
+sim.set_plan(plan.prepare())
+sim.set_driven(
+    [
+        # The band, 10 MHz apart.
+        Linear(4e9, 9e9, points=501),
+        # The window, 10.55 kHz apart.
+        Linear(f0 - w, f0 + w, points=2001),
+    ],
+    adaptive_tolerance=1e-3,
+)
+```
+
+That Q is 25 % too high ([below](#check-against-eigenmode)), yet the window
+still spans ±16 of the resonance's true linewidths: a rough Q is enough.
+
+**The fit.** SCGSim gives you S21; fitting the notch is yours. Here it is
+the hanger model of
+[Probst et al., Rev. Sci. Instrum. 86, 024706 (2015)](https://doi.org/10.1063/1.4907935),
+fitted to S21 at the 2,003 listed frequencies inside the window:
+
+$$
+S_{21}(f) = a\,e^{i\alpha}\,e^{-2\pi i f\tau}
+\left[1 - \frac{(Q_l/|Q_c|)\,e^{i\phi}}{1 + 2iQ_l\,(f/f_0 - 1)}\right],
+$$
+
+$$
+\frac{1}{Q_i} = \frac{1}{Q_l} - \frac{\cos\phi}{|Q_c|}.
+$$
+
+$Q_l$, the loaded Q, sets the notch's width $f_0/Q_l$. $Q_c$, the coupling
+Q, counts the power the resonator gives to the feedline, and $Q_i$, the
+internal Q, the power lost inside the model. The line's delay τ, 14.64 ps,
+is taken from the phase of the band away from the resonance and removed
+before the fit.
+
+| | Band and window | 9 full solves at `tolerance=1e-9` |
+|---|---:|---:|
+| $f_0$ | 7.356663911 GHz | 7.356663906 GHz |
+| $Q_l$ | 11,140.8 | 11,140.8 |
+| $\lvert Q_c\rvert$ | 11,261.8 | 11,261.8 |
+| $Q_i$ | 1.036 × 10⁶ | 1.036 × 10⁶ |
+| Frequencies | 2,502 | 9 |
+| Full solves per port | 9 and 4 | 9 and 9 |
+| Time | 3,948 s | 2,137 s |
+| Peak memory | 35,738 MB | 34,233 MB |
+
+At the 9 frequencies both hold, their S21 agrees to 2.4 × 10⁻⁶. The full
+solves cost less here because they are only 9 frequencies; they give no
+broadband response, and you must know $f_0$ to place them.
+
+$Q_i$ comes from a small difference between $1/Q_l$ and the coupling's
+share, so small errors in S21 move it the most
+([an example](#full-solves-at-the-default-tolerance)). It holds the losses
+inside the solve. The thin films' surface loss is not among them, as S21
+with Surface EPR off shows ([above](#surface-epr-off)); that loss comes from
+the Surface EPR rows
+([Surface participation](s-parameters-palace.qmd#surface-participation)).
+
+## Check against Eigenmode {#check-against-eigenmode}
+
+An Eigenmode run of the same plan, with the two ports as 50 Ω loads, finds
+the resonator's mode directly
+([Resonant modes with Palace](modes-palace.qmd)). On the hanger, 4 modes
+from 6.5 GHz took 1,431 s, and the resonator was mode 1:
+
+| Compare | Eigenmode | Notch fit |
+|--------------------|----------:|----------:|
+| $f_0$ | 7.356647804 GHz | 7.356663911 GHz |
+| The coupling: $Q_\text{ext}$ of the two ports together, and $\lvert Q_c\rvert$ | 11,258.2 | 11,261.8 |
+| The mode's Q at `tolerance=1e-9`, and $Q_l$ | 11,141.7 | 11,140.8 |
+
+- **$f_0$** agrees to 16.1 kHz, 2.2 ppm, at the default tolerance; at
+  `tolerance=1e-9` the mode is at 7.356663931 GHz, 20 Hz from the notch's.
+- **Compare Q through the coupling Q.** Palace gives each port's
+  $Q_\text{ext}$, the Q the mode would have if that port were its only
+  loss; the two ports together give
+  $1/Q_\text{ext} = 1/Q_{\text{ext},1} + 1/Q_{\text{ext},2}$. It is accurate
+  at the default tolerance: 11,258.2, within 0.03 % of $|Q_c|$.
+- **Or through the mode's Q, with a tighter linear tolerance.** The Q Palace
+  computes from the mode's complex frequency needs
+  `set_numerical(tolerance=1e-9)` for a high-Q mode. The imaginary part of
+  that frequency is tiny next to its real part, so the solver's approximate
+  linear solves move it far more than they move the frequency: at the
+  default it gave 13,947.6 here, 25 % high. At `1e-9` it agrees with $Q_l$ to 0.008 %, and
+  $1/Q - 1/Q_{\text{ext},1} - 1/Q_{\text{ext},2}$ gives
+  $Q_i$ = 1.036 × 10⁶, the notch's.
+
+After resolving the Eigenmode run with `resolve_palace_result`, read the
+frequency and loaded Q from `result.tables["eig"].rows[0]`. For this mode,
+`result.epr_result().rows[0]["external"]` gives each resistive port's
+`port_name` and `inverse_q`, its contribution $1/Q_\text{ext}$. Include both
+feedline ports if you select ports with `set_epr_request(port_names=...)`.
+Take the reciprocal of their sum to get the combined coupling Q.
+
+```python
+external = result.epr_result().rows[0]["external"]
+q_ext = 1 / sum(port["inverse_q"] for port in external)
+```
+
+The runs and their raw numbers are in the
+[run record](https://github.com/NCUPHY-LTLab/scgsim/issues/307#issuecomment-7194872828).

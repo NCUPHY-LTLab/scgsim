@@ -2,12 +2,13 @@
 
 One folder per stage, in the order the work flows:
 
-- ``simulation``: the stage a user drives, the two simulation classes and their lifecycle.
+- ``simulation``: the stage a user drives, the three simulation classes and their lifecycle.
 - ``source``: from a bound plan to the input of the geometry build.
 - ``mesh``: from that input to ``palace.msh`` with its physical groups and manifest.
 - ``config``: from the mesh's groups and the problem's settings to ``config.json`` and the index map.
 - ``run``: the run folder handed to Palace, and what Palace returns.
-- ``results``: from a returned run folder to the checked records of the run.
+- ``results``: from a returned run folder to the checked records of the run and the detached results it yields:
+  an Eigenmode run's EPR, a Driven run's S-parameters.
 - ``reports``: the result a user holds (``resolve_palace_result``) and the notebook views of it.
 
 A public entry point refuses state it cannot run from (no bound plan, a stage called out of order, a name that
@@ -20,6 +21,7 @@ from scgsim.contracts.palace_convergence import (
     ConvergencePlan,
     ConvergenceVerdict,
 )
+from scgsim.semantics.s_parameters import SParameterPort, SParameters
 
 from .config.convergence import (
     Capacitance,
@@ -27,14 +29,22 @@ from .config.convergence import (
     CriterionGroup,
     ErrorIndicator,
     ModeFrequency,
+    SMatrix,
     SurfaceEpr,
 )
+from .config.driven_sweep import Linear, Log, Points
+from .reports.driven import DrivenPhysicsReport, DrivenTrustReport
 from .reports.epr import show_epr
 from .reports.reports import inspect_run_trustworthiness
 from .reports.resolved_result import ResolvedPalaceResult, resolve_palace_result
 from .reports.trust import PalaceTrustReport
 from .reports.views import PhysicsQuantitiesReport, SimulationBenchmarkReport
 from .results.convergence import SolverEnd
+from .results.driven_records import (
+    AdaptiveSampling,
+    DrivenSurfaceEpr,
+    PalaceDrivenResult,
+)
 from .results.epr import epr_result, reanalyze_epr, resolve_epr_result
 from .results.epr_records import PalaceEprResult
 from .results.inspection_records import (
@@ -52,21 +62,31 @@ from .results.resolved_records import (
     ParsedTable,
 )
 from .simulation.drc import SimulationDrcError, SimulationDrcReport, StageResult
+from .simulation.driven import DrivenSim
 from .simulation.eigenmode import EigenmodeSim
 from .simulation.electrostatic import ElectrostaticSim
 
 __all__ = [
+    "AdaptiveSampling",
     "Capacitance",
     "ConvergenceCheck",
     "ConvergencePlan",
     "ConvergenceVerdict",
     "Criterion",
     "CriterionGroup",
+    "DrivenPhysicsReport",
+    "DrivenSim",
+    "DrivenSurfaceEpr",
+    "DrivenTrustReport",
     "EigenmodeSim",
     "ElectrostaticSim",
     "ErrorIndicator",
+    "Linear",
+    "Log",
     "ModeFrequency",
+    "SMatrix",
     "PalaceCost",
+    "PalaceDrivenResult",
     "PalaceEprResult",
     "PalaceFailureDiagnosis",
     "PalacePerformance",
@@ -77,7 +97,10 @@ __all__ = [
     "ParsedTable",
     "PassCostRecord",
     "PhysicsQuantitiesReport",
+    "Points",
     "ResolvedPalaceResult",
+    "SParameterPort",
+    "SParameters",
     "SimulationBenchmarkReport",
     "SimulationDrcError",
     "SimulationDrcReport",
