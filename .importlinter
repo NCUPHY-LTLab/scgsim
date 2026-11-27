@@ -39,9 +39,10 @@ layers =
     exact
     models
 # Every folder of scgsim.geometry is in this list or named here: a new folder has to take its place in
-# the order. sgb and surface_epr are placed by the contracts below.
+# the order. sgb, surface_epr and the advanced entry sections are placed by the contracts below.
 exhaustive = true
 exhaustive_ignores =
+    sections
     sgb
     surface_epr
 
@@ -96,10 +97,11 @@ ignore_imports =
     scgsim.geometry.sgb.** -> scgsim.geometry.models.**
     scgsim.geometry.sgb.** -> scgsim.geometry.exact.**
 
-# geometry.surface_epr and the Palace backend call SGB; no other geometry folder reads it. What the
-# junction partition shares with SGB is the exact kernel, which both read.
+# geometry.surface_epr, the advanced entry geometry.sections and the Palace backend call SGB; no other
+# geometry folder reads it. What the junction partition shares with SGB is the exact kernel, which both read.
 # scgsim.geometry.* matches every folder of the geometry package, present or added later; import-linter
-# skips the forbidden folders themselves, and surface_epr calling SGB is the allowed direction.
+# skips the forbidden folders themselves, and surface_epr calling SGB, and sections calling both, are the
+# allowed directions.
 [importlinter:contract:stages-do-not-read-sgb]
 name = The stages before SGB do not read it
 type = forbidden
@@ -111,6 +113,8 @@ forbidden_modules =
 ignore_imports =
     scgsim.geometry.surface_epr.** -> scgsim.geometry.sgb.**
     scgsim.geometry.surface_epr.** -> scgsim.geometry.sgb
+    scgsim.geometry.sections -> scgsim.geometry.sgb.**
+    scgsim.geometry.sections -> scgsim.geometry.surface_epr.**
 
 # SGB's folders in the order they import: a folder reads the folders before it, never one after it;
 # import-linter lists the last first. This is the order of dependency. The order in time is the step list
