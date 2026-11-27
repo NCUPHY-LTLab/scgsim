@@ -109,7 +109,9 @@ def test_a_lead_twice_a_margin_wide_is_refused_before_meshing_as_the_erosion(
         assert (x0, x1) == pytest.approx(LEAD_CORE_X_UM, abs=0.001)
         assert (y0, y1) == pytest.approx(LEAD_CORE_Y_UM, abs=0.001)
         assert finding.value_steps is not None and finding.value_steps < 1
-        assert "change the margins" in finding.fix
+        assert "inset margins" in finding.fix
+        assert "plan.set_surface_epr" in finding.fix
+        assert "width of the conductor" in finding.fix
 
 
 @pytest.mark.parametrize(
