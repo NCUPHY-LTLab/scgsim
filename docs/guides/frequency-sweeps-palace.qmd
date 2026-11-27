@@ -206,9 +206,10 @@ from 6.5 GHz took 1,431 s, and the resonator was mode 1:
   at the default tolerance: 11,258.2, within 0.03 % of $|Q_c|$.
 - **Or through the mode's Q, with a tighter linear tolerance.** The Q Palace
   computes from the mode's complex frequency needs
-  `set_numerical(tolerance=1e-9)` for a high-Q mode
-  ([Resonant modes with Palace](modes-palace.qmd#read-the-result) says why).
-  At `1e-9` it agrees with $Q_l$ to 0.008 %, and
+  `set_numerical(tolerance=1e-9)` for a high-Q mode. The imaginary part of
+  that frequency is tiny next to its real part, so the solver's approximate
+  linear solves move it far more than they move the frequency: at the
+  default it gave 13,947.6 here, 25 % high. At `1e-9` it agrees with $Q_l$ to 0.008 %, and
   $1/Q - 1/Q_{\text{ext},1} - 1/Q_{\text{ext},2}$ gives
   $Q_i$ = 1.036 × 10⁶, the notch's.
 

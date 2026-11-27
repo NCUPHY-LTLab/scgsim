@@ -124,7 +124,7 @@ $Q_i$ 來自 $1/Q_l$ 與耦合部分之間的一個小差值，所以 S21 的小
 
 - **$f_0$** 在預設容許誤差下相差 16.1 kHz，即 2.2 ppm；在 `tolerance=1e-9` 下，模態位在 7.356663931 GHz，與凹口相差 20 Hz。
 - **透過耦合 Q 比對 Q。** Palace 會給出每個埠的 $Q_\text{ext}$，也就是假設這個埠是模態唯一的損耗時，模態會有的 Q；兩個埠合起來是 $1/Q_\text{ext} = 1/Q_{\text{ext},1} + 1/Q_{\text{ext},2}$。它在預設容許誤差下就準確：11,258.2，與 $|Q_c|$ 相差在 0.03 % 以內。
-- **或透過模態的 Q 比對，但要用更嚴格的線性容許誤差。** 對高 Q 模態，Palace 由模態複數頻率算出的 Q 需要 `set_numerical(tolerance=1e-9)`（原因見[以 Palace 計算共振模態](modes-palace.qmd#read-the-result)）。在 `1e-9` 下，它與 $Q_l$ 相差 0.008 %，而 $1/Q - 1/Q_{\text{ext},1} - 1/Q_{\text{ext},2}$ 給出 $Q_i$ = 1.036 × 10⁶，與凹口相同。
+- **或透過模態的 Q 比對，但要用更嚴格的線性容許誤差。** 對高 Q 模態，Palace 由模態複數頻率算出的 Q 需要 `set_numerical(tolerance=1e-9)`。這個複數頻率的虛部遠小於實部，求解器的近似線性求解會讓虛部大幅偏移，卻幾乎不影響頻率：在預設容許誤差下，這裡得到 13,947.6，高了 25 %。在 `1e-9` 下，它與 $Q_l$ 相差 0.008 %，而 $1/Q - 1/Q_{\text{ext},1} - 1/Q_{\text{ext},2}$ 給出 $Q_i$ = 1.036 × 10⁶，與凹口相同。
 
 Palace 能完成這樣的計算，但 SCGSim 目前還無法讀回集總埠全為電阻性的本徵模態計算（[未解決的 issue](https://github.com/NCUPHY-LTLab/scgsim/issues/311)）：`resolve_palace_result` 會把它標為失敗。在那之前，請從計算資料夾中的 `results/palace/eig.csv` 讀取模態，從 `results/palace/port-Q.csv` 讀取每個埠的 $Q_\text{ext}$。
 
