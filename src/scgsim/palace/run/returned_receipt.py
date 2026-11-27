@@ -493,20 +493,24 @@ def _output_paths(
 
 
 def _written_families(problem: str, config: dict[str, Any]) -> tuple[str, ...]:
-    """The output families Palace writes for ``problem`` from this ``config``: its ports and Surface-EPR rows."""
+    """The output families Palace writes for ``problem`` from this ``config``: its ports' circuits and Surface-EPR rows."""
     record = palace_problem(problem)
     boundaries = config.get("Boundaries")
     if not isinstance(boundaries, dict):
         raise TypeError(
             refused(f"{CONFIG} Boundaries", "must be a JSON object", WHERE_RUN_FOLDER)
         )
-    ports = boundaries.get(record.excitation, []) if record.port_families else []
+    ports = boundaries.get(record.excitation, []) if record.port_tables else []
     postprocessing = boundaries.get("Postprocessing", {})
-    if not isinstance(ports, list) or not isinstance(postprocessing, dict):
+    if (
+        not isinstance(ports, list)
+        or not all(isinstance(port, dict) for port in ports)
+        or not isinstance(postprocessing, dict)
+    ):
         raise TypeError(
             refused(
                 f"{CONFIG} Boundaries",
-                f"must hold {record.excitation} as a list and Postprocessing as a JSON object",
+                f"must hold {record.excitation} as a list of JSON objects and Postprocessing as a JSON object",
                 WHERE_RUN_FOLDER,
             )
         )
@@ -519,7 +523,7 @@ def _written_families(problem: str, config: dict[str, Any]) -> tuple[str, ...]:
                 WHERE_RUN_FOLDER,
             )
         )
-    return record.written_families(lumped_ports=bool(ports), surfaces=bool(surfaces))
+    return record.written_families(lumped_ports=ports, surfaces=bool(surfaces))
 
 
 def iteration_output_paths(

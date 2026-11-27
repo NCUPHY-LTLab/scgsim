@@ -272,13 +272,19 @@ def validate_returned_state_agreement(
 
 
 def _required_output_records(
-    problem: str, *, index_counts: dict[str, int], tables: bool
+    problem: str,
+    *,
+    config: dict[str, Any],
+    index_counts: dict[str, int],
+    tables: bool,
 ) -> tuple[dict[str, Any], ...]:
     """List native output families required by the written problem and configured selectors."""
     paths = [
         *(
             output_table(family)
-            for family in (output_families(problem, index_counts) if tables else ())
+            for family in (
+                output_families(problem, config, index_counts) if tables else ()
+            )
         ),
         NATIVE_METADATA,
     ]
@@ -470,12 +476,13 @@ def _validate_returned_outputs(
     output_files = expect_list(receipt_payload.get("output_files"), "output_files")
     output_map = extract_hash_map(output_files)
     index_map = read_json(root / INDEX_MAP)
+    config = read_json(root / CONFIG)
     required_outputs = _required_output_records(
         problem,
+        config=config,
         index_counts=count_index_entries(index_map),
         tables=ending == "solver_ended",
     )
-    config = read_json(root / CONFIG)
     if collects_adapted_meshes(handoff_metadata.get("palace_identity")):
         required_outputs += tuple(
             {"path": relative} for relative in adapted_mesh_output_paths(root, config)

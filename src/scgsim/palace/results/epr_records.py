@@ -14,7 +14,9 @@ from scgsim.semantics.epr import film_assumptions, inverse_quality_factor
 
 _WHERE_EPR_FILE = "the EPR result file passed to resolve_epr_result"
 
-EPR_RESULT_SCHEMA = "scgsim.palace.epr-result.v2"
+EPR_RESULT_SCHEMA = "scgsim.palace.epr-result.v3"
+"""v3 adds each row's ``external`` group: a v2 row has none, and reading its silence as no coupling loss would
+misstate a run whose ports have a resistance, so a v2 result is refused."""
 
 
 def _plain(value: Any) -> Any:
@@ -162,7 +164,7 @@ class PalaceEprResult:
 
 
 def _validate_rows(rows: tuple[Mapping[str, Any], ...]) -> None:
-    """Each row is one mode, numbered once, with its normalisation and its surface, bulk and port records."""
+    """Each row is one mode, numbered once, with its normalisation and its surface, bulk, junction and external records."""
     identities: set[int] = set()
     group_sources: dict[str, tuple[Any, ...]] = {}
     for row in rows:
@@ -180,7 +182,7 @@ def _validate_rows(rows: tuple[Mapping[str, Any], ...]) -> None:
             "normalization_energy_j",
             positive=True,
         )
-        for name in ("surface", "bulk", "junction"):
+        for name in ("surface", "bulk", "junction", "external"):
             if not isinstance(row.get(name), (list, tuple)) or any(
                 not isinstance(item, Mapping) for item in row[name]
             ):
@@ -201,6 +203,7 @@ def _validate_rows(rows: tuple[Mapping[str, Any], ...]) -> None:
                 )
             checked_number(bulk.get("participation"), "bulk participation")
         _validate_ports(row["junction"])
+        _validate_external(row["external"])
 
 
 def _validate_surface_result(
@@ -324,3 +327,17 @@ def _validate_ports(ports: Any) -> None:
                     _WHERE_EPR_FILE,
                 ).refusal(found_text(value))
             )
+
+
+def _validate_external(ports: Any) -> None:
+    """Each resistive port's name, with its coupling loss 1/Q_ext: finite and never negative."""
+    for port in ports:
+        name = port.get("port_name")
+        if not isinstance(name, str) or not name:
+            raise ValueError(
+                Declared(
+                    "Palace EPR external port_name must be a non-empty string",
+                    _WHERE_EPR_FILE,
+                ).refusal(found_text(name))
+            )
+        checked_number(port.get("inverse_q"), f"Palace EPR external {name!r} inverse_q")

@@ -37,6 +37,7 @@ from scgsim.palace.results.resolved_records import ResolvedRunData
 from scgsim.palace.results.surface_contract import entry_rows
 from scgsim.palace.results.tables import (
     count_index_entries,
+    lumped_ports,
     output_families,
     read_result_table,
 )
@@ -114,7 +115,7 @@ def _iteration_result(result: ResolvedRunData, iteration: int) -> _IterationRun:
         )
     counts = count_index_entries(result.provenance.index_map)
     tables = {}
-    for family in output_families(result.problem, counts):
+    for family in output_families(result.problem, result.provenance.config, counts):
         tables[family] = read_result_table(
             _verified_artifact(result, records, prefix, table_name(family)),
             result.problem,
@@ -180,7 +181,12 @@ def _verified_artifact(
 def epr_result(
     result: ResolvedRunData, *, palace_iteration: int | None = None
 ) -> PalaceEprResult:
-    """Extract final or explicitly selected sealed-iteration Eigenmode EPR."""
+    """Extract final or explicitly selected sealed-iteration Eigenmode EPR.
+
+    Each row is one mode: its ``surface``, ``bulk`` and ``junction`` participations, and ``external``, the
+    coupling loss 1/Q_ext of each resistive lumped port from Palace's ``port-Q``.  Like a surface item's
+    ``inverse_q``, it is a 1/Q, so the loss channels add.
+    """
 
     if not isinstance(result, ResolvedRunData) or result.problem != EIGENMODE.name:
         raise TypeError(
@@ -201,8 +207,8 @@ def epr_result(
     l0 = checked_number(config["Model"]["L0"], "Model.L0", positive=True)
     surfaces = _entries_in(index, DIELECTRIC_SECTION)
     domains = _entries_in(index, ENERGY_SECTION)
-    junctions = _entries_in(index, LUMPED_PORT_SECTION)
-    request, selected = _selected_outputs(domains, index, junctions, surfaces)
+    ports = _entries_in(index, LUMPED_PORT_SECTION)
+    request, selected = _selected_outputs(domains, index, ports, surfaces)
     eig = result.tables["eig"].rows
     surface_table = (
         result.tables["surface-Q"].rows
@@ -210,19 +216,14 @@ def epr_result(
         else tuple({"m": item["m"]} for item in eig)
     )
     domain_table = result.tables["domain-E"].rows
-    port_table = (
-        result.tables["port-EPR"].rows
-        if junctions
-        else tuple({"m": item["m"]} for item in eig)
-    )
     rows: list[dict[str, Any]] = []
     _ModeExtraction(
         domain_table,
         domains,
         eig,
-        junctions,
+        _PortColumns.of(result, "port-EPR", ports),
+        _PortColumns.of(result, "port-Q", ports),
         l0,
-        port_table,
         rows,
         selected,
         surface_table,
@@ -410,7 +411,7 @@ def _source_provenance(
     source_inputs = {CONFIG, INDEX_MAP}
     source_outputs = {
         f"{output_prefix}/{table_name(family)}"
-        for family in ("eig", "domain-E", "surface-Q", "port-EPR")
+        for family in ("eig", "domain-E", "surface-Q", "port-EPR", "port-Q")
     }
     source_outputs.add(f"{output_prefix}/{NATIVE_METADATA_NAME}")
     palace_output = next(
@@ -456,6 +457,34 @@ def _source_provenance(
     return provenance
 
 
+@dataclass(frozen=True)
+class _PortColumns:
+    """One port table's mode rows and the ports with a column in it, as index-map entries by Palace index."""
+
+    rows: tuple[dict[str, Any], ...]
+    ports: Mapping[int, Mapping[str, Any]]
+
+    @classmethod
+    def of(
+        cls,
+        result: ResolvedRunData,
+        family: str,
+        ports: Mapping[int, Mapping[str, Any]],
+    ) -> _PortColumns:
+        """The ports of ``family`` by their circuits in the config; a mode index per row when none has a column.
+
+        Palace writes ``port-EPR`` only for ports with an inductance and ``port-Q`` only for ports with a
+        resistance, so a run without such a port has no table to read.
+        """
+        columns = EIGENMODE.port_columns(family, lumped_ports(result.provenance.config))
+        rows = (
+            result.tables[family].rows
+            if columns
+            else tuple({"m": item["m"]} for item in result.tables["eig"].rows)
+        )
+        return cls(rows, {number: ports[number] for number in columns})
+
+
 @dataclass
 class _ModeExtraction:
     """Aligned native mode tables and source selections used by EPR extraction."""
@@ -463,9 +492,9 @@ class _ModeExtraction:
     domain_table: tuple[dict[str, Any], ...]
     domains: Mapping[int, Mapping[str, Any]]
     eig: tuple[dict[str, Any], ...]
-    junctions: Mapping[int, Mapping[str, Any]]
+    junction: _PortColumns
+    external: _PortColumns
     l0: float
-    port_table: tuple[dict[str, Any], ...]
     rows: list[dict[str, Any]]
     selected: Mapping[str, set[str]]
     surface_table: tuple[dict[str, Any], ...]
@@ -473,16 +502,18 @@ class _ModeExtraction:
 
     def extract(self) -> None:
         """Append mode rows in the native table order."""
-        for mode_row, surface_row, domain_row, port_row in zip(
+        for mode_row, surface_row, domain_row, port_row, coupling_row in zip(
             self.eig,
             self.surface_table,
             self.domain_table,
-            self.port_table,
+            self.junction.rows,
+            self.external.rows,
             strict=True,
         ):
             mode = int(mode_row["m"])
             if any(
-                _row_index(row) != mode for row in (surface_row, domain_row, port_row)
+                _row_index(row) != mode
+                for row in (surface_row, domain_row, port_row, coupling_row)
             ):
                 raise ValueError(
                     Declared(
@@ -493,6 +524,7 @@ class _ModeExtraction:
                                 "surface-Q": _row_index(surface_row),
                                 "domain-E": _row_index(domain_row),
                                 "port-EPR": _row_index(port_row),
+                                "port-Q": _row_index(coupling_row),
                             },
                             mode,
                         )
@@ -507,8 +539,6 @@ class _ModeExtraction:
             surface_items = _mode_surface_items(
                 self.surfaces, self.selected, self.l0, surface_row
             )
-            bulk = self._bulk_items(domain_row)
-            port = self._port_items(port_row)
             self.rows.append(
                 {
                     "mode": mode,
@@ -518,8 +548,9 @@ class _ModeExtraction:
                     * 1e9,
                     "normalization_energy_j": normalization,
                     "surface": surface_items,
-                    "bulk": bulk,
-                    "junction": port,
+                    "bulk": self._bulk_items(domain_row),
+                    "junction": self._junction_items(port_row),
+                    "external": self._external_items(coupling_row),
                 }
             )
 
@@ -538,8 +569,8 @@ class _ModeExtraction:
             if item["entry_name"] in self.selected["bulk_domain_ids"]
         ]
 
-    def _port_items(self, port_row: Mapping[str, Any]) -> list[dict[str, Any]]:
-        """The selected lumped ports' signed participation in one mode, as Palace reports it."""
+    def _junction_items(self, port_row: Mapping[str, Any]) -> list[dict[str, Any]]:
+        """The selected inductive ports' signed participation in one mode, as Palace reports it."""
         return [
             {
                 "port_name": item["port_name"],
@@ -548,7 +579,23 @@ class _ModeExtraction:
                 "participation": float(port_row[f"p[{number}]"]),
                 "signed_palace": True,
             }
-            for number, item in sorted(self.junctions.items())
+            for number, item in sorted(self.junction.ports.items())
+            if item["port_name"] in self.selected["port_names"]
+        ]
+
+    def _external_items(self, coupling_row: Mapping[str, Any]) -> list[dict[str, Any]]:
+        """The selected resistive ports' coupling loss in one mode, 1/Q_ext.
+
+        Palace's coupling rate κ_ext takes the sign of the port current along the port's direction, but its
+        Q_ext is |Re f / κ_ext|, so the loss is positive whichever way the port is drawn.  A mode the port
+        does not load has Q_ext +inf and loses nothing through it.
+        """
+        return [
+            {
+                "port_name": item["port_name"],
+                "inverse_q": 1.0 / float(coupling_row[f"Q_ext[{number}]"]),
+            }
+            for number, item in sorted(self.external.ports.items())
             if item["port_name"] in self.selected["port_names"]
         ]
 
@@ -561,10 +608,14 @@ def _row_index(row: Mapping[str, Any]) -> int:
 def _selected_outputs(
     domains: Mapping[int, Mapping[str, Any]],
     index: Mapping[str, Any],
-    junctions: Mapping[int, Mapping[str, Any]],
+    ports: Mapping[int, Mapping[str, Any]],
     surfaces: Mapping[int, Mapping[str, Any]],
 ) -> tuple[Mapping[str, Any], dict[str, set[str]]]:
-    """Resolve explicit surface, bulk and port selections against the written index."""
+    """Resolve explicit surface, bulk and port selections against the written index.
+
+    A selected port is reported in ``junction`` when it has an inductance and in ``external`` when it has a
+    resistance; ``port_names`` selects ports, whatever their circuit.
+    """
     request = index.get(
         "epr_request",
         {
@@ -597,7 +648,7 @@ def _selected_outputs(
             entry_rows(item)[0]["interface_type"] for item in surfaces.values()
         },
         "bulk_domain_ids": {item["entry_name"] for item in domains.values()},
-        "port_names": {item["port_name"] for item in junctions.values()},
+        "port_names": {item["port_name"] for item in ports.values()},
     }
     selected: dict[str, set[str]] = {}
     for name, configured in available.items():
