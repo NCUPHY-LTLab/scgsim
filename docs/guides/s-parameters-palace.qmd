@@ -358,12 +358,10 @@ participation, so SCGSim derives no Q or T1 from it. A film's
 
   ::: {.callout-note title="High-Q resonances and full solves"}
   Full solves through a high-Q resonance need a tighter linear-solver
-  tolerance than the default 10⁻⁶: `set_numerical(tolerance=1e-9)`. On a
-  hanger resonator with Q ≈ 11,000, full solves at the default put S21 at
-  the resonance off by 4.5 × 10⁻³ and the fitted Q off by 0.8 %. At 10⁻⁹
-  they agreed with the adaptive sweep to 2.4 × 10⁻⁶, and each solve took
-  about 36 % longer. The adaptive sweep is accurate at the default, so the
-  default stays 10⁻⁶.
+  tolerance than the default 10⁻⁶: `set_numerical(tolerance=1e-9)`. The
+  adaptive sweep is accurate at the default, so the default stays 10⁻⁶.
+  [Full solves at the default tolerance](frequency-sweeps-palace.qmd#full-solves-at-the-default-tolerance)
+  shows what the default gave on a hanger resonator.
   :::
 - **The adaptive sweep's limit.** `adaptive_max_samples` caps the solves per
   port; without it Palace's own cap of 20 applies. When a port reaches the
@@ -422,15 +420,9 @@ spaces its points evenly on a log scale, for a band of several decades, and
 same or more than 10 Hz apart, 1 Hz below 1 GHz and 100 Hz from 10 GHz up:
 Palace takes frequencies less than 1 Hz apart as one and prints each with
 nine significant digits, so closer ones are refused. An adaptive sweep
-needs at least three frequencies.
-
-The frequencies you list are what such a sweep costs. The adaptive sweep's
-model covers the lowest to the highest frequency whatever the ranges are,
-so a dense window does not change how it is built. Palace then spends a
-fixed time at every listed frequency, about 0.17 s per frequency and port
-on this guide's chip at second order with 8 processes. A window keeps that
-small where a uniform grid cannot: 10 kHz apart across the whole band
-would be 500,001 frequencies.
+needs at least three frequencies. Which sweep to choose for what you want
+to compute, and what a sweep costs, is in
+[Choose a frequency sweep with Palace](frequency-sweeps-palace.qmd).
 
 A range given `full_solve=True` is solved in full at each of its
 frequencies, once per port, before the adaptive sweep chooses solves of its
@@ -456,8 +448,4 @@ lowest and the highest frequency, so a cap below them is refused. A
 full-solve frequency that falls on a frequency of another range is that
 frequency once. Palace may then compute the other range's frequency lower
 by a rounding error, keep it instead and stop as it starts, naming the
-full-solve frequency: move it more than 10 Hz away then. On a hanger
-resonator with
-Q ≈ 11,000, one full solve at its resonance cut the time Palace spent
-building the model from 1,190 s to 921 s, and S21 agreed with the sweep
-without it to 1.4 × 10⁻⁵.
+full-solve frequency: move it more than 10 Hz away then.
