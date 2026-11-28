@@ -1,0 +1,321 @@
+---
+title: "GeometryPlan and SGB"
+description: "How to build a GeometryPlan: the calls in order and what each checks, the grid, overlaps, the vacuum region, the lumped elements, the curves a plan accepts, the routes, and 2D cross-sections."
+scgsim-kind: "contract"
+scgsim-status: "ACCEPTED"
+scgsim-id: "docs/geometry-sgb"
+aliases:
+  - ../../geometry-sgb.html
+---
+
+A `GeometryPlan` holds everything about your layout that every solver shares:
+the drawn component, its layer stack and materials, the Nets you declare, the
+vacuum region, the Surface-EPR films and the lumped elements. `plan.prepare()` freezes it into a
+*snapshot*, and each simulation takes that snapshot with `set_plan`. SCGSim's
+geometry builder, SGB, then builds the 3D model from it, the same model for
+Palace and AEDT. This page gives the calls in order, what each one checks,
+how to declare the lumped elements, which curves a plan accepts, and how to
+cut a 2D cross-section. [Prepare a layout](../../guides/prepare-a-layout.qmd) walks
+through a real plan; how the plan works inside is on
+[GeometryPlan internals](../../contribute/internals/geometry-plan.qmd).
+
+## Build a plan {#component-to-backend-geometry-contract}
+
+These are the plan calls of the [First simulation](../../start/first-simulation.qmd),
+a 200 µm pad in a 1000 µm die:
+
+```python
+plan = GeometryPlan(
+    component=component,
+    root_id="chip",
+    layer_stack=get_single_die_layer_stack(),
+    material_records=get_material_records(),
+    coupon_padding_um=0.0,
+)
+plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
+plan.set_vacuum_region(padding=(0.0, 0.0, 1000.0))
+sim.set_plan(plan.prepare())
+```
+
+| Call | What it does |
+|---|---|
+| `GeometryPlan(component=..., root_id=..., layer_stack=..., material_records=..., coupon_padding_um=...)` | Takes the assembled GDSFactory component, the PDK layer stack and materials. `root_id` names the root occurrence; every Entity ID starts with it (`chip/PAD`). |
+| `register_instance("chip/q0", reference)` | Names a child component placed in the layout, so its Entities become `chip/q0/...`. Register parents before children, one call per GDS reference; expand an array reference into single references first. `prepare()` refuses a child with its own component semantics that is not registered (`ValueError`, "it is not registered"): flattening the layout would otherwise lose its semantics. |
+| `plan.entities` | The Entities of the plan, each with its qualified `.semantic_id`. |
+| `set_nets({net_id: (entity_id, ...)})` | Declares which Entities form each Net: one piece of metal that is one conductor. SCGSim never infers a Net from shapes that touch. An Entity belongs to at most one Net; an Entity in no Net stays unassigned. An update with an unknown Entity, or one in two Nets, is refused whole. |
+| `set_vacuum_region(padding=...)` | The box of empty space around the model, in µm: one number, an (x, y, z) tuple, or one value per face. |
+| `set_surface_epr(specs)` | The Surface-EPR films and their inset margins, by interface type; see the [Eigenmode reference](palace-eigenmode.qmd#surface-epr-margins). |
+| `set_lumped_elements(elements)` | The device's lumped elements, each on a port sheet the layout draws: a junction or an R, L, C element, or an excitation port; see [below](#lumped-elements). |
+| `set_entity_priorities({entity_id: priority})` | Decides which of two overlapping Entities of one Net owns the overlap; see [below](#overlap-priority). |
+| `prepare()` | Checks the declarations and returns the snapshot: the normalized geometry, the stack, the GDS bytes and the occurrence records, with no live reference to the component. |
+
+The checks at `prepare()` and their errors are listed under
+[What a layout must guarantee](../supported-scope.qmd#layout-rules). To change
+anything, change the plan, prepare a new snapshot and call `set_plan` again.
+
+### The grid {#the-grid}
+
+The model grid is the layout's database unit, read from the GDS: 1 nm for an
+OrcaPen SC PDK layout. Set it before you draw the cells. Every XY coordinate of
+the model lies on that grid; heights, film thicknesses and the mesh do not.
+SCGSim does not change the PDK's or GDSFactory's settings.
+
+### Which region owns an overlap {#overlap-priority}
+
+Overlapping regions are resolved in this order:
+
+1. **Conductors before everything else.** Metal is placed first; solution
+   regions never compete with it.
+2. **A dielectric over vacuum**, whatever their `mesh_order`.
+3. **Between two dielectrics, the lower `LayerLevel.mesh_order` wins**, the
+   GDSFactory convention.
+4. **Between two Entities of one Net, the higher priority wins**: the
+   component's annotation `priority`, or `plan.set_entity_priorities(...)` for
+   occurrences placed over each other. Equal or missing priorities are an
+   `OverlapError` that names both Entities. Two conductors of different Nets
+   may not overlap at all.
+
+For example, a 20 × 20 µm silicon nitride patch with `mesh_order=1` on a
+silicon region with `mesh_order=2`: the overlap is silicon nitride. Had the
+patch been vacuum, the silicon would own the overlap, whatever the numbers.
+Internally the plan stores `priority = -mesh_order`, so a stored `priority`
+always means the higher value wins.
+
+### The vacuum region {#vacuum-region}
+
+The vacuum region is the plan's. Set it before `prepare()` with
+`plan.set_vacuum_region(padding=...)`, or use the stack's own `VACUUM_REGION`;
+no padding is ever assumed. Palace and AEDT receive the same box, and a
+simulation has no vacuum setting of its own. Where the vacuum has no planar
+padding, the model ends at the layout's planar extent, which matters for a
+conductor that touches that edge; see
+[A conductor that touches the boundary at one point](../known-geometry-problems.qmd#boundary-point-pinch).
+An authored gap volume between two dies, `D0_TO_D1_GAP`, stays a vacuum Entity
+of its own inside the box.
+
+On the outer faces of the vacuum, Palace leaves its natural boundary (PMC),
+and HFSS assigns the same condition, Perfect H, to its Region.
+
+### Ground metal from a child component {#ground-plane-contributions-user}
+
+A child component can add metal to a ground plane of the root, such as the arm
+of an Xmon's ground that reaches into its clearance. It declares
+`component_semantics.ground_plane_contributions`: each record gives exactly
+`local_id`, `plane_id` (the root plane it joins), `level` (the conductor level,
+which must match that plane's), `layer` and `selector_point_um`. The metal
+becomes part of that plane; it is not an Entity of its own and has no Net
+entry. How the records are resolved is in
+[the internals](../../contribute/internals/geometry-plan.qmd#ground-plane-contributions).
+
+### Lumped elements {#lumped-elements}
+
+[]{#explicit-rectangular-junctions}A lumped element is a part of the device
+that the model does not draw as metal: a Josephson junction as its inductance,
+a resistor, a capacitor, or the port a measurement drives. Each one sits on a
+port sheet the component draws and declares among the ports of its
+`component_semantics`, joining the two conductors the sheet lands on. Declare
+every lumped element once, on the plan, by the qualified name of its sheet;
+every simulation reads them from the snapshot:
+
+```python
+from scgsim.geometry import LumpedElement, LumpedPort
+
+plan.set_lumped_elements([
+    LumpedElement("chip/o_junction_lumped", inductance_h=10e-9),
+    LumpedPort("chip/o_launcher", reference_net="ground", impedance_ohm=50.0),
+])
+```
+
+| Record | What it is |
+|---|---|
+| `LumpedElement(sheet, *, resistance_ohm=None, inductance_h=None, capacitance_f=None)` | A resistance, an inductance and a capacitance in parallel, in ohm, henry and farad; give at least one. A junction is an element with an inductance and, if you model it, a capacitance. |
+| `LumpedPort(sheet, *, reference_net, impedance_ohm)` | An excitation port: the conductor in `reference_net` is its reference, the other its signal, and `impedance_ohm` is its reference impedance. |
+
+The ports are numbered first, in the order you give them: port 1 is the first
+`LumpedPort`, row and column 1 of an S-matrix. The other elements follow in
+their order, so in a study without ports the first element is Palace's port
+`P1`. `prepare()` refuses, naming the element, its sheet's layer and its box
+in µm: a name the layout does not draw; a sheet that lands on other than two
+conductors; two conductors of one Net; a port whose `reference_net` is
+neither conductor's Net. `snapshot.lumped_elements` holds the result, one
+`LumpedElementRecord` each, with the sheet, its two conductors in the order of
+the sheet's direction (`start`, `end`) and their Nets.
+
+What each simulation does with each element is on
+[Supported calculations](../supported-calculations.qmd#lumped-elements);
+in short, Palace Eigenmode and HFSS Eigenmode realize every element and treat
+a port as a load of its impedance, Palace Electrostatic and Q3D leave them
+open, and HFSS Driven Terminal takes the two ports. Every realized element's
+sheet is cut to the rectangle between its two conductors, the same in Palace
+and AEDT. A sheet the plan declares nothing on is not part of a Palace or HFSS
+model. For a normalized `GeometryBuildInput` built below the plan,
+`with_rectangular_junctions(build_input, specs)` binds a sheet to its two
+terminals with `RectangularJunctionSpec` and `JunctionTerminalBinding`.
+
+## Source curves {#source-curves}
+
+A layout reaches SGB as polygons, and you may declare curves on top of them.
+SGB builds **line segments and circular arcs** exactly; it refuses spline
+curves with `UnsupportedCurveError`. A curve drawn as a polygon is always
+accepted ([Curved outlines drawn as polygons](../supported-geometry.qmd#curve-rule)).
+Palace meshes the arcs on either route, and AEDT imports them as exact arcs in
+the model's STEP.
+
+`SourceCurveSpec` describes a curve in XY micrometres. Its kinds are
+`line_segment` (two end points) and `circular_arc` (start, a point on the arc,
+end); `interpolation_spline` and `bspline` can be declared but SGB refuses
+them. An optional `parameter_interval` trims the curve without refitting it.
+
+`BoundaryCurveChainSpec` binds an ordered closed boundary to `entity_id`,
+`boundary_id` and `selector_point_um`. The selector point lies in the metal of
+the Entity. `role="outer"` selects the outline; `role="hole", hole_index=0`
+selects the first hole of that polygon, and its selector point still lies in
+the metal, not in the hole.
+
+A component declares `boundary_curves` or `boundary_reconstruction` records
+with its local IDs; the plan qualifies them with the occurrence and applies
+its transform once. For an assembled input, call
+`plan.set_boundary_curves(records)` or `plan.set_boundary_reconstruction(records)`
+with qualified IDs.
+
+`GdsBoundaryReconstructionSpec` turns drawn polygon edges back into a circular
+arc. It names the edges by `segment_indices`: index `i` is the edge from drawn
+vertex `i` to vertex `(i + 1) % N`, in the order the GDS stores the polygon
+(read it from the component, for example with `component.get_polygons()`,
+because GDSFactory normalizes polygons as KLayout stores them). A closed circle
+takes three `anchor_indices`; an open arc takes start, on-arc and end anchors.
+Three anchors on one line define no circle and are refused at `prepare()`.
+`closed=True` selects a whole ring. Two reconstructions may not claim the same
+edges, and a ring made by fusing two drawn polygons has no drawn order, so a
+reconstruction on it is refused.
+
+## Routes {#current-surface-epr-direction}
+
+A route is how the metal films become solver geometry.
+
+| Route | What it models | Taken by |
+|---|---|---|
+| Route A | Each film is a zero-thickness perfect-conductor sheet; bumps stay finite shells | Palace (`set_route("A")`); AEDT `modeling="thin_film"` |
+| Route B | Each conductor is a finite metal volume whose surface is a perfect conductor and whose inside is left out of the mesh | Palace (`set_route("B")`, the default) |
+| Route C | Each conductor volume stays in the model | AEDT `modeling="solid"` |
+
+Palace's `set_route` and `mesh()` refuse any route other than A and B with
+`ValueError`. [Route A and Route B](../../concepts/routes.qmd) explains the
+choice with a cross-section, and
+[AEDT: solid or thin_film](aedt-runtime.qmd#aedt-solid-thin-film) gives the
+heights under each. Surface-EPR bands are cut into the model on every route
+when it is built.
+
+## Films and profiles {#physical-representation}
+
+How each film is turned into a sheet or a volume, and how the heights of the
+stack change, is set by an approximation profile.
+[Physical representation](physical-representation.qmd) lists the profiles and
+the Palace calls that choose them.
+
+## 2D cross-sections {#section-models}
+
+SGB can cut the 3D model along a line to give the 2D model of a long, uniform
+line, such as a CPW. The 2D model has the 3D model's Entities, Nets,
+materials and Surface-EPR bands by construction. No solver of this version
+reads it; [Q2D](aedt-runtime.qmd#q2d-native-combined-matrix-export) takes a
+cross-section you describe instead.
+
+For example, `finite_ground_cpw_coupon` at the OrcaPen SC PDK defaults (signal
+10 µm, gaps 6 µm, grounds 80 µm, Al 100 nm on 500 µm Si), Route B with MA, MS
+and SA bands at margins 0.5 and 1.0 µm and the vacuum padded by (0, 0, 1000) µm,
+cut across its middle at x = 0, gives this section:
+
+| Region | `u` (µm) | `z` (µm) | Edges |
+|---|---|---|---|
+| Ground `chip/GROUND_MINUS` (excluded) | 0 to 80 | 0 to 0.1 | `MA::chip/GROUND_MINUS__top::band=k` above, `MS::...__bottom::band=k` below, `MA::...__sidewall` at 80 |
+| Gap (vacuum) | 80 to 86 | 0 to 0.1 | SA band edges at z = 0: band 0 from 80 to 80.5, band 1 to 81, band 2 to 85, then band 1 and band 0 up to the signal |
+| Signal `chip/SIGNAL` (excluded) | 86 to 96 | 0 to 0.1 | MA top, MS bottom and MA sidewalls at 86 and 96 |
+| Gap (vacuum) | 96 to 102 | 0 to 0.1 | SA bands as in the first gap |
+| Ground `chip/GROUND_PLUS` (excluded) | 102 to 182 | 0 to 0.1 | as the first ground, sidewall at 102 |
+| Substrate `D0_SUBSTRATE` | 0 to 182 | −500 to 0 | unbanded SA at its underside, `EXT` sidewalls at both ends |
+| Vacuum `VACUUM_REGION` | 0 to 182 | −1500 to −500 and 0.1 to 1000.1 | `EXT` at the ends, top and bottom |
+
+Here `u` is the distance along the cut and `z` the height. Each band of a gap
+is measured from the nearer gap edge, so band 2 (beyond 1.0 µm) runs from 81 to
+85 µm. In Route B a conductor is a rectangle of its film's thickness, excluded
+from the domain and bounded by its MA top, MS bottom and MA sidewall edges. The
+SA band edges are in the groups
+`SA::D0_SUBSTRATE|VACUUM_REGION__interface::band=k`.
+
+The cut is a `CutLine`, a straight segment along x or y in the plan's frame, in
+micrometres:
+
+```python
+from scgsim.geometry.models.section import CutLine
+
+cut = CutLine(start_um=(0.0, -91.0), end_um=(0.0, 91.0))
+```
+
+`scgsim.geometry.sgb.section.build_section_model(model, cut)` builds the
+section from a validated 3D model and holds it in memory as a `SectionModel`.
+Every part of it is the trace of a part of the 3D model:
+
+| 2D model | Trace of | Group |
+|---|---|---|
+| Horizontal edge at height `z` | The horizontal face at that height, over the stretch of the cut it covers | That face's group, band index included |
+| Vertical edge at `u` | The wall the cut crosses there | That wall's group (side walls carry no band) |
+| Face | One connected part of a volume's cross-section; a volume the cut crosses twice gives two faces | The volume's, its owning Entity |
+| End edges, top and bottom | The model's boundary walls and faces | `EXT::<domain>__<face kind>` |
+
+The 3D model is always the whole layout, so every
+[build rule](../supported-scope.qmd#layout-rules) applies to the whole layout,
+also far from the cut.
+
+### Cut rules {#cut-rules}
+
+The 2D model stands for a line with one cross-section, so the cut must cross a
+straight, uniform part of the line from one edge of the model to the other.
+SGB refuses any other cut with an `InputError` that names what the cut meets,
+the height, the place in micrometres and the fix.
+
+| Rule | Refused cut | Fix |
+|---|---|---|
+| Ends on the grid | An end off the model grid | Put both ends on the grid |
+| Whole cross-section | An end beyond the model's planar extent (vacuum region included), an end inside the model where a region continues past it, or a stretch outside the model | Run the cut from one edge of the extent to the other |
+| Right angle | A crossing at another angle: an oblique section widens the gaps and gives a plausible but wrong L and C | Cut where the line's edges run straight across the cut |
+| No edge along the cut | The cut runs along an edge | Move the cut off the edge |
+| No corner | The cut passes through a vertex of the layout or of a band seam | Move the cut along the line to a uniform section |
+| No arc | The cut crosses an arc, or comes within half a grid step of one: a bend, a rounded corner, or a band seam turning round a corner | Move the cut onto a straight section, farther than the largest margin from a corner |
+| No point contact | Conductors, or a conductor and the model's edge, touch only at a point in the section | Draw the conductors so that they overlap along an edge or stay apart, or move the cut |
+
+## Preparation workers {#preparation-resources}
+
+Preparation and meshing run serially. To give source preparation a pool of
+workers, wrap the calls in `preparation_resources`:
+
+```python
+from scgsim.preparation import preparation_resources
+
+with preparation_resources(max_workers=30):
+    snapshot = plan.prepare()
+    sim.set_plan(snapshot)
+    sim.mesh()
+```
+
+`max_workers` bounds SCGSim's own preparation workers; on a cluster, request
+the CPUs from the scheduler as well. Meshing runs on one Gmsh thread and
+Palace's own MPI and OpenMP settings control the solve.
+`scgsim.diagnostics.preparation_diagnostics(output_dir, profile=False)` records
+stage timings.
+
+## Input summary {#pre-solve-input-summary}
+
+`sim.input_summary()` shows, before any file is written, what the model will
+be: the source, Entities, occurrences, Nets, materials, heights, vacuum, ports,
+EPR requests and solver settings, as a notebook card with the detached data in
+`.data`. On Palace it shows the input `mesh()` will build, with the plan's
+vacuum, its lumped elements and the route applied; `.data["backend"]["lumped_elements"]`
+says what the simulation makes of each element. Unknown values stay
+unknown, never zero. `scgsim.geometry.summarize_geometry_input(build_input,
+*, prepared_stack)` gives the same summary of a normalized input.
+
+[]{#internal-semantic-projection}[]{#identity-requirements}[]{#shared-source-facts-for-aedt}[]{#accepted-q3d-source-normalization}How
+SGB projects the sources, which identities a handoff keeps, the facts AEDT
+reads from the snapshot and the Q3D airbridge records are on
+[GeometryPlan internals](../../contribute/internals/geometry-plan.qmd).

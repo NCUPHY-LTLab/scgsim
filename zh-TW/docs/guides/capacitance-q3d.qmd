@@ -1,0 +1,139 @@
+---
+lang: zh-TW
+title: "以 Q3D 計算電容"
+description: "以 AEDT Q3D 從 Palace 使用的同一個 3D 模型，萃取版圖導體的電容與電導矩陣。"
+scgsim-kind: "course"
+scgsim-status: "ACCEPTED"
+scgsim-id: "docs/course/aedt-q3d"
+aliases:
+  - ../course/aedt-q3d.html
+---
+
+Q3D 是 Ansys AEDT 的準靜態萃取器，會回傳導體的電容與電導矩陣。SCGSim 由你的版圖建立 3D 模型（與 Palace 建網格用的是同一個模型），並寫出一個執行資料夾，由 AEDT 匯入並求解。下面的腳本對[第一個模擬](../start/first-simulation.qmd)的 200 µm 焊墊做這件事，每個矩陣元素印一行：物理量（`C` 或 `G`）、列與行的 Net、數值，以及 Q3D 匯出時的單位。
+
+這個儲存庫沒有這支腳本的執行結果。這個範例較早的版本是把 GDS 檔直接匯入 Q3D、金屬為 0.2 µm 的鋁，當時回報 C[pad][pad] = 87.00 fF（[3.0 之前的紀錄](../contribute/history/aedt-capacitance-pre-v3.qmd)）。這個版本的模型以 Palace 計算得到 95.43 fF（[以 Palace 計算電容](capacitance-palace.qmd)）；兩次計算的真空區域與求解器都不同。
+
+## 完整的一次執行 {#a-complete-run}
+
+這支腳本需要含 `aedt-epr` extra 的 SCGSim 與 OrcaPen SC PDK（[安裝 SCGSim](../start/install.qmd#extras)），以及同一台電腦上有可用授權的 AEDT Q3D 2024.2。存成 `simplepad_q3d.py`：
+
+```python
+from pathlib import Path
+from uuid import uuid4
+import argparse
+import subprocess
+import sys
+
+import gdsfactory as gf
+import orcapen_sc_pdk
+from orcapen_sc_pdk import get_material_records
+from orcapen_sc_pdk.tech import get_single_die_layer_stack
+from scgsim.geometry import GeometryPlan
+from scgsim.aedt import (
+    AedtResources,
+    MatrixRunControl,
+    prepare_q3d_from_geometry,
+    resolve_results,
+)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--handoff-only", action="store_true")
+    args = parser.parse_args()
+
+    # 1. Build the layout and declare electrical ownership.
+    orcapen_sc_pdk.activate()
+    component = gf.get_component(
+        "square_pad_capacitor",
+        pad_side_um=200.0,
+        gap_um=20.0,
+        die_side_um=1000.0,
+        junction_width_um=2.0,
+    )
+    records = get_material_records()
+    plan = GeometryPlan(
+        component=component,
+        root_id="chip",
+        layer_stack=get_single_die_layer_stack(),
+        material_records=records,
+        coupon_padding_um=0.0,
+    )
+    plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
+    plan.set_vacuum_region(padding=(250.0, 250.0, 1000.0))
+    snapshot = plan.prepare()
+
+    # 2. Prepare a new, portable Q3D input directory.
+    handoff = prepare_q3d_from_geometry(
+        snapshot,
+        aedt_version="2024.2",
+        modeling="solid",
+        output_dir=Path(".artifacts/simplepad-q3d") / uuid4().hex[:12],
+        project_name="SimplePad",
+        design_name="Capacitance",
+        net_types={"pad": "Signal", "ground": "Signal"},
+        physical_ground_nets=("ground",),
+        run_control=MatrixRunControl(
+            setup_name="Setup1", frequency_ghz=5.0,
+            maximum_passes=10, convergence_percent=1.0,
+        ),
+        resources=AedtResources(cores=4, ram_limit_percent=80),
+    )
+    print("Inputs:", handoff.run_dir)
+    if args.handoff_only:
+        return
+
+    # 3. Run AEDT on this licensed host using the current Python environment.
+    subprocess.run(
+        [sys.executable, "-m", "scgsim.aedt.run",
+         "--handoff", str(handoff.metadata_path), "--execute"],
+        cwd=handoff.run_dir,
+        check=True,
+    )
+
+    # 4. Read the returned matrix entries with their names and exported units.
+    result = resolve_results(handoff.run_dir)
+    for row in result.physics_results():
+        print(row)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+在研究專案中執行：
+
+```bash
+uv run simplepad_q3d.py
+```
+
+每次執行都會在 `.artifacts/simplepad-q3d/` 下建立新的執行資料夾。加上 `--handoff-only` 時，腳本只準備執行資料夾與封存檔，在開啟 AEDT 之前停下；之後可以[在另一台電腦執行這個資料夾](run-elsewhere.qmd#aedt-execute-the-prepared-package-locally)。
+
+四個編號段落依序建立計畫、準備執行資料夾、執行 AEDT、讀取結果。計畫與第一個模擬相同，只是真空區域延伸到晶片邊緣外 250 µm，讓 Q3D 的 Region（它求解的空間範圍）不會止於金屬。
+
+## Net 與導體 {#geometryplan-backed-cg-preparation}
+
+Net 是一塊具名、作為同一個導體的金屬，由計畫的 `plan.set_nets` 定義。`prepare_q3d_from_geometry` 把模型中的每個 Net 變成一個 Q3D net：
+
+- `net_types` 給每個 Net 一個 Q3D 類型，`"Signal"` 或 `"Ground"`，而且必須正好列出模型中的所有 Net。`Signal` net 在矩陣中有一列一行；`Ground` net 是 Q3D 的參考，沒有列與行。這裡兩個都是 `Signal`，所以矩陣是 2 × 2，也包含接地金屬。
+- `physical_ground_nets` 另外記錄哪些 Net 實際上接地，與它們的 Q3D 類型無關。這裡是 `ground`。
+- Q3D 以 Net 名稱命名每個 net，字母、數字與 `_` 以外的字元會被替換；替換後撞名的兩個 Net 會被拒絕。執行資料夾中的 `aedt_spec.json` 列出這些名稱，這裡是 `pad` 與 `ground`。
+- `modeling="solid"` 把金屬建成具有薄膜厚度的實體（這裡是 100 nm 的鋁）；`"thin_film"` 則建成薄膜面上的薄片。兩者的差別見[選擇幾何近似](../concepts/model-and-numerics.qmd#choose-the-geometric-approximation)。
+
+## Q3D 萃取什麼 {#know-which-formulation-you-requested}
+
+在這個模型上，Q3D 只萃取電容與電導，頻率由 `MatrixRunControl` 指定（這裡是 5 GHz）。它不求解交流或直流的電阻與電感；這在本版本中不提供，追蹤於 [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265)。
+
+`MatrixRunControl` 也設定 Q3D 自己的自適應細化：`maximum_passes=10` 允許最多十個回合（pass），`convergence_percent=1.0` 在兩個回合之間的變化不超過 1 % 時停止。取回結果後，報告會把 Q3D 的收斂狀態、它回報的變化與你設定的控制值放在矩陣旁邊（[收斂與報告](convergence-and-reports.qmd#aedt-read-the-sealed-family-evidence)）。
+
+Region 就是計畫的真空區域，外圍是開放的。若要讓 Region 的六個面成為接地外殼，那是 Q3D 請求中的一個欄位 `Q3dSpec(grounded_region_net=...)`，`prepare_q3d_from_geometry` 不會設定它；[Q3D 參考](../reference/specs/aedt-runtime.qmd#q3d-extraction-and-region-ground-candidate)有說明。
+
+## 只建模、不求解 {#build-only-then-solve}
+
+要只建立 AEDT 專案而不求解，先以 `--handoff-only` 準備執行資料夾，再以 `--prepare-only` 執行它，路徑填入腳本印出的資料夾：
+
+```bash
+python -m scgsim.aedt.run --handoff <run-folder>/metadata/aedt_handoff_metadata.json --execute --prepare-only
+```
+
+AEDT 會匯入模型、指定 net、Region 與求解設定、讀回確認並儲存專案，但不求解，也不匯出矩陣。這會用掉這個執行資料夾：要求解前，請準備新的資料夾。[Q3D 參考](../reference/specs/aedt-runtime.qmd#q3d-sgb-model)說明匯入過程，以及對取回結果的檢查。

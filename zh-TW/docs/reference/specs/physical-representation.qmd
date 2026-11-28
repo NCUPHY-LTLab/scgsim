@@ -1,0 +1,71 @@
+---
+title: "物理表示：薄膜、薄片與體積"
+lang: zh-TW
+description: "決定金屬薄膜成為薄片或體積、以及堆疊高度如何改變的近似方式，附尺寸範例，以及選擇它們的 Palace set_route 呼叫。"
+scgsim-kind: "contract"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/specs/physical-representation"
+aliases:
+  - ../../specs/physical-representation.html
+---
+
+一層 100 nm 的金屬薄膜，可以用這個厚度的體積進入模型，也可以是零厚度的薄片。*近似方式*（approximation profile）為堆疊中的每層薄膜做這個選擇，並決定它上方的高度如何改變。Palace 模擬以 `set_route` 選擇近似方式，AEDT 要求以 `modeling` 選擇。何時用哪一種，見 [Route A 與 Route B](../../concepts/routes.qmd)；本頁列出每種近似方式的確切效果。
+
+## 近似方式 {#profiles}
+
+以 500 µm 矽基板上的 100 nm 鋁膜為例：矽從 z = −500 到 0 µm，薄膜從 0 到 0.1 µm，上方是真空。五種近似方式彼此不同，沒有一個是另一個的別名。
+
+| 近似方式 | 路徑 | 薄膜變成 | 薄膜上方的高度 | 由誰選擇 |
+|---|---|---|---|---|
+| `route_b` | B | 0.1 µm 的體積，表面為理想導體，內部不產生網格 | 不變 | Palace `set_route("B")`，預設 |
+| `thin_film` | A | z = 0 的薄片，即薄膜所在處 | 下移 0.1 µm | Palace `set_route("A")`；AEDT `modeling="thin_film"` |
+| `substrate_face` | A | 你綁定的基板面上的薄片，z = 0 | 不變 | Palace `set_route("A", approximation_profile=...)` |
+| `metal_gap_equivalent` | A | 覆晶的兩層相對薄膜，各成為自己基板面上的薄片；兩層的厚度都移除 | 依各薄膜厚度下移 | Palace `set_route("A", approximation_profile=...)` |
+| `solid` | C | 保留在模型中的 0.1 µm 體積 | 不變 | AEDT `modeling="solid"` |
+
+對覆晶來說，差別出現在間隙。兩片晶粒各有 0.1 µm 薄膜，下方基板面在 z = 0、上方基板面在 z = 10.2 µm，兩層薄膜之間有 10.0 µm 真空時：
+
+| 近似方式 | 下方薄片 | 上方薄片 | 薄片之間的間隙 |
+|---|---|---|---|
+| `thin_film` | z = 0 | z = 10.0 | 10.0 µm，即金屬到金屬的間隙 |
+| `substrate_face` | z = 0 | z = 10.2 | 10.2 µm，即基板到基板的間隙 |
+| `metal_gap_equivalent` | z = 0 | z = 10.0 | 10.0 µm，即金屬到金屬的間隙 |
+
+`thin_film` 移除堆疊中的每層薄膜；`metal_gap_equivalent` 只移除你綁定的那兩層相對薄膜，一層附著於下表面、一層附著於上表面，分別位於兩片不同的基板上。凸塊與柱在每種近似方式中都仍是體積，它們的端點隨高度移動。輪廓、孔洞、材料與 Net 名稱在各近似方式中都相同。
+
+這些高度是以 SCGSim 自己的映射（`scgsim.geometry.interpret_physical_layers`），對這些薄膜的宣告計算出來的。
+
+## Palace：`set_route` {#palace-caller-profile}
+
+`ElectrostaticSim` 與 `EigenmodeSim` 在 `mesh()` 之前以 `set_route()` 選擇近似方式。一次呼叫就說明全部設定：它同時取代路徑與近似方式。
+
+| 呼叫 | 使用的近似方式 |
+|---|---|
+| `set_route("B")`，或不呼叫 | `route_b` |
+| `set_route("A")` | `thin_film` |
+| `set_route("A", approximation_profile=profile)` | `substrate_face` 或 `metal_gap_equivalent`，附其綁定 |
+
+面型近似方式為每層薄膜指名它所在的介質 Entity 與該 Entity 的哪一面：
+
+```python
+from scgsim.geometry.models.physical import ApproximationProfile
+
+profile = ApproximationProfile(
+    name="substrate_face",
+    revision="v1",
+    parameters={"film_bindings": authored_film_bindings},
+)
+sim.set_route("A", approximation_profile=profile)
+```
+
+`authored_film_bindings` 把每個宣告的物理層 ID 對應到恰好兩項：`supporting_entity_id` （一個介質 Entity）與 `supporting_side`（`"upper"` 或 `"lower"`），例如 `{"D0_M1": {"supporting_entity_id": "D0_SUB", "supporting_side": "upper"}}`。`substrate_face` 接受一或兩個綁定；`metal_gap_equivalent` 恰好兩個，位於彼此相對的兩片不同基板上。缺少或錯誤的綁定會在任何原生工作之前被拒絕，並附上應使用的呼叫形式。
+
+`input_summary()` 顯示路徑與近似方式，包括預設值。規劃的薄膜不符合的近似方式（Route A 配 `route_b` 或 `solid`，Route B 配 `thin_film`）會在 `mesh()` 建構時被拒絕，而不是在 `set_route()` 時。不論近似方式為何，Surface-EPR 薄膜都屬於規劃，即 `plan.set_surface_epr(specs)`。
+
+## AEDT：`modeling` {#aedt-modeling}
+
+HFSS 或 Q3D 要求在 `modeling="thin_film"` 時使用 `thin_film`，在 `modeling="solid"` 時使用 `solid`；高度見 [AEDT：solid 還是 thin_film](aedt-runtime.qmd#aedt-solid-thin-film)。Q2D 使用自己的截面，不使用近似方式。
+
+## 宣告從哪裡來 {#declarations}
+
+[]{#typed-source-carrier-and-plan}[]{#selected-declarations-and-source-incidence}[]{#fresh-and-historical-layer-records}近似方式讀取 PDK 堆疊中每一層的物理宣告：它是堆疊薄膜、局部薄膜還是有限體積，以及它的材料、厚度與附著面。這些由 PDK 撰寫，筆記本不需要。PDK 作者如何撰寫它們、哪些較早的記錄會被拒絕，見 [GeometryPlan 內部實作](../../contribute/internals/geometry-plan.qmd#physical-declarations)。

@@ -1,0 +1,142 @@
+---
+title: "Flip-chip Xmon: the shared plan"
+description: "Build the plan of a flip-chip Xmon qubit from the PDK, with its Nets and vacuum region, as the one input of the Palace and AEDT pages that follow."
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/tutorial-xmon-input"
+execute:
+  enabled: false
+aliases:
+  - ../../tutorial-xmon-input.html
+---
+
+This worked example takes one flip-chip Xmon qubit through both solvers. This
+page builds its plan and prepares it as `snapshot`; the
+[Palace page](palace.qmd) and the [AEDT page](aedt.qmd) start from it, in the
+same Python session. The plan holds this model:
+
+![The flip-chip Xmon as the plan prepares it. Left: the face of the upper chip (D1) that faces the lower chip, to scale: the cross-shaped Xmon pad, 309.5 µm from tip to tip with 24.65 µm wide arms, four couplers 20 µm from its tips, the ground plane around them, and eight indium bumps that join the two chips' ground planes. The red mark is the junction sheet between the pad and the ground plane. Right: the layer stack, not to scale; the two chips face each other across an 8.2 µm vacuum gap.](../../assets/xmon-flip-chip.png){#fig-xmon-flip-chip}
+
+Two silicon chips, each 500 µm thick, face each other. The lower chip (D0)
+carries a ground plane on its top face; the upper chip (D1) carries the Xmon
+on the face turned down towards it. Eight indium bumps, each 20 µm square,
+connect the two ground planes across the 8.2 µm gap. The model is 1060 µm
+square. The junction is modelled by its sheet, a small sheet that joins the pad
+to the D1 ground plane: the plan puts an 11.78 nH inductor there, the
+value of the PDK's public notebooks for this qubit, and both backend pages
+read it from the plan.
+
+You need SCGSim with its `palace` extra for the Palace page or its `aedt-epr`
+extra for the AEDT page, and the OrcaPen SC PDK
+([Install SCGSim](../../start/install.qmd)).
+
+## Draw the coupon {#build-the-component-and-named-coupon-occurrences}
+
+```python
+import gdsfactory as gf
+import orcapen_sc_pdk
+from orcapen_sc_pdk import LAYER_STACK, get_material_records
+from orcapen_sc_pdk.helpers.assembly import place_flip_chip_ground_short_bumps
+from orcapen_sc_pdk.tech import OUTER_VACUUM_THICKNESS_UM
+from scgsim.geometry import GeometryPlan, LumpedElement
+
+orcapen_sc_pdk.activate()
+gf.clear_cache()
+device = gf.get_component(
+    "kosen2024_flip_chip_xmon_qubit",
+    bump_ring_count_per_side=0,
+    qubit_pad_length=309.5,
+    qubit_pad_width=24.65,
+    qubit_gap=20.0,
+)
+coupon = place_flip_chip_ground_short_bumps(
+    device,
+    coupon_padding_um=75.0,
+    clearance_um=30.0,
+    placement_mode="corner_anchors",
+)
+component = coupon.component
+```
+
+`kosen2024_flip_chip_xmon_qubit` draws the Xmon, its four couplers and its
+junction sheet; `bump_ring_count_per_side=0` leaves out the device's own
+rings of bumps. `place_flip_chip_ground_short_bumps` puts it in a coupon, the
+small piece of the chip that is simulated: it adds the two ground planes and
+the eight shorting bumps, two at each corner. The coupon names each placed
+part: `device` for the Xmon and `short_000` to `short_007` for the bumps.
+
+## Make the plan {#assign-the-final-net-map-and-prepare-one-snapshot}
+
+```python
+plan = GeometryPlan(
+    component=component,
+    root_id="chip",
+    layer_stack=LAYER_STACK,
+    material_records=get_material_records(),
+    coupon_padding_um=coupon.stack_coupon_padding_um,
+)
+for name, reference in coupon.named_instances.items():
+    plan.register_instance(f"chip/{name}", reference)
+
+plan.set_nets({
+    "xmon_pad": ("chip/device/D1_XMON_PAD",),
+    "Ground": (
+        "chip/D0_TOP_GROUND_PLANE",
+        "chip/D1_BOTTOM_GROUND_PLANE",
+        *(f"chip/device/D1_COUPLER_{index}" for index in range(1, 5)),
+        *(
+            f"chip/{name}/D0_D1_INDIUM_BUMP"
+            for name in coupon.named_instances
+            if name.startswith("short_")
+        ),
+    ),
+})
+plan.set_vacuum_region(
+    padding=(0.0, 0.0, float(OUTER_VACUUM_THICKNESS_UM))
+)
+port_name = "chip/device/o_junction_lumped"
+plan.set_lumped_elements([LumpedElement(port_name, inductance_h=11.78e-9)])
+snapshot = plan.prepare()
+```
+
+What each step fixes:
+
+- `LAYER_STACK` is the PDK's two-chip stack of the figure, and
+  `coupon.stack_coupon_padding_um` the substrate margin the coupon helper
+  chose around the layout.
+- `register_instance` gives each placed part its name in the plan, so that
+  its shapes are found under `chip/device/...` and `chip/short_000/...`.
+  Each named shape is an Entity.
+- `set_nets` groups the Entities into Nets, each a named piece of metal that
+  acts as one conductor:
+
+  | Net | Entities |
+  |---|---|
+  | `xmon_pad` | the Xmon pad, `chip/device/D1_XMON_PAD` |
+  | `Ground` | both ground planes, the four couplers and the eight bumps |
+
+  The couplers are grounded here because the example has no readout or
+  drive line; in a device with them, they would be Nets of their own.
+- `set_vacuum_region` adds 1000 µm of vacuum above and below the two chips
+  (`OUTER_VACUUM_THICKNESS_UM`) and none beyond their sides. The 8.2 µm gap
+  between the chips is part of the stack, not of this region.
+- `set_lumped_elements` declares the junction once, on the plan: an 11.78 nH
+  inductor on the junction sheet `port_name`, between the Xmon pad and the D1
+  ground plane, with no capacitance of its own, a modelling choice. Both
+  backend pages read it from the plan and name the junction by `port_name` in
+  their EPR requests ([Lumped elements](../../reference/specs/geometry-plan.qmd#lumped-elements)).
+
+## Next {#observe-the-prepared-source-and-continue}
+
+Continue with [Flip-chip Xmon with Palace](palace.qmd) or
+[Flip-chip Xmon with AEDT](aedt.qmd) in the same session. To look at what the
+plan holds before you simulate, see [Inspect the source](../inspect-the-source.qmd);
+the [GeometryPlan reference](../../reference/specs/geometry-plan.qmd#component-to-backend-geometry-contract)
+gives the rules for placed parts, Entities and Nets.
+
+The Xmon cell is OrcaPen's own parametric adaptation of the qubit of Kosen
+et al., [PRX Quantum 5, 030350 (2024)](https://doi.org/10.1103/PRXQuantum.5.030350),
+shared under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); it is
+not the authors' mask, and its dimensions are example inputs, not measured
+device data. The [PDK's notebooks for this qubit](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/ComponentSimulation/Kosen2024_Xmon)
+are the source of its settings.

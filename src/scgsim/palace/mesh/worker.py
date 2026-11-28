@@ -1,8 +1,6 @@
-"""Gmsh worker for the Palace JSON request/result process boundary."""
+"""The fresh process ``process.lower_mesh_in_worker`` starts: it reads a JSON request and writes the lowering's result as JSON."""
 
 from __future__ import annotations
-
-from scgsim.diagnostics import _worker_diagnostics
 
 import json
 import sys
@@ -10,7 +8,9 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from scgsim.palace.mesh.build import _mesh_xao_in_current_process
+from scgsim.diagnostics import worker_diagnostics
+from scgsim.palace.mesh.native import lower_mesh_in_current_process
+from scgsim.refusal import found_text, internal
 
 
 def main(arguments: list[str] | None = None) -> int:
@@ -21,33 +21,32 @@ def main(arguments: list[str] | None = None) -> int:
     request_path, result_path = (Path(value) for value in values)
     request = json.loads(request_path.read_text(encoding="utf-8"))
     if not isinstance(request, Mapping):
-        raise TypeError("Gmsh worker request must be a mapping.")
+        raise TypeError(
+            internal(
+                "Gmsh worker request must be a mapping"
+                + ": "
+                + found_text(type(request).__name__)
+            )
+        )
     diagnostic_config = request.get("preparation_diagnostics")
     if diagnostic_config is not None and not isinstance(diagnostic_config, Mapping):
-        raise TypeError("Worker diagnostic configuration must be a mapping.")
-    with _worker_diagnostics(diagnostic_config):
+        raise TypeError(
+            internal(
+                "Worker diagnostic configuration must be a mapping"
+                + ": "
+                + found_text(type(diagnostic_config).__name__)
+            )
+        )
+    with worker_diagnostics(diagnostic_config):
         return _run_request(request, result_path)
 
 
-def _run_request(request: Any, result_path: Path) -> int:
+def _run_request(request: Mapping[str, Any], result_path: Path) -> int:
     """Validate and execute one decoded worker request."""
-    if not isinstance(request, Mapping):
-        raise TypeError("Gmsh worker request must be a mapping.")
-    from .controls import MeshSizing, mesh_controls
-
-    sizing = MeshSizing.from_payload(request)
-    controls = mesh_controls(
-        size_policy=sizing.size_policy, **_required(request, "mesh_controls", dict)
-    )
-    result = _mesh_xao_in_current_process(
-        xao_path=Path(_required(request, "xao_path", str)),
-        route=_required(request, "route", str),
-        records=_required(request, "records", list),
-        stack=_required(request, "stack", dict),
+    result = lower_mesh_in_current_process(
+        source_mesh=Path(_required(request, "source_mesh", str)),
         mesh_path=Path(_required(request, "mesh_path", str)),
-        refined_mesh_size=sizing.refined_mesh_size,
-        max_mesh_size=sizing.max_mesh_size,
-        mesh_controls=controls,
+        groups=_required(request, "groups", dict),
     )
     result_path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     return 0
@@ -56,7 +55,9 @@ def _run_request(request: Any, result_path: Path) -> int:
 def _required(payload: Mapping[str, Any], key: str, expected: type[Any]) -> Any:
     value = payload.get(key)
     if isinstance(value, bool) or not isinstance(value, expected):
-        raise TypeError(f"Gmsh worker request field {key!r} has an invalid type.")
+        raise TypeError(
+            internal(f"Gmsh worker request field {key!r} has an invalid type")
+        )
     return value
 
 

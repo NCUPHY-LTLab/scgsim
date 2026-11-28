@@ -1,0 +1,188 @@
+---
+title: "檢查版圖"
+description: "模擬之前，先對計畫執行 simulation_drc：一份通過與一份被拒絕的報告、怎麼讀一項發現，以及該執行哪個檢查。"
+lang: zh-TW
+scgsim-kind: "contract"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/layout-modeling-check"
+aliases:
+  - ../layout-modeling-check.html
+---
+
+產生網格或求解之前，先對你要交給模擬的計畫執行版圖檢查 `simulation_drc`。它會建出該模擬將建立的 3D 模型，找出網格器處理不了的細小部分，並告訴你在哪裡、該由誰修正。它不產生網格，也不求解：下面的方形焊墊不到一秒就檢查完，所以版圖每次修改後都可以再跑一次。
+
+## 做法 {#recipe}
+
+建立計畫，呼叫你要執行的模擬的檢查，再印出報告。下面是[第一個模擬](../start/first-simulation.qmd)的計畫，寫成一個函式，方便改變焊墊與接地之間的間隙：
+
+```python
+import gdsfactory as gf
+import orcapen_sc_pdk
+from orcapen_sc_pdk import get_material_records
+from orcapen_sc_pdk.tech import get_single_die_layer_stack
+from scgsim.geometry import GeometryPlan
+from scgsim.palace import ElectrostaticSim
+
+orcapen_sc_pdk.activate()
+
+
+def pad_plan(gap_um):
+    """The square pad of First simulation, with the gap to the ground in µm."""
+    component = gf.get_component(
+        "square_pad_capacitor", pad_side_um=200.0, gap_um=gap_um, die_side_um=1000.0
+    )
+    plan = GeometryPlan(
+        component=component,
+        root_id="chip",
+        layer_stack=get_single_die_layer_stack(),
+        material_records=get_material_records(),
+        coupon_padding_um=0.0,
+    )
+    plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
+    plan.set_vacuum_region(padding=(0.0, 0.0, 1000.0))
+    return plan
+
+
+report = ElectrostaticSim.simulation_drc(pad_plan(gap_um=20.0))
+print(report.render_text())
+```
+
+20 µm 的間隙通過檢查：
+
+```text
+geometry stage: passed
+meshing stage: passed (0 refusing, 0 warning)
+```
+
+檢查分兩個階段。**幾何階段**像模擬的 `mesh()` 一樣建出模型；建不出來的版圖會停在這裡，並拋出建構時的錯誤，例如兩個 Net 互相接觸。**網格階段**量測建出的模型的每條邊與每個面，列出對網格器來說太小的部分。計畫裡有什麼，見[準備版圖](prepare-a-layout.qmd)。
+
+## 讀懂被拒絕的報告 {#read-a-refused-report}
+
+把同一塊焊墊的間隙改成 5 nm。模型仍然建得出來，但 5 nm 的細縫窄到無法用可用的四面體填滿，所以網格階段拒絕它，拋出 `SimulationDrcError`；錯誤的 `report` 裡有每一項發現：
+
+```python
+from scgsim.palace import SimulationDrcError
+
+try:
+    ElectrostaticSim.simulation_drc(pad_plan(gap_um=0.005))
+except SimulationDrcError as error:
+    print(error.report.render_text())
+```
+
+```text
+geometry stage: passed
+meshing stage: refused (2 refusing, 2 warning)
+  meshing stage, refuse B: face width 2A/P 0.00498753 um (4.99 grid steps) < 10 grid steps at (100.0025, 0.0000, 0.0000) um, f:78b2f2949a9aec64 in PORT::PORT_SHEET__chip/o_junction_lumped__0000 on layer D0_TOP_M1; from PORT_SHEET__chip/o_junction_lumped__0000/polygon0/ring0/edge2, PORT_SHEET__chip/o_junction_lumped__0000/polygon0/ring0/edge6, chip/GROUND/polygon0/ring1/edge2, chip/PAD/polygon0/ring0/edge1; owner layout. A face this narrow forces flat elements along its whole length; refining it does not make them better shaped. Fix: widen or remove the sliver between these polygons.
+  meshing stage, refuse B: face width 2A/P 0.00499997 um (5 grid steps) < 10 grid steps at (0.0000, 0.0000, 0.0000) um, f:cd87e808586a1f62 in SA::D0_SUBSTRATE|VACUUM_REGION__interface on layer D0_TOP_M1; from PORT_SHEET__chip/o_junction_lumped__0000/polygon0/ring0/edge2, PORT_SHEET__chip/o_junction_lumped__0000/polygon0/ring0/edge6, chip/GROUND/polygon0/ring1/edge0, chip/GROUND/polygon0/ring1/edge1, chip/GROUND/polygon0/ring1/edge3, chip/GROUND/polygon0/ring1/edge4, chip/GROUND/polygon0/ring1/edge5, chip/PAD/polygon0/ring0/edge0, chip/PAD/polygon0/ring0/edge2, chip/PAD/polygon0/ring0/edge3, chip/PAD/polygon0/ring0/edge4, chip/PAD/polygon0/ring0/edge5; owner layout. A face this narrow forces flat elements along its whole length; refining it does not make them better shaped. Fix: widen or remove the sliver between these polygons.
+  meshing stage, warn C: edge length 0.005 um (5 grid steps) < 25 grid steps at (100.0025, -1.0000, 0.0000) um, e:37415fdfc71dddc3 in PORT::PORT_SHEET__chip/o_junction_lumped__0000, SA::D0_SUBSTRATE|VACUUM_REGION__interface on layer D0_TOP_M1; from PORT_SHEET__chip/o_junction_lumped__0000/polygon0/ring0/edge6; owner layout. An edge this short needs elements of its own length around it, which costs repair rounds and elements. Fix: join the short outline edge into its neighbours.
+  meshing stage, warn C: edge length 0.005 um (5 grid steps) < 25 grid steps at (100.0025, 1.0000, 0.0000) um, e:78e284ff15d36d88 in PORT::PORT_SHEET__chip/o_junction_lumped__0000, SA::D0_SUBSTRATE|VACUUM_REGION__interface on layer D0_TOP_M1; from PORT_SHEET__chip/o_junction_lumped__0000/polygon0/ring0/edge2; owner layout. An edge this short needs elements of its own length around it, which costs repair rounds and elements. Fix: join the short outline edge into its neighbours.
+```
+
+每一項發現占一行。第一項可以這樣讀：
+
+| 行中的片段 | 意思 |
+|---|---|
+| `refuse B` | 這項會擋下版圖（`warn` 不會），屬於 B 類：太窄的面。 |
+| `face width 2A/P 0.00498753 um (4.99 grid steps) < 10 grid steps` | 它的尺寸，以及對照的界限。這個版圖的格點是 1 nm，10 個格點就是 0.01 µm。 |
+| `at (100.0025, 0.0000, 0.0000) um` | 位置，用版圖座標表示：x = 100.0025 µm 是焊墊東側邊緣（x = 100 µm）旁那段間隙的中線。 |
+| `in PORT::PORT_SHEET__chip/o_junction_lumped__0000` | 模型中的物件：PDK 畫在間隙上的那片接面薄片。 |
+| `on layer D0_TOP_M1` | 它所來自的繪製物件所在的圖層。 |
+| `from chip/PAD/polygon0/ring0/edge1, ...` | 圍出它的那些繪製邊。 |
+| `owner layout` | 由誰處理：版圖本身就是這樣畫的。 |
+| `Fix: widen or remove the sliver between these polygons.` | 該怎麼改。 |
+
+第二項是焊墊周圍同一圈 5 nm 間隙中的基板表面；兩則警告則是接面薄片 5 nm 長的兩端。把間隙加寬，兩項拒絕都會消失。
+
+負責方（owner）說明該由誰處理一項發現：
+
+| 負責方 | 由誰處理 |
+|---|---|
+| `layout` | 你：這個細小結構是版圖畫出來的。SCGSim 只回報，絕不修補。 |
+| `erosion` | 你：兩條邊各自往內切出的 Surface-EPR 條帶在這裡相遇，例如導體寬度只比邊距的兩倍略大。請修改邊距或導體寬度。 |
+| `sgb` | SCGSim：是模型建構器做出了版圖沒有的細小結構。請把這項發現回報給 SCGSim；版圖不需要改。 |
+
+幾何階段的拒絕，就是建構本身的錯誤，例如兩個 Net 互相接觸時的 `ContactError`，並附上以 µm 表示的位置。每種錯誤的負責方與下一步，見[失敗時怎麼辦](../reference/supported-scope.qmd#when-something-fails)。如果訊息與你畫的版圖對不上，請回報給 SCGSim。
+
+### Surface-EPR 邊距太窄 {#margins-too-narrow}
+
+Surface-EPR 請求中若有條帶窄於 10 個格點，會在建構任何東西之前就被拒絕。對同一塊焊墊要求 5 nm 的邊距：
+
+```python
+from orcapen_sc_pdk import (
+    get_interface_preset_records,
+    validate_interface_preset_records,
+)
+
+presets = validate_interface_preset_records(get_interface_preset_records())
+film = presets["LiteratureCentral_MA"]
+plan = pad_plan(gap_um=20.0)
+plan.set_surface_epr(
+    {
+        "MA": {
+            "thickness": film["thickness"],
+            "permittivity": film["permittivity"],
+            "loss_tangent": film["loss_tangent"],
+            "inset_margins_um": (0.005,),
+        }
+    }
+)
+try:
+    ElectrostaticSim.simulation_drc(plan)
+except ValueError as error:
+    print(error)
+```
+
+```text
+Surface EPR bands narrower than the meshing stage's face-width limit of 10 grid steps (0.01 um): MA inset_margins_um band=0 (0 to 0.005 um) is 0.005 um (5 grid steps) wide. A band this narrow is a face the mesher cannot use. Widen the inset margins given to plan.set_surface_epr so that every band is at least 10 grid steps wide. Change it in the call to GeometryPlan.set_surface_epr.
+```
+
+改用[準備版圖](prepare-a-layout.qmd#surface-epr)中的 `(0.5, 1.0)` µm，同一塊焊墊兩個階段都會通過，也沒有警告。
+
+## 該執行哪個檢查 {#which-check-to-run}
+
+每個模擬類別檢查的是它自己會建的模型，所以 cell 預定用於哪些模擬，就要各執行那些模擬的檢查：
+
+| cell 預定用於 | 呼叫 |
+|---|---|
+| Palace Eigenmode | `scgsim.palace.EigenmodeSim.simulation_drc(plan, route=...)` |
+| Palace Electrostatic | `scgsim.palace.ElectrostaticSim.simulation_drc(plan, route=...)` |
+| AEDT HFSS Eigenmode | `scgsim.aedt.EigenmodeSim.simulation_drc(plan, modeling=...)` |
+| AEDT HFSS Driven Terminal 或 Q3D | 沒有另外的呼叫：`prepare_hfss_driven_from_geometry` 與 `prepare_q3d_from_geometry` 在 AEDT 啟動前執行相同的步驟，並在那裡拒絕 |
+
+`route` 是 Palace 的幾何近似：預設的 `"B"` 保留金屬厚度，`"A"` 則把每層薄膜當成零厚度的薄片；`approximation_profile` 的傳法與 `set_route` 相同。`modeling` 是 AEDT 的對應選項，`"thin_film"` 或 `"solid"`，沒有預設值。在一種 route 或 modeling 上通過，不代表另一種也通過；Palace 與 AEDT 的檢查也永遠不能互相代替。只有兩個 Palace 類別在相同的計畫與 route 上，而且計畫沒有埠片時，才會建出相同的模型；有埠片時兩者不同，因為 Eigenmode 會把每片埠片裁成集總埠。
+
+cell 預定用於多個模擬時，用同一份計畫逐一檢查：
+
+```python
+import scgsim.aedt
+import scgsim.palace
+
+plan = pad_plan(gap_um=20.0)
+checks = [
+    (scgsim.palace.EigenmodeSim, {"route": "B"}),
+    (scgsim.palace.ElectrostaticSim, {"route": "B"}),
+    (scgsim.aedt.EigenmodeSim, {"modeling": "solid"}),
+]
+for simulation, options in checks:
+    report = simulation.simulation_drc(plan, **options)
+    print(f"{simulation.__module__}.{simulation.__name__}")
+    print(report.render_text())
+```
+
+拒絕會拋出錯誤，所以迴圈會停在第一個拒絕這份計畫的類別。Palace 的檢查需要 `scgsim[palace]`，AEDT 的檢查需要 `scgsim[aedt]`；兩者都不需要求解器，也不需要 AEDT 授權。
+
+## 檢查從計畫拿了什麼 {#build-the-plan}
+
+檢查接收的是 `GeometryPlan` 本身（在 `prepare()` 之前），並且照模擬的方式使用它：它的 Net、真空區域、Surface-EPR 請求、接面與埠片，以及試片外加的基板。檢查不加入任何自己的設定，也不改動你的計畫。所以請建立一次計畫、檢查它，再把 `plan.prepare()` 交給模擬。傳入的若不是 `GeometryPlan`（例如元件本身或快照），會被拒絕，訊息會說明該建立什麼樣的計畫。
+
+::: {.callout-note title="通過代表什麼"}
+通過代表這份計畫的模型，在所檢查的 route 或 modeling 上建得出來，而且沒有任何會被網格階段拒絕的邊或面。它不保證換一種 route、加上 Electrostatic 端子或更多埠時也建得出來，也不保證能得到乾淨的網格：`mesh()` 仍可能以 `MeshRepairError` 停下，並指出停在哪裡。要確認某個確切的設定，請執行該模擬自己的 `mesh()`。
+:::
+
+## 更多細節 {#more-detail}
+
+- []{#what-the-meshing-stage-reports}三類細小結構、以格點數表示的界限、Surface-EPR 條帶的寬度與負責方：[版圖檢查參考](../reference/specs/layout-check.qmd#what-the-meshing-stage-reports)。
+- []{#the-same-check-inside-mesh}`mesh()` 在啟動網格器之前，也會執行同一個網格階段：[`mesh()` 內的檢查](../reference/specs/layout-check.qmd#the-same-check-inside-mesh)。
+- []{#what-the-check-uses}每個類別在計畫之外加入的設定，以及 route 參數：[檢查使用的設定](../reference/specs/layout-check.qmd#what-the-check-uses)。
+- []{#aedt-eigenmode-check}AEDT Eigenmode 的檢查涵蓋哪些步驟：[AEDT 的檢查](../reference/specs/layout-check.qmd#aedt-eigenmode-check)。
+- 版圖必須滿足的規則：[支援範圍](../reference/supported-scope.qmd#layout-rules)。

@@ -1,0 +1,233 @@
+---
+title: "Parameter sweep on HPC"
+description: "Sweep a junction inductance in HFSS: build each model on a workstation, solve them on HPC without the AEDT desktop, and collect the results."
+scgsim-id: "docs/course/aedt-hpc-sweep"
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+execute:
+  enabled: false
+aliases:
+  - ../course/aedt-hpc-sweep.html
+---
+
+This page sweeps the inductor of the pad resonator of
+[Resonant modes with Palace](modes-palace.qmd) through 10, 12 and 14 nH in
+HFSS Eigenmode. Each of the three models is built and saved on a workstation
+with AEDT, the three are solved one after another on an HPC computer with
+AEDT's command-line solver and no desktop, and the results come back to the
+workstation, which reads each model's frequency, Q and energy participations.
+The procedure has not been run end to end with AEDT, and this repository
+holds no result of it.
+
+[]{#hosts-and-prerequisites}Three computers, or three sessions, take part:
+
+| Stage | Where | What it needs |
+|---|---|---|
+| 1. Build and package each model | Workstation | SCGSim with its `aedt-epr` extra and the OrcaPen SC PDK, AEDT 2024.2 with its desktop and licence |
+| 2. Solve | HPC computer | AEDT 2024.2's command-line solver and licence, and Python 3.12; no SCGSim, no PyAEDT, no desktop |
+| 3. Collect | Workstation | The same as stage 1 |
+
+Use the same AEDT release on all three.
+
+## 1. Build and package each model {#prepare-and-package-each-model}
+
+Set `AEDT_BATCH_EXECUTABLE` to the AEDT executable as it is called on the HPC
+computer; it is written into each package and run there. Then run this script
+on the workstation, in a new study folder:
+
+```python
+import json
+import os
+import subprocess
+import tarfile
+from pathlib import Path
+
+import gdsfactory as gf
+import orcapen_sc_pdk
+from orcapen_sc_pdk import get_material_records
+from orcapen_sc_pdk.tech import get_single_die_layer_stack
+from scgsim.aedt import (
+    AedtResources, EigenmodeRunControl, EigenmodeSim, EprAnalysisRequest,
+    prepare_native_batch,
+)
+from scgsim.geometry import GeometryPlan, LumpedElement
+
+# The pad of First simulation; each case puts its junction on the junction sheet.
+orcapen_sc_pdk.activate()
+component = gf.get_component(
+    "square_pad_capacitor", pad_side_um=200.0, gap_um=20.0, die_side_um=1000.0
+)
+plan = GeometryPlan(
+    component=component,
+    root_id="chip",
+    layer_stack=get_single_die_layer_stack(),
+    material_records=get_material_records(),
+    coupon_padding_um=0.0,
+)
+plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
+plan.set_vacuum_region(padding=(0.0, 0.0, 1000.0))
+junction = "chip/o_junction_lumped"
+
+AEDT_VERSION = "2024.2"  # The same release on all three computers.
+resources = AedtResources(cores=4, ram_limit_percent=80)
+study = (Path.cwd() / ".artifacts" / "pad-hpc-sweep").resolve()
+packages = study / "packages"
+packages.mkdir(parents=True, exist_ok=False)
+rows = []
+for case_id, inductance_h in (("L10nH", 10e-9), ("L12nH", 12e-9), ("L14nH", 14e-9)):
+    plan.set_lumped_elements([LumpedElement(junction, inductance_h=inductance_h)])
+    sim = EigenmodeSim(modeling="solid", aedt_version=AEDT_VERSION)
+    sim.set_plan(plan.prepare())
+    sim.set_output_dir(study / "prepared" / case_id)
+    sim.set_eigenmode(
+        project_name=f"pad_{case_id}",
+        design_name="PadLC",
+        run_control=EigenmodeRunControl(
+            setup_name="Setup1", minimum_frequency_ghz=3.0, num_modes=1,
+            maximum_passes=20, maximum_delta_frequency_percent=0.1,
+            minimum_passes=1, minimum_converged_passes=1,
+        ),
+        resources=resources,
+    )
+    sim.set_epr_request(EprAnalysisRequest(
+        mode_indices=(1,),
+        surface_epr_groups=None,  # every Surface EPR group of the plan (none here)
+        junction_ids=(junction,),
+        bulk_domain_ids=None,  # every dielectric solid and the Region
+    ))
+    handoff = sim.prepare_handoff()  # Writes the run folder; opens no AEDT.
+    subprocess.run(["bash", str(handoff.script_path), "--prepare-only"], check=True)
+    package = prepare_native_batch(
+        handoff.run_dir,
+        output_dir=packages / case_id,
+        solver_executable=os.environ["AEDT_BATCH_EXECUTABLE"],
+        resources=resources,
+    )
+    rows.append({
+        "case_id": case_id,
+        "inductance_h": inductance_h,
+        "package": package.root.relative_to(study).as_posix(),
+    })
+
+manifest = study / "sweep.json"
+manifest.write_text(json.dumps({"aedt_version": AEDT_VERSION, "cases": rows}, indent=2) + "\n")
+outbound = study / "pad-sweep-inputs.tar.gz"
+with tarfile.open(outbound, "w:gz") as archive:
+    archive.add(manifest, arcname="sweep.json")
+    archive.add(packages, arcname="packages")
+print(outbound)
+```
+
+For each inductance, the loop:
+
+1. prepares a run folder with `prepare_handoff()`, as [Resonant modes with
+   HFSS](modes-hfss.qmd) does, here with an EPR request for the junction and
+   the dielectrics;
+2. runs that folder's `run_aedt.sh --prepare-only`: AEDT builds the model,
+   sets up the solve and the EPR calculations, saves the project and closes,
+   without solving;
+3. packages the saved project for the HPC solver with
+   `prepare_native_batch()`.
+
+The junction is a lumped element of the plan: each case declares its
+inductance on the junction sheet with `set_lumped_elements` and prepares the
+plan again. The plan finds the pad and the ground the sheet joins, and HFSS
+names the junction by its sheet in the EPR request. Only the inductance
+changes between the models, so the three cases share the layout and the
+geometry; a sweep of the geometry changes the layout or the plan the same way.
+`sweep.json` is your own table of cases; SCGSim has no sweep function.
+
+Each `packages/<case>` holds `native-batch-package.json`, `run_batch.py` and
+`native_batch.tar.gz`. Keep the `prepared/` folders on the workstation.
+
+## 2. Solve on HPC {#transfer-one-archive-and-solve-serially-on-hpc}
+
+Copy `pad-sweep-inputs.tar.gz` to the HPC computer. In a new working folder
+there, run this with Python 3.12 alone:
+
+```python
+import json
+import subprocess
+import sys
+import tarfile
+from pathlib import Path
+
+incoming = Path("pad-sweep-inputs.tar.gz").resolve()
+workspace = (Path.cwd() / "pad-hpc-run").resolve()
+workspace.mkdir(exist_ok=False)
+with tarfile.open(incoming, "r:gz") as archive:
+    archive.extractall(workspace, filter="data")
+sweep = json.loads((workspace / "sweep.json").read_text(encoding="utf-8"))
+attempts = workspace / "attempts"
+attempts.mkdir()
+for row in sweep["cases"]:
+    package_dir = workspace / row["package"]
+    subprocess.run([
+        sys.executable, str(package_dir / "run_batch.py"), "solve",
+        "--package", str(package_dir),
+        "--output", str(attempts / row["case_id"]),
+    ], check=True)
+
+returned = workspace.parent / "pad-sweep-returned.tar.gz"
+with tarfile.open(returned, "x:gz") as archive:
+    for name in ("sweep.json", "packages", "attempts"):
+        archive.add(workspace / name, arcname=name)
+print(returned)
+```
+
+`run_batch.py solve` runs AEDT's batch solve on the packaged project with the
+packaged resources, on this one computer; it submits no scheduler job. To use
+your site's scheduler, run one case per job instead of the loop. Each
+attempt keeps `batch-attempt.json`, the solver's output and its complete
+`work/` folder. If a case fails, the loop stops and keeps that attempt and its
+logs; it does not run the case again.
+
+## 3. Collect the results {#return-all-attempts-and-collect-full-epr}
+
+Copy `pad-sweep-returned.tar.gz` back to the workstation, whole: the
+adaptive history and the saved fields are in the returned project's
+`.aedtresults` folder. Then run, in the SCGSim environment:
+
+```python
+import json
+import tarfile
+from pathlib import Path
+
+from scgsim.aedt import collect_native_batch
+
+incoming = Path("pad-sweep-returned.tar.gz").resolve()
+returned_root = (Path.cwd() / "pad-returned").resolve()
+returned_root.mkdir(exist_ok=False)
+with tarfile.open(incoming, "r:gz") as archive:
+    archive.extractall(returned_root, filter="data")
+sweep = json.loads((returned_root / "sweep.json").read_text(encoding="utf-8"))
+collected_root = (Path.cwd() / "pad-collected").resolve()
+collected_root.mkdir(exist_ok=False)
+for row in sweep["cases"]:
+    run = collect_native_batch(
+        returned_root / row["package"],
+        returned_root / "attempts" / row["case_id"],
+        output_dir=collected_root / row["case_id"],
+    )
+    print(row["case_id"], "L =", row["inductance_h"], "H")
+    print(run.physics_results())
+    print(run.epr_result())
+```
+
+`collect_native_batch()` opens a copy of each returned project in AEDT, reads
+the adaptive history and the EPR of the saved fields, and returns the result
+as `resolve_results()` would, without solving again or rebuilding the model.
+`physics_results()` gives the mode's `frequency_ghz` and `q_factor`, and
+`epr_result()` the participations. A case whose history or saved fields are
+missing fails here and keeps its output for diagnosis.
+
+## Comparing the cases {#read-version-and-stage-records}
+
+Only the inductance changes between the three cases: the geometry, the
+materials, the EPR request and the solver controls are the same. Compare each
+case's frequency with its own convergence status and history, as
+[Convergence and reports](convergence-and-reports.qmd#interpret-for-scq-use)
+describes. The report of each case also records the AEDT release used at each
+stage. The [batch reference](../reference/specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch)
+gives the package contents and every failure rule.
+

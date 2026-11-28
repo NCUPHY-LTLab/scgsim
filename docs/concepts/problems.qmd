@@ -1,55 +1,73 @@
 ---
 title: "Choose the physical problem"
-description: "Connect capacitance, resonances, port response and matrix extraction to the circuit quantity you need."
+description: "Capacitance, resonant modes or a driven response: what each calculation asks, what it returns and which solver runs it, with numbers from the SimplePad."
 scgsim-kind: "concept"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/concepts/problems"
 ---
 
-A drawing can support several calculations. The physical problem determines
-what is excited, which boundaries are imposed and what the answer means.
+From one layout SCGSim can compute three kinds of answer: a capacitance
+matrix, the resonant modes, or the response to a signal at a port. Choose the
+one whose output is the circuit quantity you need. The examples are the
+[First simulation](../start/first-simulation.qmd) pad: a 200 µm square pad in a
+20 µm gap inside ground metal, on a 1000 µm chip.
 
-## Capacitance: charge response to conductor voltage
+| Problem | It asks | It returns | Solvers | Example |
+|---|---|---|---|---|
+| Capacitance | How much charge each conductor holds per volt | A capacitance matrix, in farads | Palace Electrostatic, Q3D | 112.54 fF between the pad and the ground ([First simulation](../start/first-simulation.qmd); one solve on the first mesh) |
+| Resonant modes | At which frequencies the layout rings, and where the energy sits | Frequency and $Q$ of each mode; on request, energy participation | Palace Eigenmode, HFSS Eigenmode | Mode 1 at 5.135702 GHz with a 10 nH junction across the gap ([recorded Palace run](https://github.com/NCUPHY-LTLab/scgsim/issues/84#issuecomment-6789403273); at most two refinement passes) |
+| Driven response | How the layout responds to a signal at its ports, frequency by frequency | Complex S-parameters versus frequency, as CSV and Touchstone | HFSS Driven Terminal | No recorded result in these pages yet |
 
-Electrostatic extraction solves for conductor charge under specified terminal
-voltages. A capacitance matrix relates charge and voltage, with conductor order
-and ground choices carried by the model. It can supply a circuit's pad-to-ground
-or mutual capacitance. Palace Electrostatic and Q3D are the implemented paths.
-A finite enclosure grounded at its exterior is a different model from one with
-only selected physical conductors grounded.
+A fourth calculation, Q2D, gives per-unit-length properties of a line's
+cross-section; [below](#finite-extraction-versus-a-cross-section).
 
-## Resonance: modes of a field and circuit model
+## Capacitance {#capacitance-charge-response-to-conductor-voltage}
 
-An Eigenmode calculation finds the resonant frequencies and fields of the
-specified model. A linearized junction can be represented by an inductive
-branch. That branch participates in the mode; it is not supplied by the drawn
-pad alone. For an ideal lumped LC model, $f_0=1/(2\pi\sqrt{LC})$ gives a useful
-interpretive reference, while the electromagnetic model includes distributed
-fields and its chosen boundaries.
+A capacitance calculation sets each **terminal**, a conductor you name, to 1 V
+in turn, holds the ground at 0 V and computes the charge on every conductor.
+The result is the capacitance matrix, in the order of the terminals; how to
+read its diagonal and off-diagonal entries is on the
+[First simulation](../start/first-simulation.qmd#read-the-result) page. What
+you ground is part of the problem: a box whose walls are grounded is a
+different model from one where only the chip's ground metal is at 0 V.
 
-Palace and HFSS provide the implemented Eigenmode paths. Optional EPR analysis
-asks where the mode stores energy and what selected loss assumptions imply.
-Read [energy participation](../eigenmode-epr.qmd) before interpreting those fractions.
+## Resonant modes {#resonance-modes-of-a-field-and-circuit-model}
 
-## Driven response: excite a port at a frequency
+An Eigenmode calculation finds the frequencies at which the model resonates
+and the field of each mode. A Josephson junction enters as a linear
+inductance on a port sheet across its gap, 10 nH in the example; the drawn
+pad alone has no such element. For an ideal lumped circuit,
+$f_0=1/(2\pi\sqrt{LC})$ is a useful reference, but the field calculation
+includes the distributed fields and the box around the chip.
 
-A driven problem asks how the model responds to an applied excitation.
-HFSS Modal and Terminal workflows expose complex S-parameters. The port model,
-reference conductor or integration direction is part of the problem. A peak in
-a driven response is not the same data structure as an Eigenmode result.
+Palace and HFSS run Eigenmode. On request they also compute energy
+participation: where the mode's energy sits and what given loss assumptions
+imply for its $Q$; read [Energy participation and Surface EPR](surface-epr.qmd)
+before using those numbers.
 
-## Finite extraction versus a cross section
+## Driven response {#driven-response-excite-a-port-at-a-frequency}
 
-Q3D extracts conductor matrices for a finite three-dimensional model. Q2D
-extracts per-unit-length properties of an explicitly authored cross section.
-Neither automatically replaces the other. A finite length, end geometry and
-port treatment cannot be recovered from a per-length matrix alone.
+A driven calculation applies a signal at a port and computes the response at
+each frequency of a sweep. HFSS Driven Terminal does this with two lumped ports
+on port sheets of the layout and returns the S-parameters. A peak in a driven
+response and an Eigenmode frequency are two different results; one does not
+replace the other. Palace Driven is not implemented, and which HFSS ports are
+available is on [Supported calculations](../reference/supported-calculations.qmd).
+
+## Cross-section {#finite-extraction-versus-a-cross-section}
+
+Q3D extracts the matrix of a finite 3D model. Q2D extracts per-unit-length
+capacitance, conductance, inductance and resistance of a cross-section you
+declare, for a line that is uniform along its length. Neither replaces the
+other: a per-unit-length matrix carries nothing about a finite length, its ends
+or its ports.
 
 ::: {.callout-tip title="Choose a quantity before a solver"}
 Write down the conductor pair, mode or port response you need, its units and
-the intended circuit-model use. Then choose a supported workflow from the
-[capability table](../backend-support.qmd).
+how your circuit model will use it. Then choose a workflow from
+[Supported calculations](../reference/supported-calculations.qmd).
 :::
 
-For native formulations, see [Palace problem types](https://awslabs.github.io/palace/stable/guide/problem/)
+For the solvers' own formulations, see
+[Palace problem types](https://awslabs.github.io/palace/stable/guide/problem/)
 and the [PyAEDT user guide](https://aedt.docs.pyansys.com/version/stable/User_guide/index.html).

@@ -1,0 +1,212 @@
+---
+title: "Capacitance with Palace"
+description: "Compute the capacitance matrix of a layout's conductors with Palace, refine the mesh until it settles, and read the result."
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/palace-electrostatic"
+aliases:
+  - ../course/palace-electrostatic.html
+---
+
+Palace's Electrostatic solver computes the capacitance matrix of the
+conductors you name as terminals. For the 200 µm pad of
+[First simulation](../start/first-simulation.qmd), with the mesh refined until
+the pad's capacitance changes by less than 1 % from one refinement to the
+next, the script on this page prints:
+
+```text
+Status: completed
+Convergence: converged at pass 3
+Capacitance matrix (fF): pad
+     pad      95.43
+```
+
+95.43 fF is the capacitance between the pad and the ground metal around it.
+First simulation's 112.54 fF is the same model solved once, on the first mesh
+and with first-order elements; [Read the result](#read-the-result) shows how
+the number moves as the mesh is refined.
+
+You need the installation of First simulation: SCGSim with its `palace`
+extra, the OrcaPen SC PDK, Palace 0.18.1, and `SCGSIM_PALACE_EXECUTABLE` set
+to the `palace` command ([First simulation](../start/first-simulation.qmd#palace-executable)).
+
+## The script {#the-script}
+
+Save this as `pad_capacitance.py` in your study project:
+
+```python
+import os
+import subprocess
+from pathlib import Path
+from uuid import uuid4
+
+import gdsfactory as gf
+import orcapen_sc_pdk
+from orcapen_sc_pdk import get_material_records
+from orcapen_sc_pdk.tech import get_single_die_layer_stack
+from scgsim.geometry import GeometryPlan
+from scgsim.palace import Capacitance, ElectrostaticSim, resolve_palace_result
+
+# 1. The layout and plan of First simulation: a 200 µm pad in a 20 µm gap on a 1000 µm die.
+orcapen_sc_pdk.activate()
+component = gf.get_component(
+    "square_pad_capacitor", pad_side_um=200.0, gap_um=20.0, die_side_um=1000.0
+)
+plan = GeometryPlan(
+    component=component,
+    root_id="chip",
+    layer_stack=get_single_die_layer_stack(),
+    material_records=get_material_records(),
+    coupon_padding_um=0.0,
+)
+plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
+plan.set_vacuum_region(padding=(0.0, 0.0, 1000.0))
+
+# 2. The problem: the pad is the terminal, the ground Net is held at 0 V.
+sim = ElectrostaticSim()
+sim.set_plan(plan.prepare())
+sim.set_output_dir(Path(".artifacts/pad-capacitance") / uuid4().hex[:12])
+sim.add_terminal("pad", net_id="pad")
+sim.add_ground(net_id="ground")
+sim.set_electrostatic(unassigned_conductor_policy="error")
+
+# 3. Refine the mesh until C[pad][pad] settles (see Convergence and reports).
+sim.set_numerical(order=2, amr_max_passes=4)
+sim.set_convergence(Capacitance.element("pad", "pad").within(percent=1.0))
+
+# 4. Mesh, write Palace's input, run Palace with 4 MPI processes.
+sim.mesh()
+sim.write_config()
+handoff = sim.prepare_handoff(
+    profile="direct-local",
+    executable=os.environ["SCGSIM_PALACE_EXECUTABLE"],
+    resources={"command_style": "wrapper", "processes": 4, "threads": 1},
+)
+subprocess.run(["bash", "run_palace.sh"], cwd=handoff.run_dir, check=True)
+
+# 5. Read the result: where refinement stopped, and the capacitance matrix in fF.
+result = resolve_palace_result(handoff.run_dir, expected_handoff_id=handoff.handoff_id)
+print("Status:", result.status)
+verdict = result.convergence.verdict
+print("Convergence:", verdict.state, "at pass", verdict.pass_number)
+terminals = {
+    entry["index"]: entry["terminal_name"]
+    for entry in result.provenance.index_map["entries"]
+    if entry["role"] == "terminal"
+}
+print("Capacitance matrix (fF):", *terminals.values())
+for row in result.tables["terminal-C"].rows:
+    values = [row[f"C[i][{column}] (F)"] * 1e15 for column in terminals]
+    print(f"{terminals[int(row['i'])]:>8}", *(f"{value:10.2f}" for value in values))
+```
+
+Sections 1, 4 and 5 are those of First simulation, which explains each line
+([First simulation](../start/first-simulation.qmd#the-script)). What is new:
+
+- **Section 2** names the conductors. A Net is a named piece of metal that
+  acts as one conductor; the plan defines `pad` and `ground`. The pad is the
+  terminal, and the ground Net is held at 0 V
+  ([Terminals and grounds](#terminals-and-grounds) gives the choices).
+- **Section 3** asks for second-order finite elements (`order=2`) and lets
+  Palace refine the mesh up to four times (`amr_max_passes=4`). Palace's
+  adaptive mesh refinement (AMR) splits the elements where its error estimate
+  is largest and solves again; each solve is one pass.
+  []{#declare-when-refinement-has-converged}`set_convergence` declares when
+  the result has settled: here, when `C[pad][pad]` has changed by at most 1 %
+  since the pass before. SCGSim then stops Palace at the first pass where that
+  holds. [Convergence and reports](convergence-and-reports.qmd#declare-convergence)
+  explains the declaration and how to choose a threshold for your use; the
+  1 % here is the threshold the [Q3D example](capacitance-q3d.qmd) asks of Q3D,
+  not a recommendation.
+
+Run it from the study project, in the shell where you set
+`SCGSIM_PALACE_EXECUTABLE`:
+
+```bash
+uv run pad_capacitance.py
+```
+
+With 4 MPI processes it took about a minute and a half on a workstation. The
+script prints the Palace log, then the lines at the top of this page.
+
+## Read the result {#read-the-result}
+
+Each pass is one solve on a finer mesh. The run folder keeps every pass's
+result under `results/palace/iteration<N>/`, and the report shows the same
+numbers ([Convergence and reports](convergence-and-reports.qmd)):
+
+| Pass | Tetrahedra | C[pad][pad] | Change from the pass before |
+|---:|---:|---:|---:|
+| 1 | 31,096 | 97.20 fF | |
+| 2 | 169,255 | 95.89 fF | 1.37 % |
+| 3 | 659,496 | 95.43 fF | 0.48 % |
+
+The change first falls below 1 % at pass 3, so the run converged there and
+SCGSim stopped Palace before a fourth pass. The result is pass 3's table. A
+run of the same model with a stricter declaration went on to a fourth pass,
+on 1,653,207 tetrahedra, and gave 95.22 fF, a further change of 0.22 %. How
+small a change you need depends on what you use the capacitance for.
+
+The element order matters as much as the mesh: on the same first mesh,
+first-order elements give the 112.54 fF of First simulation and second-order
+elements give 97.20 fF. The refinement adds elements where the field is
+strongest, around the pad's edges and the gap.
+
+With one terminal the matrix has one entry: the capacitance between the pad
+and everything held at 0 V. With several terminals, Palace reports the
+Maxwell capacitance matrix: each diagonal entry is one terminal's capacitance
+to everything else, and each off-diagonal entry C[a][b] is minus the
+capacitance between terminals a and b
+([Terms and units](../reference/terms-and-units.qmd#term-maxwell-capacitance-matrix)).
+
+## Terminals and grounds {#terminals-and-grounds}
+
+Every conductor is a Net of the plan, and the simulation says what each Net
+is:
+
+| Call | What it does |
+|---|---|
+| `sim.add_terminal("pad", net_id="pad")` | The Net is a terminal: Palace sets it to 1 V in turn, and it has a row and a column in the matrix, named `pad`. |
+| `sim.add_ground(net_id="ground")` | The Net is held at 0 V. It has no row in the matrix. |
+| `sim.set_electrostatic(unassigned_conductor_policy="error")` | Metal in no terminal and no ground Net is an error. The default, `"ground"`, holds such metal at 0 V without a word. |
+| `sim.set_electrostatic(exterior_boundary_policy="ground", unassigned_conductor_policy="error")` | The outer faces of the vacuum region are held at 0 V too, like a grounded box around the chip. The default, `"none"`, gives them no condition, so no field crosses them (Palace's log calls it "ZeroCharge"). |
+
+Terminal and ground Nets are given by their Net names, exactly as the plan
+defines them. The [Electrostatic reference](../reference/specs/palace-electrostatic-sgb.qmd)
+gives every rule.
+
+## Mesh and element order {#mesh-controls}
+
+`set_mesh(...)` sets the first mesh: `recipe` the element sizes, `mesher` the
+Gmsh algorithms and the geometry order, `budgets` how long the repair of poor
+elements may try, and `quality_threshold` the lowest element quality allowed
+(0.01 by default). The script keeps the defaults. When an element stays below
+the threshold, `mesh()` stops with `MeshRepairError` and says where
+([Palace mesh controls](../reference/specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)).
+
+`set_numerical(order=...)` is the finite-element order Palace solves with; it
+is separate from the mesh's geometry order.
+
+## Metal as sheets {#select-the-geometry-approximation-and-build-inputs}
+
+By default the metal films are solids with their real thickness, here 100 nm
+of aluminium (Route B). `sim.set_route("A")`, before `mesh()`, makes each film
+a sheet of zero thickness instead, while volumes such as bumps keep their
+shape (Route A). [Choose the geometric approximation](../concepts/model-and-numerics.qmd#choose-the-geometric-approximation)
+explains when to use which; the profiles `substrate_face` and
+`metal_gap_equivalent`, passed as `set_route("A", approximation_profile=...)`,
+are in the [GeometryPlan reference](../reference/specs/geometry-plan.qmd).
+
+## Before you run {#before-you-run}
+
+- `ElectrostaticSim.simulation_drc(plan)` checks, in seconds and without
+  meshing, that the layout can be built and meshed
+  ([Check a layout](check-a-layout.qmd)).
+- `sim.input_summary()`, before `mesh()`, shows what `mesh()` will build from:
+  the plan with its vacuum region, the terminals, the grounds and the
+  policies.
+- `sim.mesh_summary()`, after `mesh()`, shows the mesh: its controls and its
+  element and region counts
+  ([Inspect the prepared model](inspect-the-prepared-model.qmd)).
+- To run Palace on another computer or under Slurm, change only
+  `prepare_handoff` ([Run a prepared model](run-elsewhere.qmd)).

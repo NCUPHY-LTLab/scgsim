@@ -1,0 +1,419 @@
+---
+title: "Upgrade to 3.0.0"
+description: "Find the version your code was written for, then follow its checklist to 3.0.0, with the final code."
+scgsim-kind: "contract"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/api-migration"
+aliases:
+  - ../api-migration.html
+---
+
+Each release candidate of SCGSim 3.0 changed some calls, with no compatibility
+layer: a script written for an earlier version stops with an error that names
+the call to change. Find the version your code was written for, then work
+through its checklist. Each checklist goes straight to the current version
+and shows the final code. Until you are ready, keep the version your study project pins;
+nothing changes for it.
+
+## Find your version {#find-your-version}
+
+The version is the tag your project installs (`@v3.0.0rc3` in its
+`pyproject.toml`), or what
+`python -c 'from importlib.metadata import version; print(version("scgsim"))'`
+prints.
+
+| Your code was written for | What changes most | Your checklist |
+|---|---|---|
+| 3.0.0rc5 or 3.0.0rc6 | Nothing in your code. Prepare your models again, run Palace Route A again, and save Palace EPR results again | [From 3.0.0rc5 or rc6](#from-3-0-0rc6) |
+| 3.0.0rc4 | Junctions, lumped RLCs and Driven ports are declared on the plan, not on the simulation | [From 3.0.0rc4](#from-3-0-0rc4) |
+| 3.0.0rc3 | Surface EPR and the vacuum region are set on the plan, not on the simulation | [From 3.0.0rc3](#from-3-0-0rc3) |
+| 3.0.0rc1 or 3.0.0rc2 | The layout check takes the plan, and AEDT builds every 3D model from the plan | [From 3.0.0rc1 or rc2](#from-rc1-or-rc2) |
+| 2.0 (a 2.0.0 release candidate) | Palace builds its model with SGB and has new mesh controls; the route and Surface EPR are two settings; old run folders are not read | [From 2.0](#from-2-0) |
+
+Code older than 2.0, which imports `scgsim.sgb`, first moves its imports with
+the [old-import inventory](../contribute/internals/api-owners.qmd#geometry-api),
+then follows From 2.0.
+
+## From 3.0.0rc5 or rc6 {#from-3-0-0rc6}
+
+Nothing in your code changes. From 3.0.0rc6 on, an install without the `aedt`
+extra imports `scgsim.aedt` and `scgsim.visualization`. Three changes affect
+what you prepared, ran or saved:
+
+- **Prepare it again.** An SGB model now says it is `scgsim.sgb.sidecar.v7`.
+  A model, Palace run folder or AEDT handoff prepared with 3.0.0rc6 or earlier
+  is refused wherever SCGSim reads its model, with an error that says to
+  rebuild it. An older Route A model does not state the edges of its films,
+  which the mesh is now sized from. Call `plan.prepare()` and prepare the
+  simulation again.
+- **Run Palace Route A again.** On Route A (`set_route("A")`), 3.0.0rc6 and
+  earlier meshed the edge of each film at the model's coarse size, so a CPW
+  gap could be a single element across. The results came out far off, with no
+  error: on a CPW test layout, sizing the edges moved the first Eigenmode
+  frequency from 2.04 to 4.12 GHz and the capacitance from 1.19 to 0.29 pF.
+  Each film's edge is now meshed as on Route B, so a Route A mesh has about
+  as many unknowns as Route B's.
+  Route B and AEDT are not affected.
+- **Save Palace EPR results again.** Each Eigenmode EPR row now has an
+  `external` group, the coupling loss of each port with a resistance, and an
+  Eigenmode run whose ports are all resistive, such as 50 Ω feedline ports, is
+  read instead of refused. A detached EPR result saved with 3.0.0rc6 or
+  earlier (`scgsim.palace.epr-result.v2`) has no such group, so
+  `resolve_epr_result` refuses it; save `epr_result()` of the new run again
+  ([What a result holds](../reference/specs/palace-eigenmode.qmd#results-and-offline-analysis)).
+
+## From 3.0.0rc4 {#from-3-0-0rc4}
+
+[]{#lumped-elements-on-the-plan}A lumped element (a junction, a resistor, a
+capacitor, or the port a measurement drives) is a fact of the device, the same
+for every solver, so it is now declared once, on the `GeometryPlan`, by the
+name of the port sheet it sits on. Palace and AEDT read it from the snapshot;
+no simulation declares one of its own. Declared the old way or the new way, a
+study builds the same model, byte for byte (the mesh, the Palace configuration
+and the AEDT model files, checked on the roster's Eigenmode layouts and the
+HFSS EPR acceptance case). Four other changes are at the end
+of this section: [what you prepared with 3.0.0rc4](#models-from-rc4).
+
+1. Replace Palace `sim.add_port(name, layer=..., layout_sheet=True, inductance=L)`
+   with `LumpedElement(name, inductance_h=L)` in `plan.set_lumped_elements([...])`,
+   before `plan.prepare()`. `layer` goes: the plan knows the sheet's layer. The
+   elements keep the order you give them, so the first is still Palace's `P1`.
+2. Replace AEDT `sim.add_junction(planar_junction_from_port(...))` and the
+   `RectangularJunctionSpec` you gave `plan.set_rectangular_junctions(...)` with
+   one `LumpedElement(sheet, inductance_h=L, capacitance_f=C)` on the plan. The
+   plan finds the sheet's two conductors and their Nets itself. The junction's
+   id is now its sheet's name: write that name in
+   `EprAnalysisRequest(junction_ids=...)` and read it in the results.
+3. Replace AEDT `sim.add_lumped_rlc(LumpedRlc(port_sheet_id, "parallel", ...))`
+   with `LumpedElement(sheet, resistance_ohm=..., inductance_h=..., capacitance_f=...)`,
+   named by the sheet's name, not its `port_sheet_id`. The components are in
+   parallel, as in Palace; a series RLC is no longer declarable.
+4. For HFSS Driven Terminal, replace the two `LumpedTerminalPort(...)` records,
+   `prepare_sgb_model(..., ports=...)` and `prepare_hfss_driven_from_geometry(model=..., ...)`
+   with two `LumpedPort(sheet, reference_net=..., impedance_ohm=...)` on the plan
+   and `prepare_hfss_driven_from_geometry(plan.prepare(), modeling=..., ...)`.
+   Port 1 is the first `LumpedPort` you give.
+5. `simulation_drc` checks the plan's elements as the simulation builds them;
+   it no longer gives every sheet a fixed 1 nH. A sheet the plan declares
+   nothing on is left out of a Palace or HFSS model; before, HFSS refused it.
+
+The code becomes:
+
+```python
+# Before
+plan.set_rectangular_junctions([RectangularJunctionSpec("jj", ...)])
+snapshot = plan.prepare()
+sim = palace.EigenmodeSim()
+sim.set_plan(snapshot)
+sim.add_port("chip/J1", layer="metal", layout_sheet=True, inductance=10e-9)
+hsim = aedt.EigenmodeSim(modeling="solid", aedt_version="2024.2")
+hsim.set_plan(snapshot)
+hsim.add_junction(planar_junction_from_port(snapshot.geometry_input, port_name="chip/J1",
+                  junction_id="jj", terminal_a_net="A", terminal_b_net="B",
+                  inductance_h=10e-9, capacitance_f=0.0))
+hsim.set_epr_request(EprAnalysisRequest(junction_ids=("jj",)))
+
+# Now
+plan.set_lumped_elements([LumpedElement("chip/J1", inductance_h=10e-9)])
+snapshot = plan.prepare()
+sim = palace.EigenmodeSim()
+sim.set_plan(snapshot)
+hsim = aedt.EigenmodeSim(modeling="solid", aedt_version="2024.2")
+hsim.set_plan(snapshot)
+hsim.set_epr_request(EprAnalysisRequest(junction_ids=("chip/J1",)))
+```
+
+| Removed | Now |
+|---|---|
+| Palace `EigenmodeSim.add_port`, `EigenmodeSim.ports` | `plan.set_lumped_elements([LumpedElement(...)])`; `sim.input_summary().data["backend"]["lumped_elements"]` |
+| AEDT `EigenmodeSim.add_junction`, `add_lumped_rlc`, and the `junctions` and `lumped_rlcs` arguments | `LumpedElement` on the plan |
+| `GeometryPlan.set_rectangular_junctions` | `LumpedElement` on the plan; the plan binds the sheet to its two conductors |
+| `scgsim.aedt.LumpedTerminalPort`, `LumpedRlc`, `PlanarJunction`, `planar_junction_from_port`, `prepare_sgb_model`; `scgsim.aedt.specs.LumpedRlc`, `LumpedTerminalPort` | `LumpedElement` and `LumpedPort` from `scgsim.geometry`; HFSS builds its records from them |
+| `prepare_hfss_driven_from_geometry(model=...)` | `prepare_hfss_driven_from_geometry(snapshot, modeling=..., ...)` |
+
+Errors now come from `prepare()`, naming the element, its sheet's layer and its
+place in µm: a sheet the layout does not draw, a sheet that lands on other than
+two conductors, two conductors of one Net, or a port whose `reference_net` is
+neither conductor's Net. [Lumped elements](../reference/specs/geometry-plan.qmd#lumped-elements)
+gives the records, and [Supported calculations](../reference/supported-calculations.qmd#lumped-elements)
+what each calculation does with them.
+
+[]{#models-from-rc4}Four other changes affect what you prepared or ran with
+3.0.0rc4:
+
+- **Prepare it again.** An SGB model now says it is `scgsim.sgb.sidecar.v7`.
+  A model, Palace run folder or AEDT handoff prepared with 3.0.0rc6 or earlier
+  is refused wherever SCGSim reads its model, with an error that says to
+  rebuild it. The old model may list a port sheet's two conductors in the
+  other order, and read now it would put an HFSS Terminal on the wrong edge.
+  Call `plan.prepare()` and prepare the simulation again.
+- **Run HFSS Driven Terminal again** where the layout declares a port's
+  signal conductor before its ground, as the OrcaPen SC PDK launcher does.
+  3.0.0rc4 put the Terminal on the port sheet's ground edge; it is now on its
+  signal edge.
+- **Run HFSS Eigenmode again where a lumped element has a capacitance.**
+  3.0.0rc4 and earlier wrote the capacitance in a unit AEDT reads as
+  femtofarads, so the model held 10⁻¹⁵ times the capacitance you declared, with
+  no error. This affects a Lumped RLC and an EPR junction given
+  `capacitance_f`; their inductance and resistance were right, and Palace is
+  not affected.
+- **Run Palace Route A again**, as [From 3.0.0rc5 or rc6](#from-3-0-0rc6)
+  explains.
+
+## From 3.0.0rc3 {#from-3-0-0rc3}
+
+[]{#plan-owns-surface-epr}Surface EPR and the vacuum region change the geometry
+and do not depend on the solver, so from 3.0.0rc4 they are set once, on the
+`GeometryPlan`. Run folders written by 3.0.0rc3 are read as before: the model,
+the Palace configuration and the results are unchanged.
+
+1. Replace `sim.set_surface_epr(specs)` with `plan.set_surface_epr(specs)`,
+   before `plan.prepare()`, for Palace `EigenmodeSim` and `ElectrostaticSim`
+   and AEDT `EigenmodeSim`. `None` turns it off and `{}` is refused, as before.
+2. Replace the Palace `sim.set_vacuum_region(padding)` with
+   `plan.set_vacuum_region(padding)`, before `plan.prepare()`.
+3. Remove `surface_epr_specs=` from `simulation_drc(...)` on all three classes:
+   the check reads the plan's. `route`, `approximation_profile` and `modeling`
+   stay.
+4. Remove the `surface_epr_specs` and `vacuum_region` arguments of the Palace
+   simulation constructors, and `surface_epr_specs` of AEDT `EigenmodeSim`.
+   `sim.surface_epr_specs` now reads the specs of the bound plan.
+5. For AEDT `EigenmodeSim`, replace `set_geometry(...)`, `set_stack(...)` and the
+   `component`, `build_input` and `stack` arguments with
+   `sim.set_plan(plan.prepare())`, its only source.
+
+The code becomes:
+
+```python
+# Before
+sim = EigenmodeSim()
+sim.set_route("A")
+sim.set_plan(plan.prepare())
+sim.set_vacuum_region((0.0, 0.0, 1000.0))
+sim.set_surface_epr(specs)
+EigenmodeSim.simulation_drc(plan, surface_epr_specs=specs, route="A")
+
+# Now
+plan.set_vacuum_region((0.0, 0.0, 1000.0))
+plan.set_surface_epr(specs)
+EigenmodeSim.simulation_drc(plan, route="A")
+sim = EigenmodeSim()
+sim.set_route("A")
+sim.set_plan(plan.prepare())
+```
+
+The route is unchanged by this step: the check builds its own temporary
+simulation, so its `route=` must be the one the simulation sets with
+`set_route` (a simulation without `set_route` is Route B, and so is a check
+without `route=`). The specs are checked by the same rules, against the plan's materials, when
+you set them and again in `prepare()`. A refusal that named `set_surface_epr`
+on the simulation now names `GeometryPlan.set_surface_epr`. HFSS Driven
+Terminal and Q3D still read no Surface EPR and cut no bands.
+
+Then declare the lumped elements on the plan: [From 3.0.0rc4](#from-3-0-0rc4).
+
+## From 3.0.0rc1 or rc2 {#from-rc1-or-rc2}
+
+Work through these steps in order.
+
+1. **Old run folders.** Palace run folders written by 3.0.0rc1 are not read:
+   from 3.0.0rc2 the returned record states how the solver ended, and result
+   reading refuses one without it. HFSS and Q3D run folders written by
+   3.0.0rc1 or rc2 came from AEDT's own geometry builder, which is gone: the AEDT runner,
+   `resolve_results()` and `analyze_epr()` refuse them. Prepare and run such a
+   study again, or read the old folder with the version that wrote it.
+2. []{#simulation-drc-migration}**The layout check takes the plan.** The first
+   argument of `simulation_drc` is the `GeometryPlan` the simulation will be
+   given, before `prepare()`; `layer_stack`, `material_records`, `instances`,
+   `nets` and `surface_epr_specs` are gone, because they are the plan's.
+
+   ```python
+   # Before
+   EigenmodeSim.simulation_drc(component, layer_stack=layer_stack, material_records=material_records, nets=nets, route="A")
+
+   # Now
+   plan = GeometryPlan(component=component, root_id="chip", layer_stack=layer_stack, material_records=material_records, coupon_padding_um=0.0)
+   plan.set_nets(nets)
+   plan.set_vacuum_region((0.0, 0.0, 1000.0))
+   plan.set_lumped_elements(elements)  # the junctions, loads and ports, when the device has any
+   plan.set_surface_epr(specs)  # when the simulations compute Surface EPR
+   EigenmodeSim.simulation_drc(plan, route="A")
+   ```
+
+   The check adds nothing to the plan. Before, it used zero coupon padding and,
+   when the layout had no vacuum, a vacuum padded by (0, 0, 1000) µm; now it
+   uses the plan's, and a plan without a vacuum region is refused. Register an
+   assembly's instances with `plan.register_instance` before `set_nets`.
+   [Check a layout](check-a-layout.qmd) shows the check and its report.
+3. **Surface EPR, the vacuum region and the lumped elements on the plan.**
+   Steps 1 to 5 of [From 3.0.0rc3](#from-3-0-0rc3), then
+   [From 3.0.0rc4](#from-3-0-0rc4).
+4. []{#aedt-sgb-migration}**AEDT builds from the plan.** Every 3D AEDT
+   calculation is prepared from a `GeometryPlan` snapshot: AEDT imports the
+   same model Palace meshes and builds no geometry of its own.
+
+   | Calculation | Removed | Now |
+   |---|---|---|
+   | HFSS Eigenmode | `HfssEigenmodeSpec`, `gds_path` | `EigenmodeSim(modeling=..., aedt_version=...)`, `sim.set_plan(plan.prepare())`, `sim.prepare_handoff()`; see [HFSS Eigenmode](modes-hfss.qmd) |
+   | HFSS Driven Terminal | `HfssDrivenSpec`, `HfssDrivenMode`, `LayerImport`, `ObjectBinding`, `LengthMeshSpec`, `PreparedPlanarGeometry`, `prepare_planar_geometry_input`; the `modeling`, `geometry`, `ports` and `geometry_workers` arguments of `prepare_hfss_driven_from_geometry` | two `LumpedPort`s on the plan, then `prepare_hfss_driven_from_geometry(plan.prepare(), modeling=..., ...)`; see [HFSS Driven Terminal](s-parameters-hfss.qmd) |
+   | Q3D | `Q3dBodySpec`; the `materials` and `region_padding_um` arguments of `prepare_q3d_from_geometry` | `prepare_q3d_from_geometry(snapshot, ...)`, with the stack's materials; see [Q3D](capacitance-q3d.qmd) |
+
+   The rest of this step:
+
+   - The AEDT Region is the plan's vacuum region, for every calculation;
+     `region_padding_um` is gone.
+   - The AEDT request's own physical layers (`PhysicalLayerSpec`) are gone:
+     the plan's layer stack declares them, as `PhysicalLayerDeclaration`.
+   - Surface EPR for HFSS Eigenmode is the plan's: `SurfaceEprSpec`,
+     `combine_epr_mode` and `combine_surface_epr_mode` are gone.
+     `EprAnalysisRequest.surface_contribution_ids` is now `surface_epr_groups`,
+     and `analyze_epr(geometry=..., geometry_workers=...)` is now
+     `analyze_epr(model=...)`.
+   - `prepare_handoff(spec=...)` takes only `Q3dSpec` and `Q2dSpec`; an HFSS
+     request is refused with the name of the HFSS function to call.
+     `--geometry-workers` and `ExecutionOptions.geometry_workers` are gone.
+   - Driven Modal and wave ports are not available. A two-port network is
+     Driven Terminal with two `LumpedPort`s on the plan's port sheets
+     ([issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135) tracks
+     Driven Modal).
+   - Q3D extracts capacitance and conductance only: `Q3dTerminalPair`,
+     `terminal_pairs`, `Q3dSpec.solve_ac_rl` and the `source_object`,
+     `source_side`, `sink_object` and `sink_side` fields of `Q3dNetSpec` are
+     gone ([issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265)
+     tracks AC/RL).
+   - `prepare_hfss_driven_from_geometry` and `prepare_q3d_from_geometry` now
+     refuse a model the AEDT import cannot realize before they write the
+     handoff, without AEDT.
+5. []{#palace-convergence-migration}**Convergence and reports** (new in
+   3.0.0rc2; from rc2, skip this step). You can now
+   [declare when a run has converged](convergence-and-reports.qmd#declare-convergence)
+   with `sim.set_convergence(...)`; Palace is then stopped at that pass. With a
+   declaration, a stated `amr_tolerance` is refused. The reports changed for
+   every run, declared or not:
+
+   ::: {.askr-table-compact}
+   | Before | Now |
+   |---|---|
+   | Run Identity showed every recorded field | Problem, Route, Profile, AMR passes recorded and MPI × OpenMP; the rest with `show_details=True` |
+   | `|Δ …| vs AMR pass` figures | Removed. With a declaration each quantity is followed by its declared change in percent |
+   | One surface figure with MA, MS and SA | One figure per interface kind, a line for the whole surfaces and one per inset |
+   | `show_physics_quantities()` opened with the surface ranking | It opens with the capacitance matrix, or each mode's frequency and Q |
+   | `show_all_results()`: trust, benchmark, physics | Trust, physics, benchmark |
+   | `show_simulation_benchmark()` took no `theme` | Every view takes `theme="light"` or `"dark"` |
+   | A capacitance figure named `C[1][1]` | Named by its terminals, `C[signal][signal]` |
+   :::
+
+   `ResolvedPalaceResult.convergence` holds the check of every pass and the
+   verdict, and `ResolvedPalaceResult.solver_end` how Palace ended.
+
+## From 2.0 {#from-2-0}
+
+Work through these steps in order, then continue with
+[From 3.0.0rc1 or rc2](#from-rc1-or-rc2) from its step 2.
+
+1. **Old run folders.** Palace now writes mesh manifest `schema_version` 2 and
+   index map `schema_version` 3 and reads only those; run folders written by
+   2.0 and detached EPR results of `scgsim.palace.epr-result.v1` are refused
+   ([which ones](../reference/specs/report-model.qmd#palace-run-schemas)).
+   AEDT results recorded before runtime-source schema
+   `scgsim.aedt.runtime-source.v30` are refused too. Prepare and run again, or
+   read an old result with the version that wrote it.
+2. **Imports.** Import every public name from its package: `scgsim.geometry`,
+   `scgsim.palace`, `scgsim.aedt` or `scgsim.visualization`. The modules below
+   them moved in 3.0 and keep no alias: for example
+   `scgsim.palace.preparation.eigenmode` is gone, and
+   `from scgsim.palace import EigenmodeSim` is the import to use.
+   [The API index](../reference/api-index.qmd) lists the public names.
+3. []{#palace-mesh-migration}[]{#geometry}**Palace builds its model with SGB.**
+   `mesh()` builds the geometry with SGB and meshes it with `scgsim.meshing`.
+   []{#mesh-controls}`set_mesh` takes new controls, alike on both Palace
+   simulations
+   ([Palace mesh controls](../reference/specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)):
+
+   ::: {.askr-table-compact}
+   | Removed | Replacement |
+   |---|---|
+   | `size_policy`, `refined_mesh_size`, `max_mesh_size`; `set_numerical(refined_mesh_size=, max_mesh_size=)` | `recipe`: `FeatureRecipe` (default), `GlobalSizeRecipe` or `UniformBoundaryRecipe` |
+   | `algorithm_3d` | `mesher=MesherOptions(algorithm_3d=...)`, with `scgsim.meshing.DELAUNAY` or `HXT` |
+   | `geometry_order`, `high_order_optimize` | `MesherOptions(geometry_order=..., high_order_optimize=...)` |
+   | `threads`, `surface_threads` | None: meshing runs on one thread, because HXT with several threads was not reproducible |
+   | None | `quality_threshold` (default 0.01 minSICN) and `budgets` (`Budgets`) |
+   :::
+
+   No recipe reproduces an old mesh element for element. The closest to each
+   former sizing choice:
+
+   ::: {.askr-table-compact}
+   | Former setting | Closest recipe | What changes |
+   |---|---|---|
+   | `scgsim_default` (refined 5 µm, maximum 300 µm) | `UniformBoundaryRecipe()` | Before, only the boundary, PEC and port curves were sized. Now every curve is sized; pass `MesherOptions(algorithm_2d=5)` to keep the old 2D algorithm. |
+   | `gmsh_default` (no size field) | `GlobalSizeRecipe()` | The maximum size is now the bounding-box diagonal over 20, and the mesher is Delaunay by default. |
+   | `algorithm_3d`, `threads` | `MesherOptions(algorithm_3d=...)` | Meshing runs on one thread. |
+   :::
+
+   The default is none of these: `FeatureRecipe()` sizes the curves the
+   geometry calls for. With every recipe, a mesh that cannot reach the quality
+   threshold now stops `mesh()` with `MeshRepairError`; before, mesh quality
+   never stopped a run.
+4. []{#surface-epr}**The route and Surface EPR are two settings.**
+   `set_surface_epr(*, representation, specs, route_a_thin_film=None,
+   approximation_profile=None)` on the simulation became
+   `sim.set_route(route, *, approximation_profile=None)` and
+   `plan.set_surface_epr(specs)`:
+
+   ```python
+   # Before
+   sim.set_surface_epr(representation="A", specs=specs)
+
+   # Now
+   plan.set_surface_epr(specs)  # before plan.prepare()
+   sim.set_route("A")
+   ```
+
+   - Route B is the default, so a Route B simulation calls `set_route` not at
+     all. Route A is `set_route("A")`, with the `thin_film` profile;
+     `substrate_face` and `metal_gap_equivalent` are
+     `set_route("A", approximation_profile=profile)`. The keywords
+     `representation` and `route_a_thin_film` are gone, and so are the
+     simulation's `thin_film` field and the `thin_film` key of
+     `input_summary()`, which now shows the profile's name.
+   - Surface EPR is computed only when the plan was given specs, for
+     Eigenmode and Electrostatic alike. Drop a call that asked for none (Route
+     B with empty `specs`): an empty mapping is refused.
+   - `inset_margins_um` takes only positive, strictly increasing margins, so
+     drop a leading `0.0`: the row of the whole surface is always there.
+   - Palace no longer writes native `Mask` or `Inset`, so margin rows need no
+     special Palace build, and result reading refuses a config that has native
+     `Mask` rows.
+   - `inset_margins_by_entity_um` is new, for margins per conductor on `MA` and
+     `MS`. `face_kinds` takes `sheet`, `top`, `bottom` and `interface`, and
+     refuses `sidewall` when the spec asks for margins.
+
+   The [Eigenmode contract](../reference/specs/palace-eigenmode.qmd#surface-epr-margins)
+   defines the keys and the names of the rows, such as `MA::pad__top::band=1`.
+5. []{#results}**Renamed result records.** The new names have no alias:
+
+   ::: {.askr-table-compact}
+   | Before | Now |
+   |---|---|
+   | `SurfaceMaskEprRecord`, `SurfaceMaskEprSeriesSnapshot` | `SurfaceMarginEprRecord`, `SurfaceMarginEprSeriesSnapshot` |
+   | `PhysicsQuantitiesReport.masked_snapshots` | `PhysicsQuantitiesReport.margin_snapshots` |
+   | `scgsim.palace.epr-result.v1` | `scgsim.palace.epr-result.v3` |
+   | `surface-mask-Q.csv` and `surface-mask-energy.csv` | Margin rows are read from `surface-Q.csv` |
+   :::
+
+## For contributors {#for-contributors}
+
+Where each public name is defined, and the rules for moving one, are in
+[API owners](../contribute/internals/api-owners.qmd):
+
+- []{#migration-rules}[the rules for moving a public name](../contribute/internals/api-owners.qmd#migration-rules);
+- []{#geometry-api}[geometry names, from `scgsim.sgb` to `scgsim.geometry`](../contribute/internals/api-owners.qmd#geometry-api);
+- []{#aedt-api-transaction-and-state-ownership}[AEDT names and module owners](../contribute/internals/api-owners.qmd#aedt-api-transaction-and-state-ownership);
+- []{#palace-package-symbols}[Palace names](../contribute/internals/api-owners.qmd#palace-package-symbols) and []{#palace-direct-submodule-exports}[Palace submodules](../contribute/internals/api-owners.qmd#palace-direct-submodule-exports);
+- []{#visualization-symbols}[visualization names](../contribute/internals/api-owners.qmd#visualization-symbols) and []{#shared-presentation}[shared presentation](../contribute/internals/api-owners.qmd#shared-presentation);
+- []{#solidthin-film-request-migration}[the AEDT `modeling` value of a request](../contribute/internals/api-owners.qmd#solidthin-film-request-migration).
+
+[]{#aedt-release-selection}The AEDT version a request names, `"2023.2"` or
+`"2024.2"`, is described in the
+[AEDT runtime reference](../reference/specs/aedt-runtime.qmd#aedt-version-selection).

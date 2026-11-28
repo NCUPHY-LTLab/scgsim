@@ -1,0 +1,56 @@
+---
+lang: zh-TW
+title: "以 HFSS 計算共振模態"
+description: "準備計畫 3D 模型的 HFSS 本徵模態計算，並在結果取回後讀出每個模態的頻率與 Q 值。"
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/aedt-eigenmode"
+aliases:
+  - ../course/aedt-eigenmode.html
+---
+
+Ansys AEDT 的 HFSS 本徵模態（Eigenmode）會找出模型的共振模態，回傳每個模態的頻率（GHz）與 Q 值；Q 由 HFSS 依模型的材料與邊界計算。它不需要埠。SCGSim 由計畫建立 3D 模型（與 Palace 建網格用的是同一個模型），AEDT 再把它匯入空白的本徵模態設計。
+
+本頁為[為 AEDT 準備共平面波導](aedt-cpw-inputs.qmd)的 CPW 試片準備這項計算。這個儲存庫沒有它的計算結果紀錄。結果取回後，`resolve_results(handoff.run_dir).physics_results()` 每個模態給一列，鍵為 `mode`、`frequency_ghz` 與 `q_factor`。
+
+## 準備計算 {#prepare-the-run}
+
+在建立 `snapshot` 的同一個 Python 工作階段執行。需要含 `aedt-epr` extra 的 SCGSim；它會寫出執行資料夾，但不開啟 AEDT。
+
+```python
+from pathlib import Path
+from scgsim.aedt import EigenmodeRunControl, EigenmodeSim
+
+AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
+sim = EigenmodeSim(modeling="thin_film", aedt_version=AEDT_VERSION)
+sim.set_plan(snapshot)
+sim.set_output_dir(Path(".artifacts/public-cpw-eigenmode"))
+sim.set_eigenmode(
+    project_name="public_cpw_eigenmode",
+    design_name="CpwFiniteGroundEigenmode",
+    run_control=EigenmodeRunControl(
+        setup_name="Setup1", minimum_frequency_ghz=3.0, num_modes=2,
+        maximum_passes=6, maximum_delta_frequency_percent=5.0,
+    ),
+)
+handoff = sim.prepare_handoff()
+print(handoff.spec_path, handoff.archive_path)
+```
+
+各項輸入的意思：
+
+- `modeling="thin_film"` 把每層金屬薄膜建成薄膜面上的薄片；`"solid"` 則建成具有薄膜厚度的實體，這裡是 100 nm 的鋁。兩者的差別見[選擇幾何近似](../concepts/model-and-numerics.qmd#choose-the-geometric-approximation)。
+- `aedt_version` 是執行時要用的 AEDT 版本；求解器電腦必須正好有這個版本。
+- `EigenmodeRunControl` 是 HFSS 自己的搜尋與細化設定：3 GHz 以上最低的兩個模態，最多六個自適應回合（pass），在模態頻率於回合之間的變化不超過 5 % 時停止。請依你的模型選擇這些值；回傳的收斂狀態能說明什麼、不能說明什麼，見[收斂與報告](convergence-and-reports.qmd#interpret-for-scq-use)。
+- 材料來自計畫的紀錄；HFSS 的 Region（它求解的空間範圍）就是計畫的真空區域。HFSS 在 Region 表面設 Perfect H，這和 Palace 本徵模態求解器在真空區域外表面使用的條件相同。
+- `prepare_handoff()` 寫出執行資料夾：模型、請求 `aedt_spec.json`、腳本 `run_aedt.sh`，以及資料夾的封存檔。
+
+## 檢查、執行與讀取 {#check-run-and-read}
+
+把 `prepare()` 之前的計畫交給 `EigenmodeSim.simulation_drc(plan, modeling="thin_film")`，它會在不開 AEDT 的情況下檢查模型能否建立與匯入（[檢查版圖](check-a-layout.qmd#aedt-eigenmode-check)）。
+
+在有 AEDT 的電腦上執行這個資料夾（[執行已準備的模型](run-elsewhere.qmd#aedt-execute-the-prepared-package-locally)），整個帶回來，再以 `resolve_results` 讀取（[收斂與報告](convergence-and-reports.qmd#aedt-read-the-sealed-family-evidence)）。報告會把 HFSS 的收斂狀態與最後幾個回合之間的變化放在頻率旁邊（[HFSS 收斂參考](../reference/specs/aedt-runtime.qmd#hfss-convergence-observations)）。
+
+## 損耗與參與率 {#loss-and-participation}
+
+這次計算只回報頻率與 Q。若要看模態能量如何分配到各表面、基板與接面，以及這代表多少損耗，請在同一個模擬加上 EPR 請求，[覆晶 Xmon 範例](xmon/aedt.qmd)示範了做法。埠薄片也可以接上線性的 R、L 或 C，在計畫上以 `LumpedElement` 宣告（[集總元件](../reference/specs/geometry-plan.qmd#lumped-elements)）；這個試片沒有埠薄片。

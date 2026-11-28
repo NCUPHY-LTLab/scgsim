@@ -1,0 +1,286 @@
+---
+title: "Resonant modes with Palace"
+description: "Compute a resonator's mode frequency, its Q and its energy participations with Palace, and see where the Q comes from."
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/palace-eigenmode"
+aliases:
+  - ../course/palace-eigenmode.html
+---
+
+Palace's Eigenmode solver computes a layout's resonant modes: each mode's
+frequency, its quality factor Q, and how the mode's energy is shared among
+the parts of the model (the energy participation ratios, EPR). On this page
+the 200 µm pad of [First simulation](../start/first-simulation.qmd) becomes an
+LC resonator: a 10 nH inductor on the junction sheet at the pad's east edge
+(orange in [the layout figure](../start/first-simulation.qmd#the-layout))
+connects the pad to the ground. The script prints:
+
+```text
+Status: completed
+Convergence: converged at pass 2
+Mode 1: 5.1040 GHz, Q = 4.174e+06
+junction  p = -0.9940
+D0_SUBSTRATE  p = 0.9215
+VACUUM_REGION p = 0.0785
+MA            p = 7.133e-07, 1/Q = 2.354e-09
+MS            p = 8.340e-05, 1/Q = 3.919e-08
+SA            p = 6.456e-05, 1/Q = 1.097e-07
+```
+
+The mode is at 5.104 GHz. Its Q of 4.17 × 10⁶ comes only from the silicon
+substrate's loss; the lines below it give the participations and the loss of
+the chip's surfaces, which Palace's Q does not include.
+[Read the result](#read-the-result) takes the numbers apart.
+
+You need the installation of First simulation: SCGSim with its `palace`
+extra, the OrcaPen SC PDK, Palace 0.18.1, and `SCGSIM_PALACE_EXECUTABLE` set
+to the `palace` command ([First simulation](../start/first-simulation.qmd#palace-executable)).
+
+## The script {#the-script}
+
+Save this as `pad_modes.py` in your study project:
+
+```python
+import os
+import subprocess
+from pathlib import Path
+from uuid import uuid4
+
+import gdsfactory as gf
+import orcapen_sc_pdk
+from orcapen_sc_pdk import get_material_records, validate_interface_preset_records
+from orcapen_sc_pdk.tech import get_single_die_layer_stack
+from scgsim.geometry import GeometryPlan, LumpedElement
+from scgsim.palace import EigenmodeSim, ModeFrequency, resolve_palace_result
+
+# 1. The layout and plan of First simulation: a 200 µm pad in a 20 µm gap on a 1000 µm die.
+orcapen_sc_pdk.activate()
+component = gf.get_component(
+    "square_pad_capacitor", pad_side_um=200.0, gap_um=20.0, die_side_um=1000.0
+)
+plan = GeometryPlan(
+    component=component,
+    root_id="chip",
+    layer_stack=get_single_die_layer_stack(),
+    material_records=get_material_records(),
+    coupon_padding_um=0.0,
+)
+plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
+plan.set_vacuum_region(padding=(0.0, 0.0, 1000.0))
+
+# 2. Thin lossy films on the metal-air, metal-substrate and substrate-air surfaces (PDK presets).
+presets = validate_interface_preset_records()
+plan.set_surface_epr({
+    kind: {
+        "film_thickness_m": presets[f"LiteratureCentral_{kind}"]["thickness"] * 1e-6,
+        "permittivity": presets[f"LiteratureCentral_{kind}"]["permittivity"],
+        "loss_tangent": presets[f"LiteratureCentral_{kind}"]["loss_tangent"],
+        "source": presets[f"LiteratureCentral_{kind}"]["source"],
+        "preset": f"LiteratureCentral_{kind}",
+    }
+    for kind in ("MA", "MS", "SA")
+})
+
+# 3. The resonator: a 10 nH inductor on the junction sheet between pad and ground.
+port = "chip/o_junction_lumped"
+plan.set_lumped_elements([LumpedElement(port, inductance_h=10e-9)])
+sim = EigenmodeSim()
+sim.set_plan(plan.prepare())
+sim.set_output_dir(Path(".artifacts/pad-modes") / uuid4().hex[:12])
+sim.set_eigenmode(num_modes=1, target=3e9)
+sim.set_epr_request(surface_interfaces=("MA", "MS", "SA"), port_names=(port,))
+
+# 4. Refine the mesh until mode 1's frequency settles (see Convergence and reports).
+sim.set_numerical(order=2, amr_max_passes=4, amr_update_fraction=0.7)
+sim.set_convergence(ModeFrequency(modes=[1]).within(percent=1.0))
+
+# 5. Mesh, write Palace's input, run Palace with 4 MPI processes.
+sim.mesh()
+sim.write_config()
+handoff = sim.prepare_handoff(
+    profile="direct-local",
+    executable=os.environ["SCGSIM_PALACE_EXECUTABLE"],
+    resources={"command_style": "wrapper", "processes": 4, "threads": 1},
+)
+subprocess.run(["bash", "run_palace.sh"], cwd=handoff.run_dir, check=True)
+
+# 6. Read the mode, then the energy participations and the surface loss they imply.
+result = resolve_palace_result(handoff.run_dir, expected_handoff_id=handoff.handoff_id)
+print("Status:", result.status)
+verdict = result.convergence.verdict
+print("Convergence:", verdict.state, "at pass", verdict.pass_number)
+mode = result.tables["eig"].rows[0]
+print(f"Mode 1: {mode['Re{f} (GHz)']:.4f} GHz, Q = {mode['Q']:.4g}")
+epr = result.epr_result().rows[0]
+for junction in epr["junction"]:
+    print(f"junction  p = {junction['participation']:+.4f}")
+for domain in epr["bulk"]:
+    print(f"{domain['domain_id']:<13} p = {domain['participation']:.4f}")
+whole_surfaces = [
+    item for item in epr["surface"] if item["evaluation_kind"] == "unmasked_baseline"
+]
+for kind in ("MA", "MS", "SA"):
+    surfaces = [item for item in whole_surfaces if item["interface_kind"] == kind]
+    participation = sum(item["participation"] for item in surfaces)
+    inverse_q = sum(item["inverse_q"] for item in surfaces)
+    print(f"{kind:<13} p = {participation:.3e}, 1/Q = {inverse_q:.3e}")
+```
+
+Sections 1, 5 and the first lines of 6 are those of
+[First simulation](../start/first-simulation.qmd#the-script). What is new:
+
+- **Section 2** puts a thin lossy film on each of the three kinds of surface:
+  MA (metal–air, the metal's top and sides), MS (metal–substrate, under the
+  metal) and SA (substrate–air, the bare substrate in the gaps). Each film is
+  2 nm thick with its own permittivity and loss tangent, taken from the PDK's
+  `LiteratureCentral` presets, which are modelling assumptions drawn from the
+  literature, not measurements. The films are set on the plan because they
+  are part of the geometry; without `set_surface_epr`, no surface EPR is
+  computed. [Surface EPR](../concepts/surface-epr.qmd) explains the method.
+- **Section 3** makes the resonator. `set_lumped_elements` puts a 10 nH
+  inductor on the PDK's junction sheet `chip/o_junction_lumped`, between the
+  pad and the ground. Like the films, it is set on the plan, so every
+  simulation of this plan has it ([Lumped elements](../reference/specs/geometry-plan.qmd#lumped-elements)).
+  `num_modes=1` and `target=3e9` ask for the first mode above 3 GHz. `set_epr_request` selects which participations are reported; it does
+  not change the solve.
+- **Section 4** asks for second-order elements and lets Palace refine the mesh
+  up to four times, stopping once mode 1's frequency has changed by at most
+  1 % since the pass before. [Convergence and reports](convergence-and-reports.qmd#declare-convergence)
+  explains the declaration; choose the threshold for your use.
+  []{#declare-when-refinement-has-converged} `amr_update_fraction=0.7` is the
+  share of the error estimate whose elements are refined at each pass; an
+  Eigenmode simulation needs it whenever it refines.
+
+Run it from the study project, in the shell where you set
+`SCGSIM_PALACE_EXECUTABLE`:
+
+```bash
+uv run pad_modes.py
+```
+
+With 4 MPI processes it took a little over two minutes on a workstation.
+
+## Read the result {#read-the-result}
+
+**Frequency.** Pass 1, on the first mesh of 31,104 tetrahedra, gave
+5.0889 GHz; pass 2, on 63,619 tetrahedra, gave 5.1040 GHz, a change of 0.30 %,
+so the run converged at pass 2. As a check, an ideal LC circuit with the
+pad's capacitance from [Capacitance with Palace](capacitance-palace.qmd),
+C = 95.43 fF, and L = 10 nH resonates at
+
+$$
+f = \frac{1}{2\pi\sqrt{LC}} = \frac{1}{2\pi\sqrt{10\,\mathrm{nH}\times 95.43\,\mathrm{fF}}} = 5.152\ \mathrm{GHz},
+$$
+
+0.9 % above the Palace result. The junction participation, −0.9940, says that
+the inductor holds 99.4 % of the mode's inductive energy, so the pad is very
+nearly an ideal LC resonator. Palace gives the port participation a sign;
+AEDT reports the same quantity as a positive number
+([Surface EPR](../concepts/surface-epr.qmd#quantities-and-normalization)).
+
+**Q.** Palace's Q counts the losses of the materials in the model. Here the
+only lossy material is the silicon substrate, whose PDK record has a loss
+tangent of 2.6 × 10⁻⁷. The substrate holds 92.15 % of the mode's electric
+energy (`D0_SUBSTRATE p = 0.9215`; the vacuum holds the remaining 7.85 %), so
+
+$$
+\frac{1}{Q} = p_\mathrm{Si} \tan\delta_\mathrm{Si} = 0.9215 \times 2.6\times10^{-7} = 2.396\times10^{-7},
+\qquad Q = 4.17\times10^{6}.
+$$
+
+A model without any lossy material has no loss at all, and Palace then
+reports an infinite Q; the report shows it as "native-reported infinite Q"
+([Eigenmode reference](../reference/specs/palace-eigenmode.qmd#native-eigenmode-q)).
+
+::: {.callout-important title="A high-Q mode needs a tighter linear tolerance"}
+At the default `set_numerical(tolerance=1e-6)`, the mode frequency, the Surface
+EPR and the bulk electric participation are accurate. The Q that Palace
+reports, which it computes from the complex eigenfrequency as
+Re f / (2 Im f), is not when the mode's Q is high: Im f is tiny next to Re f,
+so the solver's approximate linear solves move it far more than they move
+Re f or the field. For a hanger resonator near 7.36 GHz the default reported
+Q = 13,948, 25 % above the 11,142 that `set_numerical(tolerance=1e-9)` gave,
+which agrees with an independent driven S21 notch fit (11,141). If you rely on
+that Q, set `tolerance=1e-9`; it costs about 45 % more Eigenmode time. The
+surface-loss Q built from the participations does not need it, nor does the
+coupling Q of a port with a resistance ([below](#port-as-a-load)): for that
+hanger, the two feedline ports' coupling Q moved by 0.04 % between
+`tolerance=1e-6` and `1e-9`, while the reported Q moved by 25 %.
+:::
+
+**Surface loss.** The surface films are not part of the solve. After it,
+Palace computes each surface's participation p from the field at that surface
+and the film's thickness and permittivity, and its loss as 1/Q = p tan δ. The
+last three lines sum each kind's whole-surface rows (`evaluation_kind` is
+`"unmasked_baseline"`); this run has no others:
+
+| Surface | Participation p | Loss tangent | 1/Q |
+|---|---:|---:|---:|
+| MA, metal–air | 7.133 × 10⁻⁷ | 3.3 × 10⁻³ | 2.354 × 10⁻⁹ |
+| MS, metal–substrate | 8.340 × 10⁻⁵ | 4.70 × 10⁻⁴ | 3.919 × 10⁻⁸ |
+| SA, substrate–air | 6.456 × 10⁻⁵ | 1.7 × 10⁻³ | 1.097 × 10⁻⁷ |
+
+Together the surfaces give 1/Q = 1.513 × 10⁻⁷, a surface-limited Q of
+6.61 × 10⁶. Adding the substrate's 2.396 × 10⁻⁷ gives 1/Q = 3.909 × 10⁻⁷, or
+Q = 2.56 × 10⁶ for these two loss channels. That is not the device's Q: the
+model has no conductor loss, no radiation and no other loss, and the loss
+tangents are assumptions you can change afterwards without solving again
+([Change loss assumptions](offline-loss.qmd)). The substrate–air surface
+gives the largest share: its participation is close to the metal–substrate
+one, and its loss tangent is 3.6 times higher.
+
+## Settings you may change {#build-the-real-backend-inputs}
+
+- **Mesh.** `sim.set_mesh(...)` sets the first mesh, as for capacitance
+  ([Mesh and element order](capacitance-palace.qmd#mesh-controls)). After
+  `mesh()`, `sim.mesh_summary()` also estimates the number of unknowns for
+  the chosen element order, before anything is solved.
+- **More modes.** `set_eigenmode(num_modes=...)` asks for more modes above
+  `target` (in hertz); `ModeFrequency(modes=[1, 2])` then checks both.
+- **The outer boundary.** The faces of the vacuum region get no boundary
+  condition, which in Palace's Eigenmode solver is a perfect magnetic
+  conductor (PMC). HFSS's Perfect H on the faces of its Region is the same
+  condition.
+- **Metal as sheets.** `sim.set_route("A")` before `mesh()`, as for
+  capacitance ([Metal as sheets](capacitance-palace.qmd#select-the-geometry-approximation-and-build-inputs)).
+- []{#port-as-a-load}**A port as a load.** A lumped element with a resistance,
+  such as `LumpedElement(sheet, resistance_ohm=50.0)`, or a `LumpedPort` is a
+  load: the mode loses energy through it, so Palace's Q is the loaded Q. The
+  result's `external` group gives each such port's share of that loss, its
+  coupling 1/Q:
+
+  ```python
+  for port in epr["external"]:
+      print(f"{port['port_name']}  1/Q_ext = {port['inverse_q']:.3e}")
+  ```
+
+  It is empty for this pad, whose only element is an inductor. The coupling
+  losses add like the surface ones: a hanger resonator's coupling Q is
+  1 / (sum of its feedline ports' `inverse_q`).
+
+## Surface EPR near the gaps {#surface-epr-margin-rows}
+
+The field, and so the surface participation, is largest at the gap edges.
+Adding `"inset_margins_um": (0.5, 1.0)` to a film's spec in
+`plan.set_surface_epr` adds, next to each whole-surface row, rows for the part
+of the surface at least 0.5 µm and at least 1.0 µm away from the gap edges.
+The margins are cut into the geometry, so they too are set on the plan before
+`prepare()`.
+
+A margin row (`evaluation_kind` is `"requested_margin"`, with its distance in
+`margin_um`) evaluates a part of a surface that its whole-surface row already
+contains: it is an alternative evaluation of that surface, never a term to add.
+That is why the script totals only the whole-surface rows. To read the margin
+rows, list them one by one:
+
+```python
+for item in epr["surface"]:
+    if item["evaluation_kind"] == "requested_margin":
+        print(item["name"], item["margin_um"], f"p = {item['participation']:.3e}")
+```
+ [Inset margins](../concepts/surface-epr.qmd#surface-distance-band-correction)
+explains them with a figure, the
+[Eigenmode reference](../reference/specs/palace-eigenmode.qmd#surface-epr-margins)
+gives the keys and limits, and the [flip-chip Xmon example](xmon/palace.qmd)
+uses them.

@@ -1,0 +1,73 @@
+---
+title: "預覽幾何"
+description: "幾何預覽從求解器自己的檔案畫出什麼、它的兩種形式（筆記本中的互動檢視與 12 個存檔視角）、它的配色，以及它絕不做的事。"
+scgsim-kind: "contract"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/geometry-preview"
+lang: zh-TW
+aliases:
+  - ../geometry-preview.html
+---
+
+預覽會畫出求解器將使用的模型，內容讀自該求解器自己的檔案：每個區域的材料、邊界指派（端子、接地、埠）、Surface-EPR 面，以及網格。它有兩種形式：筆記本中可互動的 3D 檢視，以及一張存成圖片、含 12 個固定視角的圖集。用它來確認模型就是你想要的那一個。在 `mesh()` 之後什麼時候呼叫它，見[檢視已準備的模型](inspect-the-prepared-model.qmd)。
+
+![一塊 200 µm 方形焊墊的邊界圖集：接地金屬為炭灰色，焊墊端子為藍色，沒有指派的外表面為淺灰色，圖例下方是 12 個視角。](../images/preview-the-geometry/square-pad-boundaries.png)
+
+## 呼叫 {#public-surface}
+
+[]{#purpose-and-ownership}
+
+| 呼叫 | 作用 |
+|---|---|
+| `inspect_palace_geometry(run_dir)` | 開啟 `mesh()` 與 `write_config()` 之後的 Palace 執行資料夾。 |
+| `inspect_aedt_geometry(source, design=None, aedt_version=None)` | 開啟在 AEDT 中準備過的 AEDT 執行資料夾，或連同 `design` 與 `aedt_version` 開啟存檔的 `.aedt` 專案。 |
+| `preview.show_materials()` | 畫出每個區域的材料。 |
+| `preview.show_boundaries()` | 畫出邊界指派。 |
+| `preview.show_surface_epr()` | 畫出 Surface-EPR 面。 |
+| `preview.show_mesh()` | 畫出網格。 |
+| `preview.show_all_previews()` | 依上面的順序畫出四種模式。 |
+| `preview.explore(mode)` | 以互動 3D 檢視顯示一種模式：`"materials"`、`"boundaries"`、`"surface_epr"` 或 `"mesh"`。 |
+
+Palace 的預覽讀取帶標記的網格、Palace 的輸入檔、網格清單（manifest），以及說明哪個標記是哪個導體或表面的索引對照。AEDT 的預覽則以不開視窗的方式開啟 AEDT，讀回每個物件及其指派，再畫出來。兩者都不會根據物件的名稱、位置或顏色猜測指派。
+
+沒有東西可畫的模式會回報為無法取得，絕不會畫成一張空白的圖。上圖的方形焊墊沒有要求 Surface EPR，所以它的 `show_surface_epr()` 回報這個模式無法取得，原因是 `No structured Surface-EPR assignment is present.`（沒有結構化的 Surface-EPR 指派）。AEDT 的 Surface-EPR 與網格模式可能無法取得，而其他模式照常可用。
+
+## 互動檢視 {#inline-notebook-viewer}
+
+`preview.explore(mode)` 在一個 3D 場景上方顯示一張表，列出畫了哪些東西；場景可以旋轉、平移、縮放與重設。場景直接送進筆記本的輸出，背後沒有伺服器，所以在 VS Code Remote SSH 的筆記本中不需轉送連接埠或額外設定就能使用。它需要一個執行中的筆記本核心與 `visualization` extra，也不會寫出任何檔案。
+
+## 存檔的視角 {#curated-views-and-contact-sheet}
+
+每個有東西可畫的 `show_*` 呼叫，都會在執行資料夾的 `previews/geometry/<mode>/` 下寫出 12 個固定的淺色主題視角：
+
+- 六個軸向視角 `+X`、`-X`、`+Y`、`-Y`、`+Z` 與 `-Z`；
+- 四個斜角視角，兩個從上方、兩個從下方；以及
+- 兩個穿過中央的剖切，分別橫切 X 與 Y。剖切只是為了觀看，不是模型的邊界。
+
+每個視角 1600 × 1200 像素。圖集約 4800 × 4200 像素，在 4 × 3 的視角網格上方放一個圖例。圖例列出每項指派的確切 ID、標籤、角色，以及帶有它的網格元素或物件數。兩個不同的 ID 不會因為標籤或顏色相同而合併。
+
+各角色有固定的顏色：
+
+| 角色 | 顏色 |
+|---|---|
+| Ground 或 PEC | 炭灰色 |
+| 集總埠 | 洋紅色 |
+| MA（金屬–空氣） | 橘色 |
+| MS（金屬–基板） | 綠色 |
+| SA（基板–空氣） | 藍色 |
+| MS_MA | 紫色 |
+| 未指派 | 淺灰色 |
+
+其他材料與端子使用一組固定的 20 色調色盤，取自 Matplotlib 的 `tab20`；同一張圖中前 20 個不同的 ID 會得到不同的顏色。超過 20 個時顏色會重複，所以辨認物件要看圖例中的 ID，而不是顏色。
+
+## 沒有螢幕時 {#native-headless-egl-context}
+
+在沒有螢幕的電腦上，SCGSim 透過軟體 EGL 裝置在背景繪製，不需要 X 伺服器、GPU 存取或特殊權限。既有的 `DISPLAY`、`VTK_DEFAULT_OPENGL_WINDOW` 或 `VTK_DEFAULT_EGL_DEVICE_INDEX` 設定會維持原樣。若沒有可用的 EGL 裝置，繪製會以錯誤結束，而不是產生一張空白的圖。
+
+## 預覽自己的記錄 {#manifest-and-evidence-boundary}
+
+`metadata/geometry_preview_manifest.json` 記錄畫了什麼：每個模式的狀態、有 AEDT 設計時的設計名稱、工具版本、調色盤、各視角，以及讀入與寫出檔案的 SHA-256。預覽檔案不屬於執行本身：產生預覽或預覽失敗，都不會改變執行的身分、狀態或結果。在 `prepare_handoff()` 之前產生的 Palace 預覽，會包含在交接套件的封存檔中；之後才產生的則放在旁邊，不在封存檔內。預覽存檔的 `.aedt` 專案時，絕不會修改執行的收據。
+
+## 不提供的功能 {#v1-exclusions}
+
+預覽沒有 ParaView 或 Gmsh 視窗、沒有可攜的互動 HTML 檔、沒有物件篩選、沒有自訂的相機或剖切，也沒有深色主題。

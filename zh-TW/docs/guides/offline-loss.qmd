@@ -1,0 +1,121 @@
+---
+lang: zh-TW
+title: "不重新求解，改變損耗假設"
+description: "給表面薄膜另一個損耗正切或另一種薄膜，在不重新求解的情況下，重新計算既有 EPR 結果的損耗。"
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/offline-epr"
+aliases:
+  - ../course/offline-epr.html
+---
+
+模態的表面參與率來自它的場；這些參與率代表多少損耗，則還取決於你假設的薄膜。`reanalyze_epr` 把新的薄膜假設套用到先前計算記錄的參與率上，幾秒內重新算出損耗，不必重新求解。以[以 Palace 計算共振模態](modes-palace.qmd)的焊墊共振器為例，把金屬–空氣薄膜的損耗正切從 3.3 × 10⁻³ 降到 2.0 × 10⁻⁴，各類表面的結果如下：
+
+| 表面 | 記錄的 1/Q | 新 MA 損耗正切下的 1/Q |
+|---|---:|---:|
+| MA，金屬–空氣 | 2.354 × 10⁻⁹ | 1.427 × 10⁻¹⁰ |
+| MS，金屬–基板 | 3.919 × 10⁻⁸ | 3.919 × 10⁻⁸ |
+| SA，基板–空氣 | 1.097 × 10⁻⁷ | 1.097 × 10⁻⁷ |
+| 所有表面 | 1.513 × 10⁻⁷ | 1.491 × 10⁻⁷ |
+
+金屬–空氣的損耗按損耗正切的比例下降了 16.5 倍，但表面總損耗只降了 1.5 %，因為金屬–空氣表面只占其中的 1.6 %：這個共振器的表面損耗以基板–空氣為主。2.0 × 10⁻⁴ 是舉例用的假設，不是量測值。
+
+## Palace：保存 EPR 結果 {#palace-detach-the-verified-final-result}
+
+在[模態腳本](modes-palace.qmd#the-script)的最後，`result` 是讀取的計算結果，把它的 EPR 結果另存成一個檔案：
+
+```python
+import json
+from pathlib import Path
+
+epr_path = Path(".artifacts/pad-modes-epr.json")
+epr_path.write_text(json.dumps(result.epr_result().to_payload(), indent=2), encoding="utf-8")
+```
+
+這個檔案包含每個表面、塊體區域與埠的參與率與假設，不需要執行資料夾就能讀取。若之後可能需要再檢查求解器的原始輸出，也請保留執行資料夾。
+
+## Palace：改變一項假設 {#change-an-assumption}
+
+在之後的工作階段中：
+
+```python
+from pathlib import Path
+from scgsim.palace import reanalyze_epr, resolve_epr_result, show_epr
+
+recorded = resolve_epr_result(Path(".artifacts/pad-modes-epr.json"))
+updated = reanalyze_epr(recorded, surface_defaults={"MA": {"loss_tangent": 2.0e-4}})
+for label, epr in (("recorded", recorded), ("updated", updated)):
+    surfaces = [
+        item for item in epr.rows[0]["surface"]
+        if item["evaluation_kind"] == "unmasked_baseline"
+    ]
+    inverse_q = {
+        kind: sum(item["inverse_q"] for item in surfaces if item["interface_kind"] == kind)
+        for kind in ("MA", "MS", "SA")
+    }
+    print(label, ", ".join(f"{kind} {value:.3e}" for kind, value in inverse_q.items()))
+show_epr(recorded, mode=1).write_html("pad-epr-recorded.html")
+show_epr(updated, mode=1).write_html("pad-epr-updated.html")
+```
+
+它只加總各類表面的整面列：若計算有邊距列，那是同一個表面一部分的另一種算法，絕不是總和中的一項（[間隙附近的表面 EPR](modes-palace.qmd#surface-epr-margin-rows)）。它印出上表的數字：
+
+```text
+recorded MA 2.354e-09, MS 3.919e-08, SA 1.097e-07
+updated MA 1.427e-10, MS 3.919e-08, SA 1.097e-07
+```
+
+`show_epr` 畫出一個模態的參與率與損耗，表面、塊體區域與埠各在不同的座標軸上；滑鼠移到長條上，會顯示該表面、它的薄膜與假設的來源。兩個檔案並排呈現記錄的假設與更新後的假設。
+
+## 新假設如何套用 {#interpret-an-assumption-change}
+
+`reanalyze_epr` 從記錄的假設開始，先把 `surface_defaults` 套用到某一類（`"MA"`、`"MS"`、`"SA"`）的所有表面，再把 `group_overrides` 依群組 ID（結果各列中的 `group_id`）套用到個別表面。沒有給的欄位保持記錄的值。
+
+| 你給的值 | 改變什麼 |
+|---|---|
+| `{"loss_tangent": 2.0e-4}` | 只改損耗：參與率不變，1/Q = p tan δ 隨新的損耗正切改變。 |
+| `{"loss_tangent": None}` | 損耗未知：這個表面沒有損耗值，不計入已知的總和。 |
+| `{"loss_tangent": 0.0}` | 已知損耗為零。 |
+| `{"film_thickness_m": ...}` | 參與率也會改變。Palace 依新厚度與舊厚度的比例縮放它；AEDT 則用計算時存下的場積分重新算出薄膜的能量。損耗隨之改變。 |
+| `{"film_relative_permittivity": ...}` | 參與率也會改變。MA 與 MS 薄膜在 Palace 中依舊介電常數與新介電常數的比例縮放；Palace 拒絕改變 SA 薄膜的介電常數，因為結果中沒有所需的積分，SA 只能改厚度或損耗正切。AEDT 對三類薄膜都會重新算出薄膜的能量。 |
+| 結果中沒有的群組 ID | 錯誤，不會被忽略。 |
+
+重新分析不會產生計算時沒有算出的場或表面：一切都由計算記錄的內容算出。表面、塊體區域與埠彼此分開；邊距的列（表面上離間隙邊緣一段距離以外的部分）是整面列的另一種算法，不能加到整面列上。已知損耗的總和不含未知的損耗與模型沒有的一切，所以它不是元件的 Q 或 T1（[Surface EPR](../concepts/surface-epr.qmd)）。
+
+## AEDT：最終場與自適應歷程 {#aedt-final-fields-and-adaptive-history-stay-separate}
+
+附帶 EPR 的 AEDT 計算會保留兩種不同的結果。自適應歷程記錄每個自適應回合（pass）的參與率；[已存場分析](saved-fields.qmd)則從最終已存的場再算一次。載入你需要的那一種；這裡是最終結果：
+
+```python
+from pathlib import Path
+from scgsim.aedt import resolve_epr_result, reanalyze_epr, show_epr
+
+result = resolve_epr_result(
+    Path(".artifacts/public-xmon-saved-field-analysis/results/epr/epr-result.json")
+)
+print(sorted({row["mode"] for row in result.rows}))
+mode = 1
+recorded = show_epr(result, mode=mode, theme="light")
+updated = reanalyze_epr(
+    result, surface_defaults={"MA": {"loss_tangent": 2.0e-4}}
+)
+changed = show_epr(updated, mode=mode, theme="dark")
+recorded.write_html("aedt-epr-recorded.html")
+changed.write_html("aedt-epr-updated.html")
+```
+
+自適應歷程是取回執行中的另一個檔案。先列出其中的模態與回合，再選一個：
+
+```python
+from scgsim.aedt import plot_epr_result
+history = resolve_epr_result(
+    Path(".artifacts/returned-aedt-epr/results/epr/adaptive-epr-result.json")
+)
+print([(row["mode"], row["native_pass"], row["status"]) for row in history.rows])
+```
+
+`show_epr(history, mode=mode, native_pass=native_pass)` 畫出一個回合，`plot_epr_result(history, mode=mode, native_pass=native_pass, show_convergence=True)` 畫出參與率在各回合的變化。缺少 EPR 的回合會留空，即使它的頻率已知。已存場分析算出的邊距只屬於最終結果，不屬於歷程。
+
+## 依賴一項改變之前 {#read-epr-history-for-the-intended-use}
+
+新的損耗正切改變的是損耗，不是它所乘上的參與率。如果參與率本身在各回合之間還沒穩定，請先看它的歷程（[收斂與報告](convergence-and-reports.qmd#interpret-for-scq-use)）。

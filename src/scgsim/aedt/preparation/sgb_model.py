@@ -1,0 +1,629 @@
+"""Prepare the SGB model AEDT imports: the guarded STEP of one SGB build and what AEDT assigns on it.
+
+AEDT models the geometry Palace meshes (issue #67).  One preparation runs, in order:
+
+1. the physical interpretation of the source under the requested ``modeling``, unchanged
+   (:mod:`scgsim.aedt.preparation.modeling`), which also derives the rectangular junctions the input
+   requests into their port sheets (the plan's lumped elements, :mod:`scgsim.aedt.preparation.lumped_elements`);
+2. the binding of each AEDT junction to its partitioned port sheet, by the sheet's source polygon, and of
+   each lumped RLC and lumped port to the port sheet it names (issue #67 decision 8);
+   wave and modal ports are refused (follow-up NCUPHY-LTLab/scgsim#135);
+3. the SGB build with the Surface-EPR bands of the normalized specs
+   (:func:`scgsim.geometry.surface_epr.build_banded_geometry`).  ``thin_film`` builds Route A (conductor
+   sheets) with its finite bodies (bumps, posts) retained as conductor solids, which AEDT makes PEC
+   (decision 8): Route A's faces, with the bodies' interiors kept as solids instead of excluded;
+   ``solid`` builds Route C (conductor solids), which is how AEDT realizes a Route B request
+   (decision 7): the same faces and bands, with the conductor interiors kept as solids;
+4. :func:`scgsim.geometry.sgb.output.exchange.step.export_aedt_step`, which writes the STEP without the vacuum and
+   its durable guard.  AEDT creates its own Region from the plan's ``VACUUM_REGION`` bounds instead.
+
+The result, :class:`PreparedSgbModel`, binds the files by SHA-256 so the runtime checks them again before
+it imports anything.
+"""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Literal
+
+from scgsim.aedt.data import canonical_sha256, detached, freeze
+from scgsim.aedt.preparation.modeling import interpret_geometry
+from scgsim.aedt.specs.common import (
+    LumpedRlc,
+    LumpedTerminalPort,
+    ModalPort,
+    TerminalPort,
+)
+from scgsim.aedt.specs.epr import PlanarJunction
+from scgsim.aedt.specs.modeling import Modeling, modeling_from_value
+from scgsim.contracts.sgb_sidecar import Sidecar, read_sidecar, views
+from scgsim.geometry.models.input import GeometryBuildInput
+from scgsim.geometry.sgb.output.exchange.guard import (
+    file_sha256,
+    guard_model,
+    read_step_guard,
+)
+from scgsim.geometry.sgb.output.sidecar.aedt import sanitise_aedt_name
+from scgsim.geometry.sgb.output.verification.ocp import require_ocp
+from scgsim.geometry.sgb.topology.routes.policy import (
+    ROUTE_A_RETAINED_BODIES,
+    ROUTE_C,
+    RoutePolicy,
+)
+from scgsim.geometry.surface_epr import build_banded_geometry
+from scgsim.refusal import internal
+
+SCHEMA = "scgsim.aedt.sgb-model.v1"
+VACUUM_REGION = "VACUUM_REGION"
+STEP_NAME = "model.step"
+REQUESTED_ROUTE: dict[str, Literal["A", "B"]] = {"thin_film": "A", "solid": "B"}
+REALIZED_ROUTE: dict[str, Literal["A", "C"]] = {"thin_film": "A", "solid": "C"}
+# The SGB policy each modeling builds: every finite conductor body is a solid AEDT makes PEC.
+BUILD_POLICY: dict[str, RoutePolicy] = {
+    "thin_film": ROUTE_A_RETAINED_BODIES,
+    "solid": ROUTE_C,
+}
+BOUND_FILES = ("step", "geometry", "sidecar", "guard")
+DRIVEN_PORT_FOLLOW_UP = "NCUPHY-LTLab/scgsim#135"
+
+
+@dataclass(frozen=True)
+class SgbJunction:
+    """One AEDT junction and the lumped-port group (``PORT::<port sheet>``) of the SGB model it sits on."""
+
+    junction: PlanarJunction
+    port_group: str
+
+    def to_payload(self) -> dict[str, Any]:
+        """The canonical payload of this binding."""
+        return {"junction": self.junction.to_payload(), "port_group": self.port_group}
+
+    @classmethod
+    def from_payload(cls, value: Mapping[str, Any]) -> SgbJunction:
+        """Decode a binding written by :meth:`to_payload`."""
+        return cls(PlanarJunction.from_payload(value["junction"]), value["port_group"])
+
+
+def port_group(port_sheet_id: str) -> str:
+    """The SGB lumped-port group of the plan's port sheet ``port_sheet_id``."""
+    return f"PORT::{port_sheet_id}"
+
+
+@dataclass(frozen=True)
+class PreparedSgbModel:
+    """The bound STEP, sidecar and guard of one SGB build, and the AEDT inputs bound to its groups.
+
+    ``model_dir`` holds the files; ``files`` names each relative to it with its SHA-256 (``step``,
+    ``geometry`` the BREP the STEP was written from, ``sidecar`` and ``guard``).  ``model_identity`` is
+    the sidecar's model record.  ``vacuum_bounds_um`` is ``(x_min, y_min, z_min, x_max, y_max, z_max)`` of
+    the plan's ``VACUUM_REGION``, the box SGB built and the box AEDT's Region takes.  ``materials`` are the
+    stack's records of the materials the model's volumes name, which AEDT realizes on the imported objects.
+    ``lumped_rlcs`` and ``lumped_ports`` each sit on the ``PORT::<port_sheet_id>`` group they name; a port
+    sheet carries at most one of them or one junction.  ``sheet_thickness_um`` is the physical thickness of
+    each Route A conductor-sheet group (``SHEET``), which Q3D gives its thin conductor.
+    """
+
+    modeling: Modeling
+    requested_route: Literal["A", "B"]
+    route: Literal["A", "C"]
+    model_dir: Path
+    files: Mapping[str, Mapping[str, str]]
+    model_identity: Mapping[str, str]
+    tolerance_um: float
+    vacuum_bounds_um: tuple[float, float, float, float, float, float]
+    materials: Mapping[str, Mapping[str, Any]]
+    junctions: tuple[SgbJunction, ...] = ()
+    lumped_rlcs: tuple[LumpedRlc, ...] = ()
+    lumped_ports: tuple[LumpedTerminalPort, ...] = ()
+    surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None
+    ground_net_ids: tuple[str, ...] | None = None
+    sheet_thickness_um: Mapping[str, float] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        modeling_from_value(self.modeling)
+        if (
+            self.requested_route != REQUESTED_ROUTE[self.modeling]
+            or self.route != REALIZED_ROUTE[self.modeling]
+        ):
+            raise ValueError(
+                f"modeling {self.modeling!r} is Route {REQUESTED_ROUTE[self.modeling]} realized as "
+                f"Route {REALIZED_ROUTE[self.modeling]}"
+            )
+        if set(self.files) != set(BOUND_FILES):
+            raise ValueError(f"a prepared SGB model binds exactly {BOUND_FILES}")
+        object.__setattr__(self, "files", freeze(self.files))
+        object.__setattr__(self, "model_identity", freeze(self.model_identity))
+        object.__setattr__(self, "materials", freeze(self.materials))
+        object.__setattr__(self, "junctions", tuple(self.junctions))
+        object.__setattr__(self, "lumped_rlcs", tuple(self.lumped_rlcs))
+        object.__setattr__(self, "lumped_ports", tuple(self.lumped_ports))
+        check_port_sheet_owners(self.junctions, self.lumped_rlcs, self.lumped_ports)
+        if self.ground_net_ids is not None:
+            ground = tuple(self.ground_net_ids)
+            if len(set(ground)) != len(ground) or not all(
+                isinstance(net, str) and net for net in ground
+            ):
+                raise ValueError("ground_net_ids must be distinct non-empty Net ids")
+            object.__setattr__(self, "ground_net_ids", ground)
+        if self.surface_epr_specs is not None:
+            object.__setattr__(
+                self, "surface_epr_specs", freeze(self.surface_epr_specs)
+            )
+        thickness = {
+            group: float(value) for group, value in self.sheet_thickness_um.items()
+        }
+        if any(not math.isfinite(value) or value <= 0 for value in thickness.values()):
+            raise ValueError("sheet_thickness_um must be finite and positive")
+        object.__setattr__(self, "sheet_thickness_um", freeze(thickness))
+
+    def path(self, role: str) -> Path:
+        """The file bound under ``role`` (``step``, ``geometry``, ``sidecar`` or ``guard``)."""
+        return self.model_dir / self.files[role]["path"]
+
+    @property
+    def identity_sha256(self) -> str:
+        """The digest of everything this record binds; saved analyses compare it."""
+        payload = self.to_payload()
+        payload.pop("model_dir")
+        return canonical_sha256(payload)
+
+    def verify_files(self) -> None:
+        """Raise ``ValueError`` when a bound file is missing or changed since preparation."""
+        for role in BOUND_FILES:
+            path = self.path(role)
+            if not path.is_file() or file_sha256(path) != self.files[role]["sha256"]:
+                raise ValueError(
+                    f"prepared SGB model {role} file {path.name} is missing or changed"
+                )
+        read_step_guard(self.path("guard"))
+
+    def to_payload(self) -> dict[str, Any]:
+        """The canonical payload of this record (round-trips through :meth:`from_payload`)."""
+        return {
+            "schema_version": SCHEMA,
+            "modeling": self.modeling,
+            "requested_route": self.requested_route,
+            "route": self.route,
+            "model_dir": self.model_dir.as_posix(),
+            "files": detached(self.files),
+            "model_identity": detached(self.model_identity),
+            "tolerance_um": self.tolerance_um,
+            "vacuum_bounds_um": list(self.vacuum_bounds_um),
+            "materials": detached(self.materials),
+            "junctions": [item.to_payload() for item in self.junctions],
+            "lumped_rlcs": [item.to_payload() for item in self.lumped_rlcs],
+            "lumped_ports": [item.to_payload() for item in self.lumped_ports],
+            "surface_epr_specs": detached(self.surface_epr_specs),
+            "ground_net_ids": None
+            if self.ground_net_ids is None
+            else list(self.ground_net_ids),
+            "sheet_thickness_um": detached(self.sheet_thickness_um),
+        }
+
+    @classmethod
+    def from_payload(cls, value: Any) -> PreparedSgbModel:
+        """Decode a record written by :meth:`to_payload`; a payload of another schema is refused."""
+        if not isinstance(value, Mapping) or value.get("schema_version") != SCHEMA:
+            raise ValueError(f"not a {SCHEMA} payload")
+        bounds = tuple(float(v) for v in value["vacuum_bounds_um"])
+        if len(bounds) != 6:
+            raise ValueError("vacuum_bounds_um must hold six numbers")
+        return cls(
+            modeling=value["modeling"],
+            requested_route=value["requested_route"],
+            route=value["route"],
+            model_dir=Path(value["model_dir"]),
+            files=value["files"],
+            model_identity=value["model_identity"],
+            tolerance_um=float(value["tolerance_um"]),
+            vacuum_bounds_um=(
+                bounds[0],
+                bounds[1],
+                bounds[2],
+                bounds[3],
+                bounds[4],
+                bounds[5],
+            ),
+            materials=value["materials"],
+            junctions=tuple(
+                SgbJunction.from_payload(item) for item in value["junctions"]
+            ),
+            lumped_rlcs=tuple(
+                LumpedRlc.from_payload(item) for item in value["lumped_rlcs"]
+            ),
+            lumped_ports=tuple(
+                LumpedTerminalPort.from_payload(item) for item in value["lumped_ports"]
+            ),
+            surface_epr_specs=value["surface_epr_specs"],
+            ground_net_ids=None
+            if value["ground_net_ids"] is None
+            else tuple(value["ground_net_ids"]),
+            sheet_thickness_um=value["sheet_thickness_um"],
+        )
+
+
+def prepare_sgb_model(  # noqa: PLR0913 -- the source, its stack and the AEDT model inputs are independent
+    build_input: GeometryBuildInput,
+    *,
+    prepared_stack: Mapping[str, Any],
+    modeling: Modeling,
+    output_dir: str | Path,
+    junctions: Sequence[PlanarJunction] = (),
+    lumped_rlcs: Sequence[LumpedRlc] = (),
+    ports: Sequence[LumpedTerminalPort | TerminalPort | ModalPort] = (),
+    surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None,
+    ground_net_ids: Sequence[str] | None = None,
+) -> PreparedSgbModel:
+    """Build the SGB model of ``build_input`` for AEDT into ``output_dir`` and bind its files.
+
+    ``surface_epr_specs`` are Palace's ``MA``/``MS``/``SA`` specs after
+    :func:`scgsim.geometry.source.surface_epr_specs.normalize_surface_epr_specs`; their margins become bands.
+    ``ground_net_ids`` records the Nets that are physically ground, as Palace's electrostatic ground declares
+    them; every one must be a Net of the model.  A Q3D request gives each Net its Q3D type itself.
+    ``lumped_rlcs`` and the ``LumpedTerminalPort`` entries of ``ports`` name the plan's port sheets; a wave
+    ``TerminalPort`` or a ``ModalPort`` is refused before anything is built (:func:`lumped_ports_of`).
+    """
+    modeling = modeling_from_value(modeling)
+    if not isinstance(build_input, GeometryBuildInput):
+        raise TypeError("build_input must be GeometryBuildInput")
+    # The STEP export needs OCP, which only the aedt extras install: refuse before the build, and import the
+    # export here, so `scgsim.aedt` and what imports it (`scgsim.visualization`) import without OCP (#291).
+    require_ocp()
+    from scgsim.geometry.sgb.output.exchange.step import export_aedt_step  # noqa: PLC0415 -- OCP is optional
+
+    lumped_ports = lumped_ports_of(ports)
+    rlcs = tuple(lumped_rlcs)
+    if any(not isinstance(item, LumpedRlc) for item in rlcs):
+        raise TypeError("lumped_rlcs must contain LumpedRlc records")
+    effective_input, effective_stack, plan = interpret_geometry(
+        build_input, prepared_stack, modeling
+    )
+    bounds = vacuum_bounds_um(effective_stack)
+    bound_junctions = bind_junctions(effective_input, junctions)
+    check_port_sheet_owners(bound_junctions, rlcs, lumped_ports)
+    model_dir = Path(output_dir).expanduser().resolve()
+    artifacts = build_banded_geometry(
+        effective_input,
+        plan.context,
+        route=BUILD_POLICY[modeling],
+        surface_epr_specs=surface_epr_specs,
+        output_dir=model_dir,
+    )
+    exported = export_aedt_step(
+        artifacts.brep, artifacts.sidecar, model_dir / STEP_NAME
+    )
+    sidecar = read_sidecar(artifacts.sidecar)
+    check_region_box(sidecar, bounds)
+    _check_port_groups(sidecar, bound_junctions, rlcs, lumped_ports)
+    check_junction_widths(sidecar, bound_junctions)
+    aedt_net_names(net_groups(sidecar))
+    junction_rlc_names(bound_junctions)
+    lumped_rlc_names(rlcs)
+    _check_ground_nets(sidecar, ground_net_ids)
+    files = {
+        role: {"path": path.name, "sha256": file_sha256(path)}
+        for role, path in (
+            ("step", exported.path),
+            ("geometry", artifacts.brep),
+            ("sidecar", artifacts.sidecar),
+            ("guard", exported.guard_path),
+        )
+    }
+    return PreparedSgbModel(
+        modeling=modeling,
+        requested_route=REQUESTED_ROUTE[modeling],
+        route=REALIZED_ROUTE[modeling],
+        model_dir=model_dir,
+        files=files,
+        model_identity=guard_model(sidecar),
+        tolerance_um=float(sidecar["model"]["tolerance_um"]),
+        vacuum_bounds_um=bounds,
+        materials=model_materials(sidecar, effective_stack),
+        junctions=bound_junctions,
+        lumped_rlcs=rlcs,
+        lumped_ports=lumped_ports,
+        surface_epr_specs=surface_epr_specs,
+        ground_net_ids=None if ground_net_ids is None else tuple(ground_net_ids),
+        sheet_thickness_um=sheet_thicknesses_um(sidecar, plan.entities),
+    )
+
+
+def sheet_thicknesses_um(
+    sidecar: Sidecar, entities: Mapping[str, Mapping[str, Any]]
+) -> dict[str, float]:
+    """``SHEET`` group -> the physical thickness of its conductor film, from the stack layer the film declares.
+
+    A Route A conductor is a sheet in the model; Q3D gives it its film's thickness back as a thin conductor.
+    The thickness is the physical interpretation's ``physical_thickness_um`` of the group's one Entity, which
+    for a stack or local film is the layer's declared normal thickness.
+    """
+    out: dict[str, float] = {}
+    for name, group in sorted(sidecar["group"].items()):
+        if group["dim"] != 2 or group.get("interface_type") != "SHEET":
+            continue
+        (entity,) = group["entities"]
+        record = entities[entity]
+        if record["representation"] != "sheet":
+            raise ValueError(
+                f"sheet group {name!r} is Entity {entity!r}, which is not a sheet"
+            )
+        out[name] = float(record["physical_thickness_um"])
+    return out
+
+
+def vacuum_bounds_um(
+    stack: Mapping[str, Any],
+) -> tuple[float, float, float, float, float, float]:
+    """``(x_min, y_min, z_min, x_max, y_max, z_max)`` of the stack's ``VACUUM_REGION``.
+
+    AEDT has no vacuum solid of its own: its Region is this box, so a stack without the plan's
+    ``set_vacuum_region`` is refused.
+    """
+    region = stack.get("solution_regions", {}).get(VACUUM_REGION)
+    if not isinstance(region, Mapping):
+        raise ValueError(
+            "AEDT creates its Region from the plan's VACUUM_REGION; call "
+            "GeometryPlan.set_vacuum_region(...) before prepare()"
+        )
+    geometry = region["geometry"]
+    xy = geometry["domain_bounds_um"]
+    return (
+        float(xy["x_min_um"]),
+        float(xy["y_min_um"]),
+        float(geometry["z_min_um"]),
+        float(xy["x_max_um"]),
+        float(xy["y_max_um"]),
+        float(geometry["z_max_um"]),
+    )
+
+
+def model_materials(
+    sidecar: Sidecar, stack: Mapping[str, Any]
+) -> dict[str, dict[str, Any]]:
+    """The stack's record of each material a volume of the model names; a volume naming none is refused."""
+    catalog = stack.get("materials", {})
+    names = sorted({volume["material"] for volume in sidecar["volume"].values()})
+    missing = [name for name in names if not isinstance(catalog.get(name), Mapping)]
+    if missing:
+        raise ValueError(f"the stack has no material record for {missing}")
+    return {name: dict(catalog[name]) for name in names}
+
+
+def check_region_box(sidecar: Sidecar, bounds: Sequence[float]) -> None:
+    """Refuse a model whose own box is not the ``VACUUM_REGION`` box AEDT's Region will take.
+
+    Palace's outer boundary is the box of the SGB model; AEDT's is its Region.  The two agree only when
+    every vertex of the model lies in the vacuum box and the box's corners are reached, so the box of
+    the model's vertices must equal ``bounds`` within the sidecar's tolerance.
+    """
+    vertices = views.expected(sidecar)["vertices_um"]
+    observed = [min(v[k] for v in vertices) for k in range(3)] + [
+        max(v[k] for v in vertices) for k in range(3)
+    ]
+    tolerance = float(sidecar["model"]["tolerance_um"])
+    if any(abs(a - b) > tolerance for a, b in zip(observed, bounds, strict=True)):
+        raise ValueError(
+            f"the SGB model spans {observed} um, not the VACUUM_REGION box {list(bounds)} um "
+            "that AEDT's Region takes"
+        )
+
+
+def bind_junctions(
+    effective_input: GeometryBuildInput, junctions: Sequence[PlanarJunction]
+) -> tuple[SgbJunction, ...]:
+    """Bind each junction to its sheet, cut to its central rectangle by a ``RectangularJunctionSpec``.
+
+    A junction names its sheet by the sheet's source polygon; its id is the junction's own name (the plan's
+    element name), not the partition's.  The partition's polygon and two Nets must be the junction's; a
+    junction whose sheet was not partitioned is refused rather than partitioned again here.
+    """
+    by_polygon = {
+        region.source_polygon_id: region
+        for region in effective_input.port_sheet_regions
+        if region.metadata.get("rectangular_junction_partition") is not None
+    }
+    out = []
+    for junction in junctions:
+        if not isinstance(junction, PlanarJunction):
+            raise TypeError("junctions must contain PlanarJunction records")
+        region = by_polygon.get(junction.source_polygon_id)
+        if region is None:
+            raise ValueError(
+                internal(
+                    f"junction {junction.junction_id!r}: its sheet {junction.source_polygon_id!r} was not cut "
+                    "to its central rectangle"
+                )
+            )
+        binding = region.metadata["rectangular_junction_binding"]
+        declared = (
+            binding["source_polygon_id"],
+            binding["terminal_a"]["net_id"],
+            binding["terminal_b"]["net_id"],
+        )
+        requested = (
+            junction.source_polygon_id,
+            junction.terminal_a_net,
+            junction.terminal_b_net,
+        )
+        if declared != requested:
+            raise ValueError(
+                f"junction {junction.junction_id!r} names polygon and Nets {requested}, "
+                f"its RectangularJunctionSpec {declared}"
+            )
+        out.append(SgbJunction(junction, f"PORT::{region.port_sheet_id}"))
+    if len({item.junction.junction_id for item in out}) != len(out):
+        raise ValueError("junction ids must be unique")
+    return tuple(out)
+
+
+def check_junction_widths(sidecar: Sidecar, junctions: Sequence[SgbJunction]) -> None:
+    """Refuse a junction whose ``width_um`` is not the width of the port sheet SGB built for it.
+
+    The junction voltage is the area integral of the field along the port's direction divided by the sheet's
+    width across it, read from the sidecar's port record (:func:`port_width_um`), so a junction that states
+    another width names another sheet.
+    """
+    ports = {port["group"]: port for port in sidecar["port"].values()}
+    tolerance = float(sidecar["model"]["tolerance_um"])
+    for item in junctions:
+        port = ports[item.port_group]
+        width = port_width_um(sidecar, port["faces"], port["direction"])
+        if abs(width - item.junction.width_um) > tolerance:
+            raise ValueError(
+                f"junction {item.junction.junction_id!r} states width_um {item.junction.width_um}, "
+                f"but its port sheet {item.port_group} is {width} um wide across its direction"
+            )
+
+
+def port_width_um(
+    sidecar: Sidecar, faces: Sequence[str], direction: Sequence[float]
+) -> float:
+    """The extent of the port faces across ``direction`` in their plane: the width a junction voltage divides by."""
+    norm = math.hypot(direction[0], direction[1])
+    across = (-direction[1] / norm, direction[0] / norm)
+    positions = [
+        sidecar["vertex"][vertex]["position_um"]
+        for face in faces
+        for loop in sidecar["face"][face]["loops"]
+        for edge in loop["edges"]
+        for vertex in sidecar["edge"][edge]["vertices"]
+    ]
+    values = [p[0] * across[0] + p[1] * across[1] for p in positions]
+    return max(values) - min(values)
+
+
+def lumped_ports_of(
+    ports: Sequence[LumpedTerminalPort | TerminalPort | ModalPort],
+) -> tuple[LumpedTerminalPort, ...]:
+    """The lumped ports of ``ports``; a wave or modal port is refused.
+
+    A Driven wave ``TerminalPort`` (on a Region ``side``) and a Driven Modal port have no realization in the
+    SGB flow yet (issue #67 decision 8), so a model that needs one is refused rather than built without it.
+    """
+    out = []
+    for port in ports:
+        if isinstance(port, (TerminalPort, ModalPort)):
+            kind = (
+                "Driven Modal"
+                if isinstance(port, ModalPort)
+                else "Driven wave Terminal"
+            )
+            raise NotImplementedError(
+                f"the SGB flow has no {kind} ports yet ({port.name!r} on side {port.side}); "
+                f"they follow in {DRIVEN_PORT_FOLLOW_UP}"
+            )
+        if not isinstance(port, LumpedTerminalPort):
+            raise TypeError("ports must contain LumpedTerminalPort records")
+        out.append(port)
+    return tuple(out)
+
+
+def check_port_sheet_owners(
+    junctions: Sequence[SgbJunction],
+    lumped_rlcs: Sequence[LumpedRlc],
+    lumped_ports: Sequence[LumpedTerminalPort],
+) -> None:
+    """Refuse a port sheet that a junction, an RLC or a lumped port share: each carries one treatment."""
+    groups = [
+        *(item.port_group for item in junctions),
+        *(port_group(item.port_sheet_id) for item in lumped_rlcs),
+        *(port_group(item.port_sheet_id) for item in lumped_ports),
+    ]
+    shared = sorted({group for group in groups if groups.count(group) > 1})
+    if shared:
+        raise ValueError(f"port sheets {shared} carry more than one treatment")
+
+
+def _check_port_groups(
+    sidecar: Sidecar,
+    junctions: Sequence[SgbJunction],
+    lumped_rlcs: Sequence[LumpedRlc],
+    lumped_ports: Sequence[LumpedTerminalPort],
+) -> None:
+    groups = {port["group"] for port in sidecar["port"].values()}
+    named = [
+        *(item.port_group for item in junctions),
+        *(port_group(item.port_sheet_id) for item in lumped_rlcs),
+        *(port_group(item.port_sheet_id) for item in lumped_ports),
+    ]
+    missing = [group for group in named if group not in groups]
+    if missing:
+        raise ValueError(f"the SGB model has no lumped-port group {missing}")
+
+
+def _check_ground_nets(sidecar: Sidecar, ground_net_ids: Sequence[str] | None) -> None:
+    if ground_net_ids is None:
+        return
+    if isinstance(ground_net_ids, str):
+        raise TypeError("ground_net_ids must be a sequence of Net ids, not one string")
+    unknown = sorted(set(ground_net_ids) - set(net_groups(sidecar)))
+    if unknown:
+        raise ValueError(f"ground Nets {unknown} are not Nets of the SGB model")
+
+
+def aedt_net_names(nets: Iterable[str]) -> dict[str, str]:
+    """Net -> its AEDT name (``chip/A`` -> ``chip_A``); two Nets whose names coincide are refused.
+
+    AEDT keeps only ``[A-Za-z0-9_]`` of a name, so ``chip/A`` and ``chip_A`` would claim one Net and one
+    Perfect E boundary.  The pair is refused, naming both Net IDs and the shared name, rather than one of
+    them renamed (the Human, 2026-11-12, issue #67).
+    """
+    out: dict[str, str] = {}
+    by_name: dict[str, str] = {}
+    for net in sorted(nets):
+        name = sanitise_aedt_name(net)
+        if name in by_name:
+            raise ValueError(
+                f"Nets {by_name[name]!r} and {net!r} both become the AEDT name {name!r}; "
+                "rename one of them"
+            )
+        by_name[name] = net
+        out[net] = name
+    return out
+
+
+def junction_rlc_names(junctions: Sequence[SgbJunction]) -> dict[str, str]:
+    """Junction id -> the AEDT name of its Lumped RLC (``junction_rlc_<id>``); two ids naming one RLC are refused."""
+    return _distinct_aedt_names(
+        "Junctions",
+        {
+            item.junction.junction_id: f"junction_rlc_{item.junction.junction_id}"
+            for item in junctions
+        },
+    )
+
+
+def lumped_rlc_names(lumped_rlcs: Sequence[LumpedRlc]) -> dict[str, str]:
+    """Port sheet id -> the AEDT name of its ``LumpedRlc`` (``rlc_<id>``); two ids naming one RLC are refused."""
+    return _distinct_aedt_names(
+        "Port sheets",
+        {item.port_sheet_id: f"rlc_{item.port_sheet_id}" for item in lumped_rlcs},
+    )
+
+
+def _distinct_aedt_names(kind: str, wanted: Mapping[str, str]) -> dict[str, str]:
+    """Id -> its sanitised AEDT name; two ids whose names coincide are refused, as Nets are (the Human, 2026-11-12)."""
+    out: dict[str, str] = {}
+    by_name: dict[str, str] = {}
+    for item_id in sorted(wanted):
+        name = sanitise_aedt_name(wanted[item_id])
+        if name in by_name:
+            raise ValueError(
+                f"{kind} {by_name[name]!r} and {item_id!r} both become the AEDT name {name!r}; "
+                "rename one of them"
+            )
+        by_name[name] = item_id
+        out[item_id] = name
+    return out
+
+
+def net_groups(sidecar: Sidecar) -> dict[str, list[str]]:
+    """Net -> the surface groups that are that Net's exposed conductor surface, sorted; the Nets of the model."""
+    out: dict[str, list[str]] = {}
+    for name, group in sorted(sidecar["group"].items()):
+        if group["dim"] == 2 and group["net"] is not None:
+            out.setdefault(group["net"], []).append(name)
+    return out

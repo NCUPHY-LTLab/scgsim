@@ -1,0 +1,189 @@
+---
+title: "Capacitance with Q3D"
+description: "Extract the capacitance and conductance matrix of a layout's conductors with AEDT Q3D, from the same 3D model Palace meshes."
+scgsim-kind: "course"
+scgsim-status: "ACCEPTED"
+scgsim-id: "docs/course/aedt-q3d"
+aliases:
+  - ../course/aedt-q3d.html
+---
+
+Q3D, the quasi-static extractor of Ansys AEDT, returns the capacitance and
+conductance matrices of your conductors. SCGSim builds the 3D model from your
+layout, the same model Palace meshes, and writes a run folder that AEDT
+imports and solves. The script below does this for the 200 µm pad of
+[First simulation](../start/first-simulation.qmd) and prints one line per
+matrix entry: the quantity (`C` or `G`), the row and column Net, the value and
+the unit as Q3D exported them.
+
+This repository holds no result of this script. The earlier version of this
+example, which imported the GDS file into Q3D with a 0.2 µm aluminium film,
+reported C[pad][pad] = 87.00 fF
+([recorded pre-3.0 result](../contribute/history/aedt-capacitance-pre-v3.qmd)).
+For this version's model, Palace gives 95.43 fF
+([Capacitance with Palace](capacitance-palace.qmd)); the two runs differ in
+their vacuum region and in the solver.
+
+## A complete run {#a-complete-run}
+
+The script needs SCGSim with its `aedt-epr` extra and the OrcaPen SC PDK
+([Install SCGSim](../start/install.qmd#extras)), and AEDT Q3D 2024.2 with a
+working licence on the same computer. Save it as `simplepad_q3d.py`:
+
+```python
+from pathlib import Path
+from uuid import uuid4
+import argparse
+import subprocess
+import sys
+
+import gdsfactory as gf
+import orcapen_sc_pdk
+from orcapen_sc_pdk import get_material_records
+from orcapen_sc_pdk.tech import get_single_die_layer_stack
+from scgsim.geometry import GeometryPlan
+from scgsim.aedt import (
+    AedtResources,
+    MatrixRunControl,
+    prepare_q3d_from_geometry,
+    resolve_results,
+)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--handoff-only", action="store_true")
+    args = parser.parse_args()
+
+    # 1. Build the layout and declare electrical ownership.
+    orcapen_sc_pdk.activate()
+    component = gf.get_component(
+        "square_pad_capacitor",
+        pad_side_um=200.0,
+        gap_um=20.0,
+        die_side_um=1000.0,
+        junction_width_um=2.0,
+    )
+    records = get_material_records()
+    plan = GeometryPlan(
+        component=component,
+        root_id="chip",
+        layer_stack=get_single_die_layer_stack(),
+        material_records=records,
+        coupon_padding_um=0.0,
+    )
+    plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
+    plan.set_vacuum_region(padding=(250.0, 250.0, 1000.0))
+    snapshot = plan.prepare()
+
+    # 2. Prepare a new, portable Q3D input directory.
+    handoff = prepare_q3d_from_geometry(
+        snapshot,
+        aedt_version="2024.2",
+        modeling="solid",
+        output_dir=Path(".artifacts/simplepad-q3d") / uuid4().hex[:12],
+        project_name="SimplePad",
+        design_name="Capacitance",
+        net_types={"pad": "Signal", "ground": "Signal"},
+        physical_ground_nets=("ground",),
+        run_control=MatrixRunControl(
+            setup_name="Setup1", frequency_ghz=5.0,
+            maximum_passes=10, convergence_percent=1.0,
+        ),
+        resources=AedtResources(cores=4, ram_limit_percent=80),
+    )
+    print("Inputs:", handoff.run_dir)
+    if args.handoff_only:
+        return
+
+    # 3. Run AEDT on this licensed host using the current Python environment.
+    subprocess.run(
+        [sys.executable, "-m", "scgsim.aedt.run",
+         "--handoff", str(handoff.metadata_path), "--execute"],
+        cwd=handoff.run_dir,
+        check=True,
+    )
+
+    # 4. Read the returned matrix entries with their names and exported units.
+    result = resolve_results(handoff.run_dir)
+    for row in result.physics_results():
+        print(row)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+Run it from the study project:
+
+```bash
+uv run simplepad_q3d.py
+```
+
+Each run creates a new run folder under `.artifacts/simplepad-q3d/`. With
+`--handoff-only`, the script only prepares the run folder and its archive and
+stops before opening AEDT; you can then
+[run the folder on another computer](run-elsewhere.qmd#aedt-execute-the-prepared-package-locally).
+
+The four numbered sections build the plan, prepare the run folder, run AEDT,
+and read the result. The plan is that of First simulation, except that its
+vacuum region reaches 250 µm beyond the die's edges, so that Q3D's Region,
+the box of empty space it solves in, does not end at the metal.
+
+## Nets and conductors {#geometryplan-backed-cg-preparation}
+
+A Net is a named piece of metal that acts as one conductor; the plan defines
+them with `plan.set_nets`. `prepare_q3d_from_geometry` turns every Net of the
+model into one Q3D net:
+
+- `net_types` gives each Net its Q3D type, `"Signal"` or `"Ground"`, and must
+  name every Net of the model and no other. A `Signal` net has a row and a
+  column in the matrix; a `Ground` net is Q3D's reference and has none. Here
+  both are `Signal`, so the matrix is 2 × 2 and includes the ground metal.
+- `physical_ground_nets` records which Nets are physically grounded,
+  separately from their Q3D type. Here it is `ground`.
+- Q3D names each net after its Net, with any character other than letters,
+  digits and `_` replaced; two Nets that would get the same name are refused.
+  The run folder's `aedt_spec.json` lists the names, here `pad` and
+  `ground`.
+- `modeling="solid"` builds the metal as solids of the film's thickness (100
+  nm of aluminium here); `"thin_film"` builds it as sheets on the film's
+  face. [Choose the geometric approximation](../concepts/model-and-numerics.qmd#choose-the-geometric-approximation)
+  explains the difference.
+
+## What Q3D extracts {#know-which-formulation-you-requested}
+
+Q3D on this model extracts capacitance and conductance only, at the frequency
+of `MatrixRunControl` (here 5 GHz). It does not solve the AC or DC
+resistance and inductance; that is not available in this version and is
+tracked in [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265).
+
+`MatrixRunControl` also sets Q3D's own adaptive refinement:
+`maximum_passes=10` allows up to ten passes, and `convergence_percent=1.0`
+stops them once the change between two passes is at most 1 %. On return, the
+report keeps Q3D's convergence status, the change it reported and the
+controls you set beside the matrix
+([Convergence and reports](convergence-and-reports.qmd#aedt-read-the-sealed-family-evidence)).
+
+The Region is the plan's vacuum region, left open.
+A Region whose six faces form a grounded enclosure is a field of the Q3D
+request, `Q3dSpec(grounded_region_net=...)`, which
+`prepare_q3d_from_geometry` does not set; the
+[Q3D reference](../reference/specs/aedt-runtime.qmd#q3d-extraction-and-region-ground-candidate)
+describes it.
+
+## Build without solving {#build-only-then-solve}
+
+To build the AEDT project without solving, prepare the run folder with
+`--handoff-only`, then run it with `--prepare-only`, giving the folder the
+script printed:
+
+```bash
+python -m scgsim.aedt.run --handoff <run-folder>/metadata/aedt_handoff_metadata.json --execute --prepare-only
+```
+
+AEDT imports the model, assigns the nets, the Region and the setup, reads
+them back and saves the project, without solving or exporting a matrix. This
+uses up the run folder: prepare a new one before you solve. The
+[Q3D reference](../reference/specs/aedt-runtime.qmd#q3d-sgb-model) describes
+the import and the checks on the returned result.

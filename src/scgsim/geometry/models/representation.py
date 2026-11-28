@@ -1,16 +1,16 @@
-"""Private source/effective representation facts for neutral geometry planning.
+"""The prepared representation of each entity, and the effective enclosure, that interpretation hands to the stages after it.
 
-These records are an in-process handoff from a preparation owner to shared
-planning primitives. They are not source metadata, a serialized schema, or a
-backend-specific plan.
+They are in-process records: not source metadata, not a serialized schema, and not a
+backend plan.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Literal
 from types import MappingProxyType
+from typing import Literal
+
 from scgsim.semantics.snapshot import freeze_plain
 
 
@@ -24,8 +24,12 @@ class EntityRepresentation:
     effective_z_interval_um: tuple[float, float]
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "source_z_interval_um", tuple(self.source_z_interval_um))
-        object.__setattr__(self, "effective_z_interval_um", tuple(self.effective_z_interval_um))
+        object.__setattr__(
+            self, "source_z_interval_um", tuple(self.source_z_interval_um)
+        )
+        object.__setattr__(
+            self, "effective_z_interval_um", tuple(self.effective_z_interval_um)
+        )
 
 
 @dataclass(frozen=True, slots=True)

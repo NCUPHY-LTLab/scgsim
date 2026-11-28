@@ -1,0 +1,341 @@
+---
+title: "Convergence and reports"
+description: "Declare when a Palace run has converged, run it, and read the three report views: did it converge, what are the numbers, what did it cost."
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/returned-results"
+resources:
+  - ../images/convergence-and-reports/*.html
+  - ../images/sgb-concept/plotly.min.js
+aliases:
+  - ../course/returned-results.html
+---
+
+This page answers two questions about a Palace run: has it converged, and what
+are its numbers. Before the run you declare which numbers must stop changing as
+Palace refines the mesh, and by how much. SCGSim then stops Palace once they
+have, and the report shows every pass against your criteria. The example is the
+square pad of [First simulation](../start/first-simulation.qmd): with a
+declaration its capacitance settles at 95.21 fF after four passes.
+
+## Declare convergence {#declare-convergence}
+
+Palace refines adaptively: it solves, estimates where its error is largest,
+refines the mesh there and solves again. Each solve is a pass; pass 1 solves
+the mesh that `mesh()` wrote. A convergence declaration says which numbers
+must stop changing from one pass to the next, by how much, and for how many
+passes in a row. It goes on the simulation before `write_config()`.
+
+This script is First simulation's, with a declaration added in step 4:
+
+```python
+import os
+import subprocess
+from pathlib import Path
+from uuid import uuid4
+
+import gdsfactory as gf
+import orcapen_sc_pdk
+from orcapen_sc_pdk import get_material_records
+from orcapen_sc_pdk.tech import get_single_die_layer_stack
+from scgsim.geometry import GeometryPlan
+from scgsim.palace import Capacitance, ElectrostaticSim, resolve_palace_result
+
+# 1. The layout and the plan of First simulation.
+orcapen_sc_pdk.activate()
+component = gf.get_component(
+    "square_pad_capacitor", pad_side_um=200.0, gap_um=20.0, die_side_um=1000.0
+)
+plan = GeometryPlan(
+    component=component,
+    root_id="chip",
+    layer_stack=get_single_die_layer_stack(),
+    material_records=get_material_records(),
+    coupon_padding_um=0.0,
+)
+plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
+plan.set_vacuum_region(padding=(0.0, 0.0, 1000.0))
+
+# 2. The capacitance problem: the pad is the terminal, the ground is at 0 V.
+sim = ElectrostaticSim()
+sim.set_plan(plan.prepare())
+sim.set_output_dir(Path(".artifacts/simplepad-converged") / uuid4().hex[:12])
+sim.add_terminal("pad", net_id="pad")
+sim.add_ground(net_id="ground")
+sim.set_electrostatic(unassigned_conductor_policy="error")
+
+# 3. Refine the mesh up to 6 times, with second-order elements.
+sim.set_numerical(order=2, amr_max_passes=6)
+
+# 4. Converged: the capacitance changes by at most 0.5 % from one pass to
+#    the next, two passes in a row.
+sim.set_convergence(
+    Capacitance.diagonal().within(percent=0.5),
+    minimum_converged_passes=2,
+)
+
+# 5. Mesh, write Palace's input, and run Palace here with 16 MPI processes.
+sim.mesh()
+sim.write_config()
+handoff = sim.prepare_handoff(
+    profile="direct-local",
+    executable=os.environ["SCGSIM_PALACE_EXECUTABLE"],
+    resources={"command_style": "wrapper", "processes": 16, "threads": 1},
+)
+subprocess.run(["bash", "run_palace.sh"], cwd=handoff.run_dir, check=True)
+
+# 6. Read the result: did it converge, and the capacitance matrix.
+result = resolve_palace_result(handoff.run_dir, expected_handoff_id=handoff.handoff_id)
+verdict = result.convergence.verdict
+print("Status:", result.status)
+print("Convergence:", verdict.state, "at pass", verdict.pass_number)
+terminals = {
+    entry["index"]: entry["terminal_name"]
+    for entry in result.provenance.index_map["entries"]
+    if entry["role"] == "terminal"
+}
+print("Capacitance matrix (fF):", *terminals.values())
+for row in result.tables["terminal-C"].rows:
+    values = [row[f"C[i][{column}] (F)"] * 1e15 for column in terminals]
+    print(f"{terminals[int(row['i'])]:>8}", *(f"{value:10.2f}" for value in values))
+```
+
+Steps 3 and 4 are the declaration:
+
+- `set_numerical(order=2, amr_max_passes=6)` allows six refinements, so at
+  most seven passes, and uses second-order finite elements. Without a pass
+  limit Palace does not refine at all.
+- `Capacitance.diagonal().within(percent=0.5)` holds at a pass when every
+  diagonal entry of the capacitance matrix, here `C[pad][pad]`, changed by at
+  most 0.5 % since the pass before. A change needs a pass before it, so it can
+  first hold at pass 2.
+- `minimum_converged_passes=2` makes the run converged at the first pass where
+  every criterion has held for two passes in a row.
+
+These thresholds are an example. The right ones depend on what you use the
+number for: a capacitance for a circuit model may need a tighter change than a
+first estimate does. A criterion can also name one matrix entry
+(`Capacitance.element("pad", "pad")`), a mode frequency, Surface EPR or
+Palace's error estimate (`ErrorIndicator().below(...)`); the
+[convergence declaration](../reference/specs/palace-electrostatic-sgb.qmd#convergence-declaration)
+lists them all. `write_config()` refuses a declaration that names a terminal
+the simulation does not have, or a pass limit too small for the passes in a
+row it asks for.
+
+Palace is stopped at the first pass where the run has converged, so the passes
+after it, the most expensive ones, are never solved
+([how it stops](../reference/specs/palace-electrostatic-sgb.qmd#convergence-stop)).
+
+## Run it {#run-it}
+
+In the shell where `SCGSIM_PALACE_EXECUTABLE` is set, as in
+[First simulation](../start/first-simulation.qmd#palace-executable), run the
+script. On a workstation with 16 MPI processes it took 99 s, and it ends with:
+
+```text
+Status: completed
+Convergence: converged at pass 4
+Capacitance matrix (fF): pad
+     pad      95.21
+```
+
+The run converged at pass 4, so Palace was stopped there and passes 5 to 7
+were never solved. The capacitance is that of pass 4: 95.21 fF.
+
+## Read the three views {#read-the-views}
+
+In a notebook, the resolved result shows three views, each answering one
+question:
+
+| Call | Answers |
+|---|---|
+| `result.show_run_trustworthiness()` | Which run is this, and has it converged? |
+| `result.show_physics_quantities()` | What are the numbers? |
+| `result.show_simulation_benchmark()` | What did it cost? |
+| `result.show_all_results()` | All three, in this order |
+
+Every view takes `theme="light"` or `"dark"`. Below is what each showed for
+this run.
+
+### Has it converged? {#trust-view}
+
+`show_run_trustworthiness()` opens with the run's identity: an Electrostatic
+problem on Route B, 4 passes recorded, 16 MPI processes with 1 OpenMP thread
+each. Then comes the convergence table, one row per pass. The column
+`C diagonal ≤ 0.5 %` is the criterion with its threshold, and each cell is the
+change from the pass before:
+
+| Pass | Solved elements | C diagonal ≤ 0.5 % | Every criterion, 2 passes in a row |
+|---|---|---|---|
+| 1 | 31,096 | N/A | not yet |
+| 2 | 169,380 | 1.37 % ✗ | fails |
+| 3 | 658,735 | 0.485 % ✓ | holds, 1 in a row |
+| 4 | 1,628,883 | 0.223 % ✓ | holds, 2 in a row |
+
+Pass 1 has no pass before it, so no change. The criterion first held at pass 3
+and held again at pass 4: two in a row, so the run converged at pass 4. The
+view then plots each quantity against the pass, and its change against the
+declared threshold:
+
+<iframe src="../images/convergence-and-reports/capacitance-by-pass.html" title="C[pad][pad] against the AMR pass: 97.20, 95.89, 95.43 and 95.21 fF" width="100%" height="460" style="border:0;" loading="lazy"></iframe>
+
+<iframe src="../images/convergence-and-reports/capacitance-change-by-pass.html" title="The change of C[pad][pad] from the pass before, on a log axis, against the 0.5 % threshold" width="100%" height="460" style="border:0;" loading="lazy"></iframe>
+
+A third figure plots Palace's error estimate for each pass. With
+`show_details=True` the view also says the verdict in a sentence:
+
+> Converged at pass 4, of the 4 passes read (passes 1 to 4): every criterion
+> held at passes 3 to 4, 2 in a row. Last to hold: C diagonal, from pass 3. No
+> pass was read after it. SCGSim stopped Palace after pass 4: 3 of the 7 passes
+> its limit allows were not run.
+
+A run that does not converge solves every pass its limit allows, and the
+sentence names each criterion that still fails, by how much.
+
+### What are the numbers? {#physics-view}
+
+`show_physics_quantities()` shows the values of the last pass read, pass 4:
+the Maxwell capacitance matrix, here one entry, `C[pad][pad]` = 95.2144 fF.
+A line below it says that Surface-EPR physics is unavailable, since this run
+asked for none. An Eigenmode run shows each mode's frequency and Q instead.
+
+### What did it cost? {#benchmark-view}
+
+`show_simulation_benchmark()` shows the cost: 93.8 s of Palace wall time,
+2,285,940 degrees of freedom and 24.37 GiB peak memory at pass 4. Its table
+per pass shows where the time went:
+
+| Pass | Degrees of freedom | Mesh elements | Time of this pass | Peak memory |
+|---|---|---|---|---|
+| 1 | 50,966 | 31,096 | 0.716 s | 1.20 GiB |
+| 2 | 246,415 | 169,380 | 5.15 s | 3.22 GiB |
+| 3 | 928,764 | 658,735 | 25.5 s | 10.22 GiB |
+| 4 | 2,285,940 | 1,628,883 | 62.4 s | 24.37 GiB |
+
+Pass 4 alone took two thirds of the time, and each further pass would cost
+more: this is why Palace is stopped at convergence. The benchmark says nothing
+about whether the physics is right, and Palace's own timers overlap, so they
+are not added up.
+
+The layout of each view, card by card, is in the
+[report model](../reference/specs/report-model.qmd#declared-convergence).
+
+## Read the numbers in a script {#numbers-in-a-script}
+
+Step 6 of the script reads the matrix the way
+[First simulation](../start/first-simulation.qmd#the-script) does:
+`result.tables["terminal-C"]` is Palace's capacitance table in farads, and the
+run's index map, `result.provenance.index_map["entries"]`, names the terminal
+of each row and column. A simpler call for this is tracked in
+[issue #273](https://github.com/NCUPHY-LTLab/scgsim/issues/273).
+
+## Keep the status, criteria and history with the number {#interpret-for-scq-use}
+
+"Converged" says that your criteria held. It does not say that the number
+answers your question. Before you use a number:
+
+- **State what it is for**: a capacitance for a circuit model, a mode
+  frequency, the participation of one surface in one mode. That decides which
+  quantity you read, and how much change you accept.
+- **Read the quantity itself**: its units, and the order of terminals, ports
+  or modes the run recorded.
+- **Keep the history**: the value at every pass, not only the last. Here pass
+  1 gave 97.20 fF and pass 4 gave 95.21 fF; First simulation's single solve,
+  with first-order elements and no refinement, gave 112.54 fF for the same
+  pad. Only the history shows how far one solve can be from a refined value.
+  A history that was not recorded cannot be filled in afterwards.
+- **Keep the run's status and criteria beside it**: how Palace ended, the
+  declaration, the pass limit and the solver settings. If a number has not
+  settled under your criteria, say so; do not invent a trend or a tolerance
+  the run does not show.
+
+The other guides link here for this rule; it holds for every solver.
+
+## Open a run that ran elsewhere {#palace-bind-the-independently-retained-preparation-id}
+
+A run prepared here and run on another computer comes back as a folder. Copy
+it back under its own name, beside the `.tar.gz` archive that
+`prepare_handoff()` wrote next to it: the folder is checked against that
+archive. `resolve_palace_result` opens the folder only when it is the run you
+prepared. Pass it the handoff ID, the run's identity that `prepare_handoff()`
+returns as `handoff.handoff_id`, from a note you kept when you prepared it, for
+example with
+`Path(".artifacts/palace-preparation-handoff-id.txt").write_text(handoff.handoff_id)`.
+Never take the expected ID from the folder you are checking.
+
+```python
+from pathlib import Path
+from scgsim.palace import resolve_palace_result
+
+# The run folder as it came back, beside its 4de138d3f97d.tar.gz.
+returned_run_dir = Path(".artifacts/simplepad-converged/4de138d3f97d")
+expected_id = Path(".artifacts/palace-preparation-handoff-id.txt").read_text(
+    encoding="utf-8"
+).strip()
+result = resolve_palace_result(returned_run_dir, expected_handoff_id=expected_id)
+result.show_all_results()
+```
+
+Point the paths to your returned folder and your note.
+`resolve_palace_result` refuses a run that failed or did not finish, a folder
+renamed or without its archive, and a folder whose files do not match what was
+prepared, even when some result table happens to exist. Run folders written by
+earlier SCGSim versions are not read
+([which ones](../reference/specs/report-model.qmd#palace-run-schemas)).
+[Run a prepared model](run-elsewhere.qmd) covers running it.
+
+## A failed or partial run {#failed-or-partial-run}
+
+For a run that failed or came back partly, open the folder with
+`inspect_run_trustworthiness` instead:
+
+```python
+from IPython.display import display
+from scgsim.palace import inspect_run_trustworthiness
+
+report = inspect_run_trustworthiness(returned_run_dir)
+display(report)
+```
+
+It shows the same convergence table for the passes the folder holds, the
+recorded status and, for a failed run, why it failed. The latest readable pass
+is shown as partial evidence; it does not make the run complete. A process
+killed by the system has exit code 137, which often means it ran out of
+memory, but the code alone does not prove it; the report says what was
+recorded.
+
+## AEDT results {#aedt-read-the-sealed-family-evidence}
+
+An AEDT run folder opens with `resolve_results`, and its views are the same
+three:
+
+```python
+from pathlib import Path
+from scgsim.aedt import resolve_results
+
+returned_run_dir = Path(".artifacts/returned-aedt")
+resolved = resolve_results(returned_run_dir)
+resolved.show_all_results(show_details=False, theme="light")
+rows = resolved.physics_results()
+benchmark = resolved.simulation_benchmark()
+```
+
+`resolve_results` checks that the files are those the run wrote. Then
+`physics_results()` returns the rows of the calculation: S-parameters for
+Driven Terminal, each mode's frequency and Q for Eigenmode, the matrices for
+Q3D and the per-length matrices for Q2D, in AEDT's units and AEDT's order of
+conductors and ports. Keep that order when you use the rows. The report never
+adds a history AEDT did not record. The
+[AEDT reference](../reference/specs/aedt-runtime.qmd) lists what each
+calculation returns.
+
+## What to do next {#continue-with-the-evidence-you-actually-have}
+
+- For a Palace Eigenmode run with Surface EPR, `result.epr_result()` returns
+  the final participations, which you can keep and
+  [evaluate with other loss assumptions](offline-loss.qmd) without solving
+  again.
+- For AEDT, the EPR of the fields a run saved is computed separately:
+  [analyze saved fields](saved-fields.qmd).
+- For a capacitance, an S-parameter or a line parameter, the number, its
+  history and the run's status above are the result.

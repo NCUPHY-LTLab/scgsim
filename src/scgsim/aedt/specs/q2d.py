@@ -2,25 +2,22 @@
 
 from __future__ import annotations
 
-
 from collections.abc import Mapping
-
 from dataclasses import dataclass, field
-
 from typing import Any, Literal
 
 from scgsim.aedt.specs.common import (
     LOCKED_PYAEDT,
-    MatrixRunControl,
     OFFICIAL_PYAEDT_SOURCE_URL,
-    PdkMaterial,
     Q2D_SCHEMA_VERSION,
     Q2D_SCHEMA_VERSION_V2,
-    _normalize_common_spec,
-    _number,
-    _padding_2d,
-    _project_name_from_payload,
-    _text,
+    MatrixRunControl,
+    PdkMaterial,
+    finite_number,
+    normalize_common_spec,
+    project_name_from_payload,
+    text_value,
+    validate_planar_padding,
 )
 
 
@@ -34,20 +31,25 @@ class Q2dRectangleSpec:
     material_id: str
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "name", _text(self.name, "rectangle.name"))
+        object.__setattr__(self, "name", text_value(self.name, "rectangle.name"))
         if len(self.origin_um) != 2 or len(self.size_um) != 2:
             raise ValueError("Q2D rectangle origin_um and size_um require x,y pairs")
         origin = tuple(
-            _number(value, "rectangle.origin_um") for value in self.origin_um
+            finite_number(value, "rectangle.origin_um") for value in self.origin_um
         )
-        size = tuple(_number(value, "rectangle.size_um") for value in self.size_um)
+        size = tuple(
+            finite_number(value, "rectangle.size_um") for value in self.size_um
+        )
         if any(value <= 0 for value in size):
             raise ValueError("Q2D rectangle size_um values must be > 0")
         object.__setattr__(self, "origin_um", origin)
         object.__setattr__(self, "size_um", size)
-        object.__setattr__(self, "material_id", _text(self.material_id, "material_id"))
+        object.__setattr__(
+            self, "material_id", text_value(self.material_id, "material_id")
+        )
 
     def to_payload(self) -> dict[str, Any]:
+        """Return this request record in its canonical payload shape."""
         return {
             "name": self.name,
             "origin_um": list(self.origin_um),
@@ -66,21 +68,22 @@ class Q2dConductorSpec:
     thickness_um: float
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "name", _text(self.name, "conductor.name"))
+        object.__setattr__(self, "name", text_value(self.name, "conductor.name"))
         if self.conductor_type not in {"SignalLine", "ReferenceGround"}:
             raise ValueError("Q2D conductor_type must be SignalLine or ReferenceGround")
         objects = tuple(
-            _text(value, "conductor.object_name") for value in self.object_names
+            text_value(value, "conductor.object_name") for value in self.object_names
         )
         if not objects or len(set(objects)) != len(objects):
             raise ValueError("Q2D conductor object_names must be nonempty and unique")
-        thickness = _number(self.thickness_um, "conductor.thickness_um")
+        thickness = finite_number(self.thickness_um, "conductor.thickness_um")
         if thickness <= 0:
             raise ValueError("Q2D conductor thickness_um must be > 0")
         object.__setattr__(self, "object_names", objects)
         object.__setattr__(self, "thickness_um", thickness)
 
     def to_payload(self) -> dict[str, Any]:
+        """Return this request record in its canonical payload shape."""
         return {
             "name": self.name,
             "conductor_type": self.conductor_type,
@@ -106,10 +109,11 @@ class Q2dSpec:
 
     @property
     def mode(self) -> Literal["q2d"]:
+        """Return the solver family represented by this request."""
         return "q2d"
 
     def __post_init__(self) -> None:
-        materials = _normalize_common_spec(self)
+        materials = normalize_common_spec(self)
         if self.run_control is not None and not isinstance(
             self.run_control, MatrixRunControl
         ):
@@ -156,10 +160,11 @@ class Q2dSpec:
         object.__setattr__(self, "rectangles", rectangles)
         object.__setattr__(self, "conductors", conductors)
         object.__setattr__(
-            self, "region_padding_um", _padding_2d(self.region_padding_um)
+            self, "region_padding_um", validate_planar_padding(self.region_padding_um)
         )
 
     def to_payload(self) -> dict[str, Any]:
+        """Return this request record in its canonical payload shape."""
         return {
             "schema_version": (
                 Q2D_SCHEMA_VERSION_V2
@@ -188,6 +193,7 @@ class Q2dSpec:
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> Q2dSpec:
+        """Construct this request record from its serialized payload."""
         if payload.get("schema_version") not in {
             Q2D_SCHEMA_VERSION,
             Q2D_SCHEMA_VERSION_V2,
@@ -209,14 +215,14 @@ class Q2dSpec:
         elif not isinstance(run, dict):
             raise TypeError("Q2D V1 run_control must be a JSON object")
         return cls(
-            project_name=_project_name_from_payload(
+            project_name=project_name_from_payload(
                 payload.get("project", {}).get("name")
             ),
-            design_name=_text(
+            design_name=text_value(
                 payload.get("project", {}).get("design"), "project.design"
             ),
             materials=materials,
-            vacuum_material_id=_text(
+            vacuum_material_id=text_value(
                 payload.get("vacuum_material_id"), "vacuum_material_id"
             ),
             rectangles=tuple(
@@ -227,11 +233,11 @@ class Q2dSpec:
             ),
             run_control=None if run is None else MatrixRunControl(**run),
             region_padding_um=tuple(payload.get("region_padding_um", ())),  # type: ignore[arg-type]
-            aedt_version=_text(
+            aedt_version=text_value(
                 payload.get("aedt", {}).get("requested_version"),
                 "aedt.requested_version",
             ),
-            pyaedt_version=_text(
+            pyaedt_version=text_value(
                 payload.get("pyaedt", {}).get("locked_version"), "pyaedt.locked_version"
             ),
         )

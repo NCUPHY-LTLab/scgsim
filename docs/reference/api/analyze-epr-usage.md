@@ -1,0 +1,53 @@
+[]{#analyze_epr-saved-field-epr-usage}Use `analyze_epr` to compute the EPR of an HFSS Eigenmode run again from the fields AEDT saved, for example for other Surface-EPR groups or field sides, without solving again. It opens AEDT, so it needs an AEDT release installed on the host, named by `aedt_version`, and its license. To change only the loss assumptions of a finished result, use `reanalyze_epr`, which works offline ([Change loss assumptions without solving](../../guides/offline-loss.qmd)). The [saved-fields guide](../../guides/saved-fields.qmd) runs the whole procedure.
+
+## Minimal call
+
+This block resolves the retained saved-field solution and parses its matching EPR specification, whose SGB model is bound to the run folder's `model/` files, before calling `analyze_epr`. Replace the example directory with the returned run folder for your study.
+
+```python
+import json
+from pathlib import Path
+
+from scgsim.aedt import analyze_epr, parse_aedt_spec, resolve_saved_solution
+
+returned_run_dir = Path(".artifacts/returned-aedt-epr")
+spec = parse_aedt_spec(
+    json.loads((returned_run_dir / "aedt_spec.json").read_text(encoding="utf-8")),
+    base_dir=returned_run_dir,
+)
+saved = resolve_saved_solution(returned_run_dir / "saved-solution-manifest.json")
+
+result = analyze_epr(
+    saved_solution=saved,
+    aedt_version="2024.2",
+    model=spec.model,
+    project_name=spec.project_name,
+    design_name=spec.design_name,
+    run_control=spec.run_control,
+    epr_request=spec.epr_request,
+    output_dir=Path(".artifacts/saved-field-epr"),
+)
+```
+
+`result` is the `EprResult` of the saved field. It holds one evaluation per mode, so `mode=` is the only selection `show_epr` takes for it; `show_epr` draws that mode as a Plotly figure:
+
+```python
+from scgsim.aedt import show_epr
+
+show_epr(result, mode=1)
+```
+
+`theme="dark"` suits a dark notebook.
+
+## Parameters
+
+| Parameter | Meaning |
+|---|---|
+| `saved_solution` | Verified saved-field cohort resolved as `SavedSolution`. |
+| `aedt_version` | Explicit AEDT release: `"2023.2"` or `"2024.2"`. |
+| `model` | The `PreparedSgbModel` the saved solution was solved from: `spec.model` of the returned run, or `EigenmodeSim.prepared_model`. A solution of another model, or of the native builder, is refused. |
+| `project_name`, `design_name` | Native project and design identities for the saved model. |
+| `run_control` | Eigenmode setup and pass controls associated with the saved solution. |
+| `epr_request` | Surface, bulk and junction quantities to evaluate. |
+| `output_dir` | New destination for the analysis handoff and returned result. |
+| `surface_field_selectors` | Optional mapping from sidecar Surface-EPR groups (those `epr_request.surface_epr_groups` selects) to `"surface"` (the field on the row's faces) or `"adjacent"` (the field just off them). A group without a selector reads `"surface"`. |

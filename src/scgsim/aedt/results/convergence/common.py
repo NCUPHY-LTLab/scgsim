@@ -2,46 +2,49 @@
 
 from __future__ import annotations
 
-
 import math
-
 import re
-
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
 
-from typing import Any
-
-from scgsim.aedt._io import file_sha256
-
+from scgsim.aedt.results.convergence.files import (
+    contained_evidence_path,
+    evidence_source,
+    read_evidence_text,
+)
+from scgsim.aedt.specs.common import MatrixRunControl
 from scgsim.aedt.specs.q2d import Q2dSpec
-
 from scgsim.aedt.specs.q3d import Q3dSpec
 
 
-def _read_convergence(
+def read_convergence(
     run_dir: Path,
     spec: Q2dSpec | Q3dSpec,
     *,
     solver: str,
-    problems: tuple[tuple[str, str, str, str | None], ...],
+    problems: tuple[ConvergenceProblem, ...],
     forbidden_block_names: tuple[str, ...] = (),
 ) -> dict[str, Any]:
+    """Read exact matrix convergence blocks and bind their native profile status."""
     root = run_dir.resolve()
-    results_dir = _contained(root, f"{spec.project_name}.aedtresults", solver)
-    asol_path = _contained(results_dir, f"{spec.design_name}.asol", solver)
-    asol = _read(asol_path, solver)
+    results_dir = contained_evidence_path(
+        root, f"{spec.project_name}.aedtresults", solver
+    )
+    asol_path = contained_evidence_path(results_dir, f"{spec.design_name}.asol", solver)
+    asol = read_evidence_text(asol_path, solver)
     profile_names = set(re.findall(r"\bPRF\([^\n]*\bFile='([^']+\.profile)'", asol))
     if len(profile_names) != 1:
         raise RuntimeError(
             f"{solver} native solution does not identify exactly one profile"
         )
-    profile_path = _contained(
+    profile_path = contained_evidence_path(
         results_dir / f"{spec.design_name}.results", profile_names.pop(), solver
     )
-    profile = _read(profile_path, solver)
+    profile = read_evidence_text(profile_path, solver)
 
-    block_names = {name for _, name, _, _ in problems}
-    blocks: dict[str, tuple[str, str]] = {}
+    block_names = {problem.block_name for problem in problems}
+    blocks: dict[str, _SolutionBlock] = {}
     found_names: set[str] = set()
     for match in re.finditer(
         r"(?ms)^\s*\$begin '(?P<id>\d+)'\s*$"
@@ -55,7 +58,7 @@ def _read_convergence(
         if name in block_names:
             if name in blocks:
                 raise RuntimeError(f"{solver} native solution repeats {name}")
-            blocks[name] = (match.group("id"), body)
+            blocks[name] = _SolutionBlock(match.group("id"), body)
     if set(blocks) != block_names:
         raise RuntimeError(
             f"{solver} native solution lacks exact matrix convergence blocks"
@@ -65,58 +68,52 @@ def _read_convergence(
             f"{solver} native solution contains a disabled convergence block"
         )
 
+    control = cast(MatrixRunControl, spec.run_control)
     evidence = {
-        problem: _problem_evidence(
-            solver=solver,
-            block_id=blocks[name][0],
-            body=blocks[name][1],
-            profile=profile,
-            expected_target=spec.run_control.convergence_percent,
-            expected_maximum_passes=spec.run_control.maximum_passes,
-            delta_field=delta_field,
-            error_field=error_field,
+        problem.result_key: _problem_evidence(
+            solver, blocks[problem.block_name], profile, problem, control
         )
-        for problem, name, delta_field, error_field in problems
+        for problem in problems
     }
     return {
         "sources": {
-            "asol": _source(asol_path, root),
-            "profile": _source(profile_path, root),
+            "asol": evidence_source(asol_path, root),
+            "profile": evidence_source(profile_path, root),
         },
         **evidence,
     }
 
 
 def _problem_evidence(
-    *,
     solver: str,
-    block_id: str,
-    body: str,
+    block: _SolutionBlock,
     profile: str,
-    expected_target: float,
-    expected_maximum_passes: int,
-    delta_field: str,
-    error_field: str | None,
+    problem: ConvergenceProblem,
+    control: MatrixRunControl,
 ) -> dict[str, Any]:
-    target = _float(_required(body, r"(?m)^\s*ConvTarget='([^']+)'\s*$"))
-    maximum_passes = _int(_required(body, r"(?m)^\s*MaxPasses='([^']+)'\s*$"))
-    if not math.isclose(target, expected_target, rel_tol=0.0, abs_tol=1e-12):
+    target = _float(_required(block.body, r"(?m)^\s*ConvTarget='([^']+)'\s*$"))
+    maximum_passes = _int(_required(block.body, r"(?m)^\s*MaxPasses='([^']+)'\s*$"))
+    if not math.isclose(
+        target, control.convergence_percent, rel_tol=0.0, abs_tol=1e-12
+    ):
         raise RuntimeError(
             f"{solver} native convergence target does not match the spec"
         )
-    if maximum_passes != expected_maximum_passes:
+    if maximum_passes != control.maximum_passes:
         raise RuntimeError(
             f"{solver} native convergence maximum passes do not match the spec"
         )
 
-    pass_rows = re.findall(r"(?m)^\s*c\((.*)\)\s*$", body)
+    pass_rows = re.findall(r"(?m)^\s*c\((.*)\)\s*$", block.body)
     if not pass_rows:
         raise RuntimeError(f"{solver} native convergence block has no adaptive passes")
     final = pass_rows[-1]
     final_pass = _int(_field(final, "p"))
     final_triangles = _int(_field(final, "tri"))
-    final_delta = _float(_field(final, delta_field))
-    final_error = _float(_field(final, error_field)) if error_field else None
+    final_delta = _float(_field(final, problem.delta_field))
+    final_error = (
+        _float(_field(final, problem.error_field)) if problem.error_field else None
+    )
     if (
         final_pass <= 0
         or final_pass > maximum_passes
@@ -126,7 +123,7 @@ def _problem_evidence(
     ):
         raise RuntimeError(f"{solver} native final convergence values are invalid")
 
-    profile_block = _block(profile, block_id, solver)
+    profile_block = _block(profile, block.block_id, solver)
     converged_text = "Adaptive Passes converged"
     not_converged_text = "Adaptive Passes did not converge"
     converged_count = profile_block.count(converged_text)
@@ -151,34 +148,6 @@ def _problem_evidence(
     if final_error is not None:
         result["final_error_percent"] = final_error
     return result
-
-
-def _source(path: Path, root: Path) -> dict[str, str | int]:
-    return {
-        "path": path.relative_to(root).as_posix(),
-        "bytes": path.stat().st_size,
-        "sha256": file_sha256(path),
-    }
-
-
-def _contained(root: Path, relative: str, solver: str) -> Path:
-    if not relative or Path(relative).is_absolute():
-        raise RuntimeError(f"{solver} native evidence path is invalid")
-    path = (root / relative).resolve()
-    if not path.is_relative_to(root.resolve()):
-        raise RuntimeError(f"{solver} native evidence escapes the run directory")
-    return path
-
-
-def _read(path: Path, solver: str) -> str:
-    if not path.is_file() or path.stat().st_size == 0:
-        raise RuntimeError(f"{solver} native convergence evidence is missing: {path}")
-    try:
-        return path.read_text(encoding="utf-8", errors="strict")
-    except UnicodeError as exc:
-        raise RuntimeError(
-            f"{solver} native convergence evidence is not UTF-8: {path}"
-        ) from exc
 
 
 def _block(text: str, name: str, solver: str) -> str:
@@ -229,3 +198,21 @@ def _int(value: str) -> int:
             "AEDT native matrix convergence value is not an integer"
         ) from exc
     return result
+
+
+@dataclass(frozen=True)
+class ConvergenceProblem:
+    """One solver quantity and its exact native convergence-block field names."""
+
+    result_key: str
+    block_name: str
+    delta_field: str
+    error_field: str | None = None
+
+
+@dataclass(frozen=True)
+class _SolutionBlock:
+    """A native convergence block with its profile-binding identity."""
+
+    block_id: str
+    body: str

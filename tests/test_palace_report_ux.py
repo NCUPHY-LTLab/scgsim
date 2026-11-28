@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import sys
 import tempfile
 import types
@@ -13,20 +14,22 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
+from scgsim.contracts.palace_convergence import ConvergenceCheck
 from scgsim.palace import (
     PalaceResultSelection,
     PalaceTrustReport,
     PhysicsQuantitiesReport,
+    ResolvedPalaceResult,
     inspect_run_trustworthiness,
 )
-from scgsim.palace.results.report_data import (
+from scgsim.palace.reports.surface_figures import surface_ranking_figure
+from scgsim.palace.results.inspection_records import (
     AmrPassSnapshot,
     SurfaceEprRecord,
     SurfaceEprSeriesSnapshot,
-    _read_surface_epr,
 )
-from scgsim.palace.presentation.reports import _surface_ranking_figure
-from scgsim.palace.execution.returned_receipt import _iteration_output_paths
+from scgsim.palace.results.surface_readers import SurfaceBinding, SurfaceEprReader
+from scgsim.palace.run.returned_receipt import iteration_output_paths
 
 
 class _Html:
@@ -53,12 +56,13 @@ def _surface_snapshot(pass_index: int, source: str) -> SurfaceEprSeriesSnapshot:
     record = SurfaceEprRecord(
         index=1,
         interface_type="MA",
-        surface_id="SURFACE_1",
-        face_kind="interface",
-        owner_semantic_ids=("OWNER_1",),
-        net_id="GROUND",
-        equipotential_id="GROUND",
-        source_provenance={"authority": "generic-test"},
+        name="SURFACE_1",
+        rows=("ROW_1",),
+        face_kinds=("interface",),
+        entities=("ENTITY_1",),
+        nets=("GROUND",),
+        attributes=(7,),
+        lineage={"f:1": {"ENTITY_1": 1.0}},
         participation=0.25 + 0.01 * pass_index,
         quality_factor=math.inf,
         loss_tangent=0.0,
@@ -97,6 +101,7 @@ def _trust_report(
             mesh_elements=50,
             elapsed_total_s=1.0 + index,
             peak_node_memory_mb=10.0,
+            native_iteration=index + 1,
         )
         for index, source in enumerate(sources)
     )
@@ -130,6 +135,7 @@ def _trust_report(
         durations={},
         cost={},
         provenance={},
+        convergence=ConvergenceCheck.not_declared(),
     )
 
 
@@ -145,7 +151,7 @@ def _file_record(root: Path, relative: str) -> dict[str, object]:
     }
 
 
-def _failed_eigenmode_run(
+def _failed_eigenmode_run(  # noqa: PLR0913 - independent native-failure scenarios stay explicit test controls
     root: Path,
     *,
     solver_exit_code: int = 137,
@@ -161,14 +167,11 @@ def _failed_eigenmode_run(
     results.mkdir(parents=True)
     logs.mkdir()
     (root / "config.json").write_text("{}", encoding="utf-8")
-    (results / "eig.csv").write_text(
-        (
-            "m,Re{f} (GHz)\n1,5.0\n"
-            if conflicting_final_problem_size
-            else "m,Re{f} (GHz)\n"
-        ),
-        encoding="utf-8",
-    )
+    # As Palace 0.18.1 leaves a run killed during the solve after pass 7: iteration07 holds pass 7, and the
+    # top level is that solve under way (eig.csv with its header only), or, when it was killed before the
+    # solve wrote anything, links into iteration07 beside a palace.json that already counts the next mesh.
+    if not conflicting_final_problem_size:
+        (results / "eig.csv").write_text("m,Re{f} (GHz)\n", encoding="utf-8")
     (logs / "palace-1.log").write_text(log_text, encoding="utf-8")
     if include_iteration:
         iteration = results / "iteration07"
@@ -177,22 +180,30 @@ def _failed_eigenmode_run(
             "m,Re{f} (GHz)\n1,5.0\n",
             encoding="utf-8",
         )
-        if conflicting_final_problem_size:
-            (iteration / "palace.json").write_text(
-                json.dumps(
-                    {
-                        "Problem": {"DegreesOfFreedom": 100, "MeshElements": 50},
-                        "ElapsedTime": {"Durations": {"Total": 10.0}},
-                    }
-                )
-                + "\n",
-                encoding="utf-8",
+        (iteration / "palace.json").write_text(
+            json.dumps(
+                {
+                    "Problem": {
+                        "DegreesOfFreedom": 100,
+                        "MeshElements": 50,
+                        "Iteration": 7,
+                    },
+                    "ElapsedTime": {"Durations": {"Total": 10.0}},
+                }
             )
+            + "\n",
+            encoding="utf-8",
+        )
     if conflicting_final_problem_size:
+        os.symlink("iteration07/eig.csv", results / "eig.csv")
         (results / "palace.json").write_text(
             json.dumps(
                 {
-                    "Problem": {"DegreesOfFreedom": 200, "MeshElements": 100},
+                    "Problem": {
+                        "DegreesOfFreedom": 200,
+                        "MeshElements": 100,
+                        "Iteration": 7,
+                    },
                     "ElapsedTime": {"Durations": {"Total": 10.0}},
                 }
             )
@@ -229,12 +240,11 @@ def _failed_eigenmode_run(
     ]
     if seal_iteration:
         output_paths.append("results/palace/iteration07/eig.csv")
-        if conflicting_final_problem_size:
-            output_paths.append("results/palace/iteration07/palace.json")
+        output_paths.append("results/palace/iteration07/palace.json")
     output_files = [_file_record(root, relative) for relative in output_paths]
     receipt: dict[str, object] = {
-        "schema": "palace-returned-run-receipt.v1",
-        "schema_version": 1,
+        "schema": "palace-returned-run-receipt.v2",
+        "schema_version": 2,
         "handoff_id": handoff_id,
         "route": "A",
         "problem": "Eigenmode",
@@ -242,10 +252,12 @@ def _failed_eigenmode_run(
         "exit_code": solver_exit_code,
         "solver_exit_code": solver_exit_code,
         "tee_exit_code": 0,
+        "ending": "solver_ended",
         "identity_verified": False,
         "input_hashes": input_hashes,
         "output_files": output_files,
         "log": _file_record(root, "logs/palace-1.log"),
+        "convergence_decision": None,
     }
     (metadata / "palace_returned_run_receipt.json").write_text(
         json.dumps(receipt) + "\n",
@@ -255,17 +267,44 @@ def _failed_eigenmode_run(
 
 
 class PalaceReportUxTests(unittest.TestCase):
+    """Palacereportuxtests."""
+
+    def test_resolved_display_validates_artifacts_before_theme(self) -> None:
+        """Missing handoff files retain precedence over an invalid display theme."""
+        with tempfile.TemporaryDirectory() as raw, _captured_notebook_display():
+            # These calls must fail before any resolved numerical data is accessed.
+            result = object.__new__(ResolvedPalaceResult)
+            object.__setattr__(result, "run_dir", Path(raw))
+            for show in (
+                result.show_run_trustworthiness,
+                result.show_all_results,
+                result.show_physics_quantities,
+                result.show_simulation_benchmark,
+            ):
+                with self.subTest(method=show.__name__):
+                    with self.assertRaises(FileNotFoundError):
+                        show(theme="invalid")
+
+    def test_resolved_all_results_loads_notebook_display_before_artifacts(self) -> None:
+        """The all-results entry retains its optional notebook import order."""
+        result = object.__new__(ResolvedPalaceResult)
+        with patch.dict(sys.modules, {"IPython.display": None}):
+            with self.assertRaises(ModuleNotFoundError):
+                result.show_all_results(theme="invalid")
+
     def test_surface_ranking_reserves_one_row_per_two_line_label(self) -> None:
+        """Surface ranking reserves one row per two line label."""
         records = tuple(
             SurfaceEprRecord(
                 index=index,
                 interface_type=("MA", "MS", "SA")[index % 3],
-                surface_id=f"SURFACE_{index}",
-                face_kind="interface",
-                owner_semantic_ids=(f"OWNER_{index}",),
-                net_id="GROUND",
-                equipotential_id="GROUND",
-                source_provenance={"authority": "generic-test"},
+                name=f"SURFACE_{index}",
+                rows=(f"ROW_{index}",),
+                face_kinds=("interface",),
+                entities=(f"ENTITY_{index}",),
+                nets=("GROUND",),
+                attributes=(index,),
+                lineage={"f:1": {f"ENTITY_{index}": 1.0}},
                 participation=1.0 / index,
                 quality_factor=math.inf,
                 loss_tangent=0.0,
@@ -283,13 +322,14 @@ class PalaceReportUxTests(unittest.TestCase):
             loss_status="unavailable_nonfinite",
         )
 
-        figure = _surface_ranking_figure(snapshot, 20, "light")
+        figure = surface_ranking_figure(snapshot, 20, "light")
 
         self.assertIsNotNone(figure)
         self.assertEqual(figure.layout.height, 1110)
         self.assertEqual(figure.layout.bargap, 0.38)
 
     def test_trust_and_physics_render_separate_families(self) -> None:
+        """Trust and physics render separate families."""
         trust = _trust_report()
         total = object()
         percentage = object()
@@ -301,16 +341,19 @@ class PalaceReportUxTests(unittest.TestCase):
                 "_convergence_items",
                 return_value=["numerical"],
             ),
-            patch("scgsim.palace.presentation.reports._surface_total_figure", return_value=total),
             patch(
-                "scgsim.palace.presentation.reports._surface_percentage_figure",
+                "scgsim.palace.reports.trust.surface_kind_figures",
+                return_value=[total],
+            ),
+            patch(
+                "scgsim.palace.reports.trust.surface_percentage_figure",
                 return_value=percentage,
             ),
             patch(
-                "scgsim.palace.presentation.reports._surface_ranking_figure",
+                "scgsim.palace.reports.views.surface_ranking_figure",
                 side_effect=AssertionError("trust must not render physics ranking"),
             ),
-            patch("scgsim.palace.presentation.reports._show_figure", trust_figures.append),
+            patch("scgsim.palace.reports.trust.show_figure", trust_figures.append),
             _captured_notebook_display(),
         ):
             trust._ipython_display_()
@@ -320,18 +363,18 @@ class PalaceReportUxTests(unittest.TestCase):
         physics = trust.show_physics_quantities(ranking_limit=1)
         with (
             patch(
-                "scgsim.palace.presentation.reports._surface_total_figure",
+                "scgsim.palace.reports.trust.surface_kind_figures",
                 side_effect=AssertionError("physics must not redraw convergence"),
             ),
             patch(
-                "scgsim.palace.presentation.reports._surface_percentage_figure",
+                "scgsim.palace.reports.trust.surface_percentage_figure",
                 side_effect=AssertionError("physics must not redraw convergence"),
             ),
             patch(
-                "scgsim.palace.presentation.reports._surface_ranking_figure",
+                "scgsim.palace.reports.views.surface_ranking_figure",
                 return_value=ranking,
             ),
-            patch("scgsim.palace.presentation.reports._show_figure", physics_figures.append),
+            patch("scgsim.palace.reports.views.show_figure", physics_figures.append),
             _captured_notebook_display() as displayed,
         ):
             physics._ipython_display_()
@@ -342,6 +385,7 @@ class PalaceReportUxTests(unittest.TestCase):
         self.assertIn("unavailable / non-finite", html_output)
 
     def test_failed_parent_keeps_last_complete_iteration_and_receipt(self) -> None:
+        """Failed parent keeps last complete iteration and receipt."""
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
             handoff_id, receipt = _failed_eigenmode_run(root)
@@ -368,9 +412,9 @@ class PalaceReportUxTests(unittest.TestCase):
         self.assertEqual(trust.passes[0].path.name, "iteration07")
         self.assertEqual(trust.passes[0].frequencies_ghz, (5.0,))
         self.assertEqual(trust.identity["handoff_id"], handoff_id)
-        self.assertEqual(trust.identity["receipt"], "failed / exit 137")
+        self.assertEqual(trust.identity["receipt"], "failed, solver_ended / exit 137")
         self.assertEqual(trust.provenance["returned_receipt"], receipt)
-        identity_html = trust._identity_html()
+        identity_html = trust.identity_html()
         self.assertIn("Run failed", identity_html)
         self.assertIn("Fallback result selected", identity_html)
         self.assertNotIn(str(root), identity_html)
@@ -394,6 +438,7 @@ class PalaceReportUxTests(unittest.TestCase):
     def test_equal_final_physics_with_conflicting_cost_uses_atomic_iteration(
         self,
     ) -> None:
+        """Equal final physics with conflicting cost uses atomic iteration."""
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
             _failed_eigenmode_run(
@@ -410,6 +455,7 @@ class PalaceReportUxTests(unittest.TestCase):
         self.assertEqual(trust.cost["mesh_elements"], 50)
 
     def test_hash_verified_slurm_oom_is_classified(self) -> None:
+        """Hash verified slurm oom is classified."""
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
             _failed_eigenmode_run(
@@ -425,6 +471,7 @@ class PalaceReportUxTests(unittest.TestCase):
         self.assertEqual(trust.failure.evidence[-1]["marker"], "slurm_out_of_memory")
 
     def test_non_oom_solver_failure_uses_the_same_fallback(self) -> None:
+        """Non oom solver failure uses the same fallback."""
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
             _failed_eigenmode_run(root, solver_exit_code=2)
@@ -435,6 +482,7 @@ class PalaceReportUxTests(unittest.TestCase):
         self.assertEqual(trust.failure.category, "solver_error")
 
     def test_no_complete_iteration_keeps_reports_available(self) -> None:
+        """No complete iteration keeps reports available."""
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
             _failed_eigenmode_run(root, include_iteration=False)
@@ -449,6 +497,7 @@ class PalaceReportUxTests(unittest.TestCase):
         self.assertEqual(len(displayed), 3)
 
     def test_sealed_iteration_is_receipt_bound_and_tamper_fails(self) -> None:
+        """Sealed iteration is receipt bound and tamper fails."""
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
             _failed_eigenmode_run(root, seal_iteration=True)
@@ -459,10 +508,11 @@ class PalaceReportUxTests(unittest.TestCase):
                 "m,Re{f} (GHz)\n1,6.0\n",
                 encoding="utf-8",
             )
-            with self.assertRaisesRegex(ValueError, "output hash mismatch"):
+            with self.assertRaisesRegex(ValueError, "output hash: mismatch"):
                 inspect_run_trustworthiness(root)
 
     def test_recorder_collects_report_relevant_iteration_files(self) -> None:
+        """Recorder collects report relevant iteration files."""
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
             iteration = root / "results/palace/iteration07"
@@ -471,7 +521,8 @@ class PalaceReportUxTests(unittest.TestCase):
             (iteration / "surface-Q.csv").write_text("m,p_surf[1]\n1,0.1\n")
             (iteration / "ignored.txt").write_text("ignored\n")
 
-            paths = _iteration_output_paths(root, "Eigenmode")
+            config = {"Boundaries": {"Postprocessing": {"Dielectric": [{"Index": 1}]}}}
+            paths = iteration_output_paths(root, "Eigenmode", config=config)
 
         self.assertEqual(
             paths,
@@ -484,13 +535,14 @@ class PalaceReportUxTests(unittest.TestCase):
     def test_zero_loss_tangent_keeps_participation_and_marks_loss_unavailable(
         self,
     ) -> None:
+        """Zero loss tangent keeps participation and marks loss unavailable."""
         with tempfile.TemporaryDirectory() as raw:
             path = Path(raw) / "surface-Q.csv"
             path.write_text(
                 "m,p_surf[1],Q_surf[1]\n1,0.25,+inf\n",
                 encoding="utf-8",
             )
-            snapshots = _read_surface_epr(
+            snapshots = SurfaceEprReader(
                 path,
                 problem="Eigenmode",
                 pass_index=0,
@@ -498,19 +550,21 @@ class PalaceReportUxTests(unittest.TestCase):
                 frequencies_ghz=(5.0,),
                 expected_rows=1,
                 bindings=(
-                    {
-                        "index": 1,
-                        "interface_type": "MA",
-                        "surface_id": "SURFACE_1",
-                        "face_kind": "interface",
-                        "owner_semantic_ids": ("OWNER_1",),
-                        "net_id": "GROUND",
-                        "equipotential_id": "GROUND",
-                        "source_provenance": {"authority": "generic-test"},
-                        "loss_tangent": 0.0,
-                    },
+                    SurfaceBinding(
+                        index=1,
+                        interface_type="MA",
+                        name="SURFACE_1",
+                        rows=("ROW_1",),
+                        face_kinds=("interface",),
+                        entities=("ENTITY_1",),
+                        nets=("GROUND",),
+                        attributes=(7,),
+                        lineage={"f:1": {"ENTITY_1": 1.0}},
+                        loss_tangent=0.0,
+                    ),
                 ),
-            )
+                surface_count=1,
+            ).read()
 
         self.assertIsNotNone(snapshots)
         snapshot = snapshots[0]

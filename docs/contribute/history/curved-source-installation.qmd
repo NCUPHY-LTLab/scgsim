@@ -1,0 +1,61 @@
+---
+title: "Circular Pad: study setup"
+description: "Pinned source and native-solver setup recorded for the Circular Pad Uniform-port study."
+scgsim-kind: "history"
+scgsim-status: "HISTORICAL"
+scgsim-id: "docs/history/curved-source-installation"
+aliases:
+  - ../../history/curved-source-installation.html
+---
+
+::: {.callout-important title="This setup no longer applies"}
+This page describes a removed setup: SCGSim `1.1.0rc1` with a fork of Palace.
+Today SCGSim 3 runs stock Palace 0.18.1 and needs no fork; to compute modes
+with it, follow [Modes with Palace](../../guides/modes-palace.qmd) after
+[Install SCGSim](../../start/install.qmd). This page only explains how an
+older result was made.
+:::
+
+The Circular Pad Uniform-port study ran a Palace Eigenmode calculation on a
+circular pad whose boundary was authored as curves. It used SCGSim
+`1.1.0rc1`, an OrcaPen SC PDK revision as the producer of the model, and a
+Palace fork. Reproduce it only in a project of its own.
+
+## Select the source and PDK revisions
+
+| Role | Revision |
+|---|---|
+| PDK that produced the executed run | [`c79b91ef882079d937fce20129f3cbd477e8438d`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/c79b91ef882079d937fce20129f3cbd477e8438d) |
+| SCGSim of the run (`1.1.0rc1`, with the curved-source APIs that `1.0.2` lacks) | [`2eed1eb4a9bcc7b1b020feb4953d5ed27e7d7b71`](https://github.com/NCUPHY-LTLab/scgsim/tree/2eed1eb4a9bcc7b1b020feb4953d5ed27e7d7b71) |
+| Later PDK revision with the teaching notebook and the evidence | [`ecc90623b62e55f95afaa5a1f1048a71f81cae52`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/ecc90623b62e55f95afaa5a1f1048a71f81cae52) |
+
+The teaching notebook, [`palace_eigenmode.qmd`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/src/ComponentSimulation/CircularPad/palace_eigenmode.qmd)
+and its [derived notebook](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/palace_eigenmode.ipynb),
+belongs to the later revision and did not produce the run; its
+[evidence README](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/evidence/README.md)
+names the producer. Create a separate project with the producer and the
+runtime of the run:
+
+```bash
+uv init --python 3.12 curved-source-study
+cd curved-source-study
+uv add 'scgsim[palace,visualization] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@2eed1eb4a9bcc7b1b020feb4953d5ed27e7d7b71' \
+  'orpen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@c79b91ef882079d937fce20129f3cbd477e8438d' \
+  ipykernel
+```
+
+Check: `uv run python -c "from importlib.metadata import version; print(version('scgsim'))"` prints `1.1.0rc1`.
+
+## Native Palace for this curved Uniform port {#native-palace-for-this-curved-uniform-port}
+
+The study used the Palace fork at revision
+[`4e9e1b7232b4c8ca8b964be7e70f1848f578de37`](https://github.com/arfiligol/palace/tree/4e9e1b7232b4c8ca8b964be7e70f1848f578de37),
+or a later one with its
+[curved-port extent correction](https://github.com/arfiligol/palace/blob/4e9e1b7232b4c8ca8b964be7e70f1848f578de37/palace/utils/geodata_impl.cpp).
+The Python package does not install Palace; configure that build's MPI
+wrapper as the executable.
+
+The published run record reports mode 1 at `5.573354161115 GHz` after four
+refinements and five solve and estimate snapshots. Its final native indicator
+is `0.1186681863426` against a configured `0.02`, and its native log records
+PCG warnings.

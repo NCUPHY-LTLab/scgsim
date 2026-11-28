@@ -1,0 +1,133 @@
+---
+lang: zh-TW
+title: "API 擁有者"
+description: "1.x 基準 API 的名稱在 SCGSim 3.0 中位於何處，以及搬動公開名稱的規則。"
+scgsim-kind: "contract"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/contribute/internals/api-owners"
+---
+
+這一頁寫給貢獻者，是凍結的 1.x API（下文稱為*基準*，其幾何套件是 `scgsim.sgb`）的遷移對照表：它的模組與名稱現在在哪裡、由誰負責。這裡沒有列出每一個現行的公開名稱，完整清單見 [API 索引](../../reference/api-index.qmd)。使用者只要從套件匯入每個公開名稱，用不到這些內容；他們的升級步驟在[升級](../../guides/upgrade.qmd)，公開名稱列在 [API 索引](../../reference/api-index.qmd)。
+
+## 搬動公開名稱的規則 {#migration-rules}
+
+- 套件入口是 `scgsim.geometry`、`scgsim.palace`、`scgsim.aedt` 與 `scgsim.visualization`。文件列出的門面與宣告的匯出才是公開介面；碰巧可以匯入的模組不算。
+- 每個公開名稱只有一個定義它的模組，也就是它的職責擁有者，再由套件門面重新匯出。搬動時，舊路徑不留第二份實作，也不留相容包裝；每個模組只宣告它自己定義的名稱。
+- 不恢復 Q3D input-v1 與 input-v2：SGB 模型上的 input-v3 就是 Q3D 請求。
+- 保留 `python -m scgsim.aedt.run`、它的 `main(argv)` 與 `__main__` 行為：產生的交接與 EPR 腳本會以既有引數呼叫這個命令。它是受支援的 CLI，不是舊版包裝。
+- AEDT 收據記錄執行來源（runtime source），結構為 `scgsim.aedt.runtime-source.v30`：每次使用時計算的 AEDT 模組與兩個 AEDT 視覺化載入器的匯入閉包，並附上每個檔案的 SHA-256。以較早的執行來源結構記錄的結果會被拒絕，須以寫出它的 SCGSim 版本讀取；舊模組路徑絕不對應到新路徑。見[執行來源契約](../../reference/specs/aedt-runtime.qmd#runtime-source)。
+
+## 幾何名稱 {#geometry-api}
+
+基準的 `scgsim.sgb` 門面對應到兩個介面。`scgsim.geometry` 負責面向來源的計畫、快照、正規化的輸入記錄、GDS 與堆疊檔轉接器、真空準備，以及分離的摘要。`scgsim.geometry.models` 的各模組存放輸入與記錄的定義。版圖經由 `GeometryPlan` 與模擬類別進入；`scgsim.geometry.sgb` 的 `build_sgb_geometry` 從已準備的輸入建立模型，位在這個入口之下，所以直接以手動建立的輸入呼叫它時，就假設了入口原本會保證的條件（見[支援的入口](../../reference/supported-scope.qmd#supported-entry)）。
+
+| 基準 | 目前的擁有者 | 名稱 |
+|---|---|---|
+| `scgsim.sgb` | `scgsim.geometry` | `BoundaryCurveChainSpec`、`Coordinate`、`CurveKindLiteral`、`CurveOrientationLiteral`、`GdsBoundaryReconstructionSpec`、`GeometryBuildInput`、`GeometryPlan`、`GeometryPlanSnapshot`、`InputSummary`、`LayoutPolygonSpec`、`PathInput`、`PolygonRing`、`PortSheetOverlapRecord`、`PortSheetRegionRecord`、`RouteLiteral`、`SemanticEntitySpec`、`SourceCurveSpec`、`VacuumRegionSpec`、`Vector3D`、`apply_vacuum_region_to_stack`、`build_gds_stack_geometry_input`、`summarize_geometry_input` |
+| `scgsim.sgb.adapter` | `scgsim.geometry.source.adapter` | `build_gds_stack_geometry_input` |
+| `scgsim.sgb.geometry_plan` | `scgsim.geometry.source.plan` | `GeometryPlan`、`GeometryPlanSnapshot` |
+| `scgsim.sgb.models.common` | `scgsim.geometry.models.common` | `Coordinate`、`CurveKindLiteral`、`CurveOrientationLiteral`、`PathInput`、`PolygonRing`、`RouteLiteral`、`Vector3D`；以及要從該模組匯入的 `ConductorPartRoleLiteral`、`ConductorRepresentationLiteral`、`DEFAULT_INTERFACE_SOLVER_USE`、`HIGH_COUNT_LOCAL_CONDUCTOR_PART_ROLES`、`InterfaceKindLiteral`、`SolverUseLiteral` |
+| `scgsim.sgb.models.input` | `scgsim.geometry.models.input` | `BoundaryCurveChainSpec`、`GdsBoundaryReconstructionSpec`、`GeometryBuildInput`、`LayoutPolygonSpec`、`SemanticEntitySpec`、`SourceCurveSpec`、`VacuumRegionSpec` |
+| `scgsim.sgb.models.regions` | `scgsim.geometry.models.regions` | `PortSheetOverlapRecord`、`PortSheetRegionRecord` |
+| `scgsim.sgb.summary` | `scgsim.geometry.source.summary` | `InputSummary`、`summarize_geometry_input` |
+| `scgsim.sgb.vacuum` | `scgsim.geometry.source.vacuum` | `apply_vacuum_region_to_stack` |
+
+`scgsim.geometry` 列出的名稱從它匯入；其他記錄從定義它們的模組匯入。下列基準名稱沒有受支援的匯入：
+
+- `scgsim.sgb` 的 route 建構器、`scgsim.sgb.pipeline`、`scgsim.sgb.planning`、`scgsim.sgb.export` 與 `scgsim.sgb.validation`：`SemanticGeometryBuilder`、`build_route_construction_plan`、`export_physical_group_records`、各階段函式（`plan_conductor_contact_patches`、`plan_cut_host_operations`、`plan_mm_contact_records`、`plan_route_construction_bodies`、`plan_route_surfaces`、`plan_route_tags`、`plan_route_volumes`、`plan_surface_partitions`、`recognize_route_interfaces`）、每個 `validate_*` 驗證器、計畫記錄（`BackendEntityTagRecord`、`ConstructionPlanRecord`、`CurvePlanRecord`、`CurveRefRecord`、`CutHostOperationRecord`、`FinalPhysicalGroupRecord`、`InnerPecVoidShellRecord`、`PointPlanRecord`、`RouteABConstructionPlanRecord`、`RouteABVolumePlanRecord`、`StructuredFinalPhysicalGroupRecord`、`SurfaceLoopRecord`、`SurfaceRefRecord`、`TagPlanRecord`、`VolumePlanRecord`），以及常值 `DimensionLiteral`、`GmshDimTag`、`ROUTE_ALLOWED_REPRESENTATIONS`、`RUN_METADATA_DIR`、`SEMANTIC_GEOMETRY_METADATA_DIR`、`SurfaceLoopRoleLiteral`、`SurfaceOrientationLiteral` 與 `TagSourceKindLiteral`。版圖經由 `GeometryPlan` 與 `EigenmodeSim` 或 `ElectrostaticSim` 建立；自行準備的輸入則經由 `build_sgb_geometry`；
+- 元件轉接器、`scgsim.sgb.stack` 與 `scgsim.sgb.source_curves`：`build_gdsfactory_geometry_input`、`build_component_stack`、`bind_source_curves`。帶有 `component_semantics` schema 2 宣告的元件經由 `GeometryPlan` 進入，由它從 PDK 層堆疊建立堆疊，並自行帶入繪製的曲線綁定；
+- 在 3.0.0rc3 隨 AEDT 自己的幾何建構器一起移除：`scgsim.geometry.planning`、`scgsim.geometry.models.topology`（`InterfacePlanRecord`、`MMContactRecord`、`SurfacePlanRecord`），以及建構記錄 `ConstructionBodyPlanRecord` 與 `SurfacePartitionRecord`。
+
+門面之下的模組以職責命名。格點引擎是 `scgsim.geometry.grid`，含 `grid_cache`、`tagged_grid`、`tagged_grid_faces`、`tagged_grid_operations` 與 `polygon_ops`；來源準備是 `scgsim.geometry.source`，含 `normalization`、`occurrence` 與 `plan_assembly`。集總元件以 `LumpedElement` 與 `LumpedPort` 宣告，由 `scgsim.geometry.source.lumped_elements` 解析成 `LumpedElementRecord`；每個模擬以 `scgsim.geometry` 的 `RectangularJunctionSpec`、`JunctionTerminalBinding` 與 `with_rectangular_junctions` 把它的埠片綁定為矩形切分，由 `interpret_physical_geometry` 推導；共用的接觸服務（`JunctionContactRequest`、`junction_contact_inventory`）位在 `scgsim.geometry.junctions.contact`，不對外匯出。
+
+## AEDT 名稱與模組擁有者 {#aedt-api-transaction-and-state-ownership}
+
+下表每個公開的 AEDT 名稱都由 `scgsim.aedt` 匯出，只有 CLI 的 `main` 留在 `scgsim.aedt.run`；它們列在 [API 索引](../../reference/api-index.qmd)。基準模組與目前擁有者的對應如下；列在這裡不代表該模組是公開的。
+
+| 基準 | 目前的擁有者 | 名稱 |
+|---|---|---|
+| `scgsim.aedt.spec` | `scgsim.aedt.specs.common` | `AedtResources`、`PdkMaterial`、`TerminalPort`、`ModalPort`、`MatrixRunControl` |
+| `scgsim.aedt.spec` | `scgsim.aedt.specs.hfss` | `FrequencySweepSpec`、`HfssRunControl`、`EigenmodeRunControl`、`HfssSpec`、`HfssEprSpec`、`HfssEprAnalysisSpec` |
+| `scgsim.aedt.spec` | `scgsim.aedt.specs.q2d` | `Q2dRectangleSpec`、`Q2dConductorSpec`、`Q2dSpec` |
+| `scgsim.aedt.spec` | `scgsim.aedt.specs.q3d` | `Q3dNetSpec`、`Q3dSpec` |
+| `scgsim.aedt.spec` | `scgsim.aedt.specs.parse` | `AedtSpec`、`parse_aedt_spec` |
+| `scgsim.aedt._epr_models` | `scgsim.aedt.epr.models` | `EprResult` |
+| `scgsim.aedt._epr_models` | `scgsim.aedt.specs.epr` | `EprAnalysisRequest`、`ExpressionCacheConvergence`、`NativeExpressionDefinition`、`NormalizedSurfaceEprTotal`、`SavedSolution` |
+| `scgsim.aedt.handoff` | `scgsim.aedt.preparation.handoff` | `HandoffPlan`、`prepare_handoff` |
+| `scgsim.aedt.handoff` | `scgsim.aedt.preparation.geometry` | `prepare_hfss_driven_from_geometry`、`prepare_hfss_eigenmode_from_geometry`、`prepare_q3d_from_geometry` |
+| `scgsim.aedt.handoff` | `scgsim.aedt.epr.workflow` | `analyze_epr` |
+| `scgsim.aedt.eigenmode` | `scgsim.aedt.eigenmode` | `EigenmodeSim` |
+| `scgsim.aedt.resolve` | `scgsim.aedt.results.resolve` | `ResolvedRun`、`resolve_results` |
+| `scgsim.aedt._epr_results` | `scgsim.aedt.epr.reanalysis` | `reanalyze_epr` |
+| `scgsim.aedt._epr_results` | `scgsim.aedt.results.epr` | `resolve_epr_result`、`resolve_saved_solution` |
+| `scgsim.aedt._epr_results`、`_presentation` | `scgsim.aedt.presentation.epr` | `plot_epr_result`、`show_epr` |
+| `scgsim.aedt.run` | `scgsim.aedt.run` | `main` |
+| （3.0.0rc3 新增） | `scgsim.aedt.preparation.sgb_model` | `PreparedSgbModel` |
+
+職責樹：
+
+- `aedt.specs` 負責共用、HFSS、Q2D 與 Q3D-v3 的請求記錄，以及各系列的解析。
+- `aedt.preparation` 負責給 AEDT 的 SGB 模型、承載它的可攜交接套件，以及交接套件的檔案成員。
+- `aedt.runtime.transaction` 是 AEDT Desktop 與收據狀態唯一的擁有者。各系列的執行期負責自己的原生準備、求解、匯出與讀回；共用的原生輔助程式既不擁有系列，也不擁有 Desktop。
+- `aedt.epr` 負責 EPR 模型、來源幾何、場與快取，以及工作流程。`aedt.results` 負責嚴格的交接與結果解析、來源記錄、收斂、矩陣與封存的 EPR 讀取器；結果絕不啟動求解。
+- `aedt.presentation` 負責只用於顯示的投影與繪圖，並延遲匯入，讓嚴格的結果讀取不必載入它們。
+
+`EigenmodeSim` 仍是計畫、EPR 設定、準備，以及交接失效等可變狀態的擁有者；準備用的輔助函式不接手這些狀態。一次交易會先驗證請求與它的檔案，在 PyAEDT 或 Desktop 啟動之前寫出執行中的收據，執行一次系列交易，在釋放 Desktop 之前保存回傳的內容，最後封存任何已保存的 EPR 結果。若釋放也失敗，先前的原生或系列錯誤仍是主要錯誤；解析只檢查回傳的檔案，不執行 AEDT。沒有共用的模擬基底類別，也沒有共通的物理結果模型。
+
+文件記載的基準模組這樣搬動：`spec` 拆到 `specs.common`、`specs.hfss`、`specs.q2d`、`specs.q3d` 與 `specs.parse`；`handoff` 拆到 `preparation.handoff`、`preparation.geometry` 與 `epr.workflow`；`eigenmode` 仍是擁有狀態的門面；`resolve` 移到 `results.resolve`；`run.main` 仍在 `scgsim.aedt.run`，作為薄的委派。可匯入但未匯出的 `aedt.util` 成了內部的 I/O 模組，沒有留下包裝。視覺化從規格擁有者匯入 PyAEDT 常數，但不把它們公開。
+
+## Palace 名稱 {#palace-package-symbols}
+
+`scgsim.palace` 匯出 36 個名稱，以下依定義它們的模組分組：
+
+| 定義模組 | 職責 | 名稱 |
+|---|---|---|
+| `scgsim.palace.simulation` | 共用同一個核心的兩個模擬類別 | `ElectrostaticSim`、`EigenmodeSim` |
+| `scgsim.palace.simulation.drc` | 兩階段的版圖檢查，`mesh()` 也會執行 | `SimulationDrcError`、`SimulationDrcReport`、`StageResult` |
+| `scgsim.palace.config.convergence` | 收斂宣告的條件 | `Capacitance`、`Criterion`、`CriterionGroup`、`ErrorIndicator`、`ModeFrequency`、`SurfaceEpr` |
+| `scgsim.contracts.palace_convergence` | 宣告的計畫、檢查與判定 | `ConvergenceCheck`、`ConvergencePlan`、`ConvergenceVerdict` |
+| `scgsim.palace.results.convergence` | 求解器如何結束 | `SolverEnd` |
+| `scgsim.palace.results.resolved_records` | 回傳執行經檢查的記錄 | `PalaceCost`、`PalacePerformance`、`PalaceProvenance`、`PalaceReturnedReceipt`、`ParsedTable` |
+| `scgsim.palace.reports.resolved_result` | 使用者拿到的解析結果及其檢視 | `ResolvedPalaceResult`、`resolve_palace_result` |
+| `scgsim.palace.results.epr`、`scgsim.palace.results.epr_records` | 分離的 EPR 數值與離線重新分析 | `PalaceEprResult`、`epr_result`、`reanalyze_epr`、`resolve_epr_result` |
+| `scgsim.palace.reports.epr` | 分離 EPR 結果的繪圖 | `show_epr` |
+| `scgsim.palace.results.inspection_records` | 報告讀取的分離記錄 | `PalaceFailureDiagnosis`、`PalaceResultSelection`、`PassCostRecord`、`SurfaceMarginEprRecord`、`SurfaceMarginEprSeriesSnapshot` |
+| `scgsim.palace.reports.reports`、`scgsim.palace.reports.trust`、`scgsim.palace.reports.views` | 可信度、物理與成本檢視 | `inspect_run_trustworthiness`、`PalaceTrustReport`、`PhysicsQuantitiesReport`、`SimulationBenchmarkReport` |
+
+`scgsim.palace.results.inspection_records` 也定義了 `AmrPassSnapshot`、`SurfaceEprRecord` 與 `SurfaceEprSeriesSnapshot`，但套件不匯出它們。
+
+## Palace 子模組 {#palace-direct-submodule-exports}
+
+基準的 Palace 子模組各自宣告 `__all__`。`scgsim.palace` 有匯出的名稱就從它匯入；其餘名稱沒有受支援的匯入，下表說明取代它們的是什麼：
+
+| 基準匯入 | 現在的匯入 | 定義模組 |
+|---|---|---|
+| `scgsim.palace.electrostatic`（`ElectrostaticSim`） | `scgsim.palace` | `scgsim.palace.simulation.electrostatic` |
+| `scgsim.palace.eigenmode`（`EigenmodeSim`） | `scgsim.palace` | `scgsim.palace.simulation.eigenmode` |
+| `scgsim.palace.handoff`（`HandoffPlan`、`HandoffProfile`、`prepare_handoff`） | 三者都沒有匯出。交接套件由模擬的方法 `sim.prepare_handoff(profile=..., executable=..., resources=...)` 準備，它回傳 `HandoffPlan`；`HandoffProfile` 是其 `profile` 值（`"direct-local"`、`"slurm-single-node"`、`"slurm-multi-node"`）的常值型別。 | `scgsim.palace.run.handoff`（內部） |
+| `scgsim.palace.resolve`（`PalaceCost`、`PalacePerformance`、`PalaceProvenance`、`PalaceReturnedReceipt`、`ParsedTable`、`ResolvedPalaceResult`、`resolve_palace_result`） | `scgsim.palace`，七個都是 | 記錄在 `scgsim.palace.results.resolved_records`；`ResolvedPalaceResult` 與 `resolve_palace_result` 在 `scgsim.palace.reports.resolved_result` |
+| `scgsim.palace.report`（`PalaceFailureDiagnosis`、`PalaceResultSelection`、`PalaceTrustReport`、`PassCostRecord`、`PhysicsQuantitiesReport`、`inspect_run_trustworthiness`） | `scgsim.palace` | `inspect_run_trustworthiness` 在 `scgsim.palace.reports.reports`，`PalaceTrustReport` 在 `scgsim.palace.reports.trust`，`PhysicsQuantitiesReport` 在 `scgsim.palace.reports.views`，各記錄在 `scgsim.palace.results.inspection_records` |
+| `scgsim.palace.report`（`AmrPassSnapshot`） | 沒有匯出：可信度報告各回合的內部記錄 | `scgsim.palace.results.inspection_records`（內部） |
+| `scgsim.palace._epr_results`（私有） | 其受支援的名稱由 `scgsim.palace` 重新匯出；舊路徑不是相容介面 | `scgsim.palace.results` |
+
+## 視覺化名稱 {#visualization-symbols}
+
+`scgsim.visualization` 只匯出 `GeometryPreview`、`GeometryPreviewArtifact`、`inspect_aedt_geometry` 與 `inspect_palace_geometry`。
+
+| 名稱 | 定義模組 | 職責 |
+|---|---|---|
+| `GeometryPreview`、`GeometryPreviewArtifact` | `scgsim.visualization.preview` | 綁定來源的預覽，以及它回傳的圖集或無法取得的模式 |
+| `inspect_palace_geometry` | `scgsim.visualization.loaders.palace` | 把 Palace 的網格、清單、索引對照與設定讀成預覽模式 |
+| `inspect_aedt_geometry` | `scgsim.visualization.loaders.aedt` | 綁定 AEDT 收據並讀回求解器指派的幾何；原始 `.aedt` 檔需要 `aedt_version` 與設計，執行資料夾則使用它記錄的版本 |
+| 場景記錄與繪製 | `scgsim.visualization.scene`、`scgsim.visualization.rendering` | 建立場景與繪製，不涉及求解器物理或狀態 |
+| 載入器的檔案輔助 | `scgsim.visualization.loaders.common` | 各載入器共用的 JSON、雜湊與限定路徑讀取 |
+
+預覽檔案及其清單不屬於求解器與交接的身分。Palace 預覽保留高階元素的連接關係與節點座標；來源曲線與原生曲線資訊保留在網格清單與分離的網格摘要中。
+
+## 共用呈現 {#shared-presentation}
+
+基準私有的 `scgsim._notebook_presentation` 存放幾何與 AEDT 共用的格式化輔助函式，現在是 `scgsim.presentation.notebook`。這些函式不擁有任何 Palace 或 AEDT 的投影、計算或結果狀態，搬移也沒有讓它們的名稱成為公開介面。
+
+## AEDT 的 `modeling` 值 {#solidthin-film-request-migration}
+
+每個 Q3D 與 HFSS 3D 請求都指定 `modeling="solid"` 或 `modeling="thin_film"`，沒有預設值；缺少或其他值都不會被推定。它決定模型建立在哪條 SGB route 上：`thin_film` 是 Route A，`solid` 是 Route C。沒有 `modeling` 的請求內容，或為 AEDT 自己的幾何建構器寫的請求內容，是較早的 SCGSim 寫出的，會被拒絕。物理層是計畫在同一個 `LayerStack` 座標系中的 `PhysicalLayerDeclaration` 記錄（見[物理表示](../../reference/specs/physical-representation.qmd)）；薄膜原本的法向厚度放在 `physical_dimensions["normal_thickness_um"]`，薄膜厚度輸出直接回報它，不重新計算。較早的 `PhysicalLayerSpec(...)` 記錄已移除。Q2D 與 Palace 不接受 `modeling`。完整的轉換、材料、端子與失敗情形見 [AEDT 實體與薄膜契約](../../reference/specs/aedt-runtime.qmd#aedt-solid-thin-film)。

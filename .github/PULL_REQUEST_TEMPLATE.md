@@ -1,25 +1,30 @@
-## Change
+<!-- Copy to .github/pull_request_template.md. Reviewers read the Issue from
+the line below; keep it even when the PR body also says "Closes". -->
+Issue: <https://github.com/OWNER/REPO/issues/N>
 
-Describe the problem, resulting behavior and affected users. Include a concrete
-before/after example when useful, and identify any compatibility or migration
-change.
+Closes #N
 
-## Validation
+## Acceptance
 
-List the checks actually run, their outcomes and any remaining coverage gap.
-For a `fix:` PR, name the regression test; if unavailable, explain why and give
-the alternative evidence. Follow [MAINTAINING.md](../MAINTAINING.md) for the
-current CI and test procedures.
+<!-- One box per acceptance criterion of the Issue, ticked with its evidence.
+Claude review is opt-in only, including high-risk PRs. Add `claude-review`
+only when the Human or Architecture explicitly requests it on the Issue or PR;
+carry their explicit Issue request here, never auto-label for risk or size. -->
+- [ ] <criterion> — <evidence: test, screenshot, CI run, log line>
 
-For scientific calculations, distinguish formula-based correctness checks from
-returned-data compatibility. An aggregate with an unknown calculation procedure
-is not a numerical oracle. For affected HFSS/EPR or batch paths (Tier A), record
-assigned private-golden checks as `COMPLETED`, `NOT RUN` or `NOT APPLICABLE`, and
-state the affected claim when data or access is unavailable. Keep private data,
-values, names and paths out of public text.
+## Boundaries
 
-## Delivery
+<!-- Review findings answered `document` or `observe` (github-flow Two-stage
+findings), one line each, so the Human sees what this PR declares outside the
+supported use. Empty if none. -->
+- <condition> — document: <where it is stated> | observe: <triage Issue>
 
-Link the actual required CI results and identify any remaining delivery action.
-Report Human acceptance only when explicitly given; passing CI does not imply
-acceptance or native verification.
+## CI change
+
+<!-- Only when .github/ or CI config changes. Plain words for the Human:
+what runs on which event before and after, the expected time change, and
+what could break. -->
+
+## Open decisions
+
+<!-- Anything the Human must decide; empty if none. -->

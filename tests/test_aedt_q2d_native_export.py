@@ -15,9 +15,10 @@ from scgsim.aedt import (
     Q2dSpec,
     resolve_results,
 )
+from scgsim.aedt.io import file_sha256, write_json
 from scgsim.aedt.results.matrices import parse_matrix_export, read_q2d_rlgc_matrix
-from scgsim.aedt.runtime.families.q2d import _export_q2d
-from scgsim.aedt._io import file_sha256, write_json
+from scgsim.aedt.results.provenance import RECEIPT_V3
+from scgsim.aedt.runtime.families.q2d import export_q2d_matrices
 
 
 def _spec(project_name: str = "PublicQ2dRun") -> Q2dSpec:
@@ -80,6 +81,8 @@ Signal,4.0
 
 
 class _FakeQ2d:
+    """Write the requested synthetic native matrix file and record the export call."""
+
     def __init__(self, *, succeeds: bool = True) -> None:
         self.succeeds = succeeds
         self.call: dict[str, object] | None = None
@@ -94,12 +97,15 @@ class _FakeQ2d:
 
 
 class Q2dNativeExportTests(unittest.TestCase):
+    """Verify combined native matrix exports and strict offline result identity."""
+
     def test_export_uses_one_public_combined_native_file(self) -> None:
+        """Export one combined public CG/RL file with the authored native arguments."""
         spec = _spec()
         app = _FakeQ2d()
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            hashes, readback = _export_q2d(app, root, spec)
+            hashes, readback = export_q2d_matrices(app, root, spec, spec.run_control)
 
             self.assertEqual(
                 app.call,
@@ -132,13 +138,18 @@ class Q2dNativeExportTests(unittest.TestCase):
             self.assertEqual(readback["matrices"]["primary_rows"], 4)
 
     def test_export_fails_when_public_api_returns_false(self) -> None:
+        """Reject a false return from the public combined-matrix export call."""
         with (
             tempfile.TemporaryDirectory() as temporary,
             self.assertRaisesRegex(RuntimeError, "combined CG/RL"),
         ):
-            _export_q2d(_FakeQ2d(succeeds=False), Path(temporary), _spec())
+            spec = _spec()
+            export_q2d_matrices(
+                _FakeQ2d(succeeds=False), Path(temporary), spec, spec.run_control
+            )
 
     def test_native_primary_blocks_fail_closed(self) -> None:
+        """Reject each tested corruption of a required native matrix block."""
         spec = _spec()
         replacements = {
             "wrong setup": ("Setup1:LastAdaptive", "Setup2:LastAdaptive"),
@@ -164,6 +175,7 @@ class Q2dNativeExportTests(unittest.TestCase):
                         read_q2d_rlgc_matrix(path, spec)
 
     def test_q3d_parser_keeps_its_existing_native_shape(self) -> None:
+        """Preserve the existing Q3D native matrix header, row and unit shape."""
         native = """Problem Type:  C
 C Units:pF, G Units:mho
 Frequency:  6GHz
@@ -193,6 +205,7 @@ Signal,2.0
     def test_resolver_binds_one_native_file_and_rejects_superseded_files(
         self,
     ) -> None:
+        """Resolve one canonical native file and reject superseded output artifacts."""
         spec = _spec()
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -207,7 +220,7 @@ Signal,2.0
             write_json(
                 receipt_path,
                 {
-                    "schema_version": "scgsim.aedt.receipt.v1",
+                    "schema_version": RECEIPT_V3,
                     "status": "completed",
                     "mode": "q2d",
                     "connected": {
@@ -231,7 +244,11 @@ Signal,2.0
                     },
                 },
             )
-            with patch("scgsim.aedt.results.resolve._validate_readback"):
+            # The preparation cohort and native readback have their own tests.
+            with (
+                patch("scgsim.aedt.results.resolve.validate_completion_cohort"),
+                patch("scgsim.aedt.results.resolve._validate_readback"),
+            ):
                 result = resolve_results(root)
                 self.assertEqual(result.primary_csv, matrix_path)
                 before = sorted(path.relative_to(root) for path in root.rglob("*"))

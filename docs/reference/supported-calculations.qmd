@@ -1,0 +1,82 @@
+---
+title: "Supported calculations"
+description: "The calculations SCGSim prepares, with the solver, the input and the returned quantity of each, what every calculation requires, and what is not available."
+scgsim-kind: "contract"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/backend-support"
+aliases:
+  - ../backend-support.html
+---
+
+Choose the calculation by the quantity you need. Each row is a workflow
+SCGSim prepares and reads back; the solvers can do more than SCGSim
+implements.
+
+::: {.table-responsive}
+
+| Calculation | Solver | You give | You get | Guide |
+|---|---|---|---|---|
+| Capacitance | Palace Electrostatic | A `GeometryPlan`, terminal and ground Nets | The capacitance matrix, in terminal order | [Capacitance with Palace](../guides/capacitance-palace.qmd) |
+| Resonant modes | Palace Eigenmode | A `GeometryPlan`, with its lumped elements if it has any | Mode frequency and Q, energies; EPR when requested | [Modes with Palace](../guides/modes-palace.qmd) |
+| Resonant modes | HFSS Eigenmode | A `GeometryPlan`, with its lumped elements if it has any, `modeling` | Mode frequency and Q; EPR when requested | [Modes with HFSS](../guides/modes-hfss.qmd) |
+| S-parameters | HFSS Driven Terminal | A `GeometryPlan` with two `LumpedPort`s, `modeling` | Complex S-parameters, CSV and Touchstone | [S-parameters with HFSS](../guides/s-parameters-hfss.qmd) |
+| Capacitance and conductance | Q3D | A `GeometryPlan`, `modeling` | The C/G matrix | [Capacitance with Q3D](../guides/capacitance-q3d.qmd) |
+| Line parameters | Q2D | Rectangles of the cross-section and their conductor groups | Per-unit-length C, G, L and R | [Line parameters with Q2D](../guides/line-parameters-q2d.qmd) |
+
+:::
+
+[]{#source-and-result-differences}Every 3D calculation solves the same model: SCGSim's geometry builder, SGB,
+builds it from the plan, Palace meshes it, and HFSS and Q3D import it as a
+STEP file. Shared geometry does not make the results interchangeable: each
+keeps its own boundaries, units and conductor, port or mode order.
+
+## Requirements {#requirements}
+
+- []{#palace-executable-capabilities}**Palace:** stock Palace 0.18.1 is enough, Surface EPR included. Palace
+  takes [Route A or Route B](../concepts/routes.qmd) (`set_route`).
+- **AEDT:** an explicit `aedt_version`, `"2023.2"` or `"2024.2"`, both through
+  PyAEDT 1.3.0, with the AEDT Desktop on the same host as SCGSim; and an
+  explicit `modeling="solid"` or `"thin_film"` for every HFSS and Q3D request
+  ([AEDT: solid or thin_film](specs/aedt-runtime.qmd#aedt-solid-thin-film)).
+- **Curves:** straight edges and circular arcs are built exactly; a spline
+  must be drawn as a polygon ([Source curves](specs/geometry-plan.qmd#source-curves)).
+- []{#energy-participation-and-loss}**Surface EPR** is declared once on the plan, `plan.set_surface_epr(specs)`.
+  Palace Eigenmode and Electrostatic and HFSS Eigenmode read it and cut its
+  margins as bands; HFSS Driven Terminal and Q3D do not. Both Palace and
+  HFSS integrate every row of a declared type over all its faces, side walls
+  included, unless the spec's `face_kinds` leaves them out.
+  [Surface EPR](../concepts/surface-epr.qmd) explains what is computed.
+- []{#lumped-elements}**Lumped elements** (junctions, resistors,
+  capacitors and the ports a measurement drives) are declared once on the
+  plan, `plan.set_lumped_elements([...])`
+  ([how](specs/geometry-plan.qmd#lumped-elements)). Each calculation uses
+  them as far as it can:
+
+  | Calculation | A `LumpedElement` (R, L, C) | A `LumpedPort` |
+  |---|---|---|
+  | Palace Eigenmode | a lumped port with its R, L and C; its energy participation is reported by its name | a resistance of its impedance, so the Q is the loaded Q |
+  | HFSS Eigenmode | an inductance with no resistance is a junction, named by its sheet in the EPR request; otherwise a Lumped RLC | a Lumped RLC of its impedance, as in Palace |
+  | HFSS Driven Terminal | refused, by name: not available in a Driven design yet | one of the two lumped Terminal ports, in the plan's order |
+  | Palace Electrostatic, Q3D | left open: the capacitance is the conductors' alone | left open |
+
+  `simulation_drc` and `input_summary()` say what the simulation makes of each
+  element. A port sheet the plan declares nothing on is not part of a Palace
+  or HFSS model.
+- **HFSS EPR on another host:** an HFSS EPR study can be solved by AEDT's batch
+  solver on a host without a Desktop ([how](specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch)).
+
+## Not available {#not-available}
+
+- HFSS Driven Modal and Driven Terminal wave ports: a request with one is
+  refused. Tracked in [issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135).
+- Q3D AC/RL: Q3D extracts C and G only. Tracked in
+  [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265).
+- Palace Driven. Tracked in
+  [issue #187](https://github.com/NCUPHY-LTLab/scgsim/issues/187).
+- Palace Magnetostatic and Transient.
+- Spline curves read as curves.
+
+Palace's [problem types](https://awslabs.github.io/palace/stable/guide/problem/)
+and the [PyAEDT user guide](https://aedt.docs.pyansys.com/version/stable/User_guide/index.html)
+describe what the solvers themselves offer.
+

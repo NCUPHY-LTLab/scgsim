@@ -1,0 +1,175 @@
+{
+ "local_log_slope": {
+  "brep_write_s": [
+   1.08,
+   1.15
+  ],
+  "derive_s": [
+   1.13,
+   1.05
+  ],
+  "faces": [
+   1.01,
+   0.99
+  ],
+  "gmsh_load_s": [
+   1.13,
+   1.19
+  ],
+  "reports_s": [
+   1.12,
+   1.0
+  ],
+  "rss_mb": [
+   0.85,
+   0.95
+  ],
+  "sidecar_s": [
+   1.09,
+   1.04
+  ],
+  "verify_loaded_s": [
+   0.99,
+   0.99
+  ]
+ },
+ "machine": {
+  "cpu_count": 64,
+  "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.35",
+  "python": "3.12.14"
+ },
+ "oracle_local_log_slope": [
+  1.96,
+  2.83
+ ],
+ "oracle_ratio_to_direct_write_at_1000": 18.0,
+ "series": {
+  "brep_write_s": [
+   0.492,
+   2.81,
+   13.799
+  ],
+  "derive_s": [
+   2.332,
+   14.459,
+   61.644
+  ],
+  "faces": [
+   14215,
+   71969,
+   285871
+  ],
+  "file_mb": [
+   {
+    "brep": 8.8,
+    "sidecar": 11.2,
+    "slivers": 0.0,
+    "validation": 0.0,
+    "xao": 13.1
+   },
+   {
+    "brep": 46.2,
+    "sidecar": 57.3,
+    "slivers": 0.0,
+    "validation": 0.0,
+    "xao": 68.7
+   },
+   {
+    "brep": 190.3,
+    "sidecar": 232.2,
+    "slivers": 0.0,
+    "validation": 0.0,
+    "xao": 281.7
+   }
+  ],
+  "gmsh_load_s": [
+   1.559,
+   9.553,
+   49.67
+  ],
+  "n": [
+   1000,
+   5000,
+   20000
+  ],
+  "oracle": {
+   "emit_s": [
+    2.284,
+    8.88,
+    63.291
+   ],
+   "load_s": [
+    0.62,
+    1.483,
+    3.355
+   ],
+   "n": [
+    500,
+    1000,
+    2000
+   ],
+   "timed_out_at_n": []
+  },
+  "reports_s": [
+   2.052,
+   12.432,
+   49.74
+  ],
+  "rss_mb": [
+   135.0,
+   534.3,
+   2000.5
+  ],
+  "sidecar_s": [
+   0.804,
+   4.622,
+   19.636
+  ],
+  "verify_loaded_s": [
+   0.795,
+   3.894,
+   15.271
+  ],
+  "written_counts": [
+   {
+    "arcs": 0,
+    "cylinders": 0,
+    "edges": 30829,
+    "faces": 13345,
+    "solids": 2,
+    "surfaces": 9703,
+    "vertices": 20552
+   },
+   {
+    "arcs": 0,
+    "cylinders": 0,
+    "edges": 155947,
+    "faces": 67241,
+    "solids": 2,
+    "surfaces": 48837,
+    "vertices": 104098
+   },
+   {
+    "arcs": 0,
+    "cylinders": 0,
+    "edges": 620297,
+    "faces": 267635,
+    "solids": 2,
+    "surfaces": 194615,
+    "vertices": 414156
+   }
+  ]
+ },
+ "source": "figures/why-scaling-measured.json (python why_scaling.py measure), figures/why-scaling-oracle.json (python why_scaling.py oracle)",
+ "stack_n20000": {
+  "direct BREP/XAO": {
+   "derive_s": 61.6,
+   "gmsh_load_s": 49.7,
+   "reports_s": 49.7,
+   "sidecar_s": 19.6,
+   "total_s": 209.8,
+   "verify_loaded_s": 15.3,
+   "write_s": 13.8
+  }
+ }
+}

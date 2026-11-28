@@ -1,4 +1,4 @@
-"""Formal AEDT CLI entry point delegating to the transaction owner."""
+"""The command line entry point ``python -m scgsim.aedt.run``, which runs one prepared handoff."""
 
 from __future__ import annotations
 

@@ -1,0 +1,29 @@
+---
+title: "Notebook 契約"
+description: "OrcaPen SC PDK 的公開元件模擬 Notebook 呼叫 SCGSim 時要遵守的規則。"
+lang: zh-TW
+scgsim-kind: "contract"
+scgsim-status: "STABILIZED"
+scgsim-id: "docs/notebook-ux"
+aliases:
+  - ../notebook-ux.html
+---
+
+公開的元件模擬 Notebook 放在 [OrcaPen SC PDK](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk)，SCGSim 不保留它們的副本。本頁列出這類 Notebook 呼叫 SCGSim 時要遵守的規則，寫給撰寫或審查它的人；Notebook 本身的連結在[選擇模擬](../start/choose-a-simulation.qmd#public-inputs)。
+
+## 儲存格的順序 {#stage-local-controls}
+
+Notebook 在每一步發生的地方呈現它，並把該步的設定放在旁邊。全域設定只有三個：工作流程動作、執行 ID 與執行根目錄。以 Palace 電容 Notebook 為例，步驟如下：
+
+1. **來源。** 建立元件與 `GeometryPlan`，指派 Net（`plan.set_nets`）與真空區域（`plan.set_vacuum_region`），並在準備任何東西之前，先顯示來源摘要與 `ElectrostaticSim.simulation_drc(plan)`。
+2. **模型。** 綁定快照（`sim.set_plan(plan.prepare())`），並設定端子、接地與問題設定。
+3. **網格與設定。** 先 `sim.mesh()`，再 `sim.write_config()`。
+4. **交接。** 以明確指定的執行設定檔呼叫 `sim.prepare_handoff(...)`。
+5. **執行。** 在交接所屬的主機上執行，這是讀者看得到的明確步驟。
+6. **回傳的執行。** 以交接 ID 呼叫 `resolve_palace_result(...)`，先呈現識別資訊、數值證據與成本，最後才呈現物理結果。
+
+AEDT Notebook 依相同順序，使用 `EigenmodeSim`（或各個 `prepare_*_from_geometry` 函式）、在 AEDT 主機上執行 `python -m scgsim.aedt.run`，再呼叫 `resolve_results`。後端自己的設定在 Notebook 中保持可見；交接、Desktop 擁有權、讀回、雜湊與結果解析都留在 SCGSim，不在 Notebook 中另寫輔助函式。未完成的收據或無法讀取的最終表格，照實呈現，絕不呈現為成功。[報告模型](../reference/specs/report-model.qmd)負責各檢視的順序；[執行設定檔](../reference/specs/execution-profiles.qmd)負責執行腳本、資源與回傳的識別資訊。
+
+## 來源與結果的保管 {#source-and-result-custody}
+
+材料、製程資料與每個元件的區域語意屬於 PDK。Notebook 透過 `GeometryPlan` 指派具名的 occurrence 與最終的 Net 對應。公開 Notebook 不包含私有的幾何、選擇器、尺寸、螢幕截圖、設定、網格、收據或產物（[公開界線](provenance.qmd#publication-boundary)）。在 Git 中忽略產物資料夾，並不會保留它的檔案供日後解析：這些證據由研究負責人保存。Notebook 能執行完成，本身並不證明它的數字準確。

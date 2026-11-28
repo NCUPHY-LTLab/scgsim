@@ -1,0 +1,66 @@
+---
+title: "Reference"
+description: "Find the page that answers your question: supported calculations, layout rules, terms, API names, and the exact behaviour of each solver workflow."
+sidebar: reference
+scgsim-id: "docs/reference"
+scgsim-kind: "reference"
+scgsim-status: "CONVERGING"
+aliases:
+  - ../reference.html
+---
+
+Find your question below; each line names the page that answers it. To learn
+a workflow from the start, use [Choose a simulation](../start/choose-a-simulation.qmd)
+and the Guides.
+
+## Find the right reference {#find-the-right-reference}
+
+[]{#model-materials}[]{#conductors-ports}
+
+**Before you draw**
+
+| Question | Page |
+|---|---|
+| Which calculations can I run, with which solver, and what do I get? | [Supported calculations](supported-calculations.qmd) |
+| What must my layout guarantee, and who fixes a failed build? | [Supported scope](supported-scope.qmd) |
+| Which layout patterns are tested, and how is a port sheet cut? | [Supported geometry](supported-geometry.qmd) |
+| My build failed on a spline or a single-point touch: why? | [Known geometry problems](known-geometry-problems.qmd) |
+| What does a term or a unit mean? | [Terms and units](terms-and-units.qmd) |
+
+**Setting up a model**
+
+| Question | Page |
+|---|---|
+| Which calls build a `GeometryPlan`, and which curves and sheets does it take? | [GeometryPlan and SGB](specs/geometry-plan.qmd) |
+| Is my film a sheet or a volume, and how do the heights change? | [Physical representation](specs/physical-representation.qmd) |
+| How do I set up a Palace capacitance run, the mesh and its convergence? | [Palace Electrostatic, mesh and convergence](specs/palace-electrostatic-sgb.qmd) |
+| How do I set up Palace modes, ports and Surface-EPR margins? | [Palace Eigenmode and EPR](specs/palace-eigenmode.qmd) |
+| Which AEDT versions, `solid` or `thin_film`, and what does each AEDT calculation return? | [AEDT: what runs and what comes back](specs/aedt-runtime.qmd) |
+
+[]{#mesh-adaptation}[]{#execution-handoff}[]{#results-reports}
+
+**Running and reading**
+
+| Question | Page |
+|---|---|
+| Is my mesh good enough? | [Tetrahedral mesh quality](specs/mesh-quality.qmd) |
+| Which resources do I give Palace, and what command runs? | [Execution profiles](specs/execution-profiles.qmd) |
+| What do the run, physics and cost views of a result show? | [Reading a run: the three views](specs/report-model.qmd) |
+
+[]{#saved-fields-offline-loss}[]{#native-and-offline-epr-steps}
+
+**Functions and names**
+
+| Question | Page |
+|---|---|
+| What does `analyze_epr` take? It computes EPR again from fields AEDT saved, with AEDT and its license. | [analyze_epr](api/analyze-epr.qmd) |
+| Which public names does each package export? | [API index](api-index.qmd) |
+
+To change the loss assumptions of a finished EPR result without AEDT or
+Palace, `reanalyze_epr` works offline; see
+[Change loss assumptions without solving](../guides/offline-loss.qmd).
+How SCGSim is built inside is under [Contribute](../contribute/index.qmd).
+
+[]{#junction-capacitance-reference}A junction's capacitive participation and
+its effective modal capacitance are defined with the other EPR formulas in
+[How EPR is normalized](specs/aedt-runtime.qmd#surface-estimates-and-junction-normalization).

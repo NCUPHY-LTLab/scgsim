@@ -1,0 +1,62 @@
+---
+title: "為 SCGSim 貢獻"
+description: "這些頁面寫給誰、該照什麼順序讀，以及檢查變更的指令。"
+sidebar: contribute
+aliases:
+  - ../contributing.html
+---
+
+如果你要修改 SCGSim 本身，也就是它的程式碼、測試或文件，這些頁面就是寫給你的。它們從 `src/scgsim` 的資料夾樹開始，一路帶你讀到你要修改的資料夾的契約，最後列出開 pull request 之前檢查變更的指令。如果你只是要用 SCGSim 跑模擬，請改從[安裝 SCGSim](../start/install.qmd) 開始。
+
+## 準備工作目錄 {#set-up}
+
+先安裝 [uv](https://docs.astral.sh/uv/getting-started/installation/) 與 Git，再執行：
+
+```bash
+git clone --branch develop https://github.com/NCUPHY-LTLab/scgsim.git
+cd scgsim
+uv sync --locked --group dev
+```
+
+`dev` 群組會安裝所有選用套件，以及測試、品質檢查與 OpenCASCADE 工具，和 CI 測試工作安裝的內容相同。原生的 Palace 與 AEDT 不在其中；下面的檢查都用不到它們。
+
+## 閱讀順序 {#reading-order}
+
+1. [程式碼地圖](code-map.qmd)：`src/scgsim` 有哪些資料夾、各是哪個階段、Palace 與 AEDT 路線上工作依序經過哪些階段，以及 CI 檢查的匯入順序。其他頁面都以它為前提。
+2. [架構](architecture.qmd)：哪個狀態由誰負責，以及一次 Palace 執行與一次 AEDT 執行的生命週期。
+3. [依區域分工](ownership.qmd)：每個區域不得接管其他區域的哪些責任，以及哪些事不屬於 SCGSim。
+4. 你要修改的資料夾在「參考」區的契約頁：`geometry` 看 [GeometryPlan](../reference/specs/geometry-plan.qmd)，`meshing` 看[網格品質](../reference/specs/mesh-quality.qmd)，`palace` 看 [Palace Electrostatic](../reference/specs/palace-electrostatic-sgb.qmd) 與 [Palace Eigenmode](../reference/specs/palace-eigenmode.qmd) 規格，`aedt` 看 [AEDT 執行環境](../reference/specs/aedt-runtime.qmd)，結果與報告看[報告模型](../reference/specs/report-model.qmd)。[支援的計算](../reference/supported-calculations.qmd)與[支援範圍](../reference/supported-scope.qmd)說明一次變更必須維持哪些功能。
+5. 本側欄 **Internals** 一節的頁面：資料夾的設計中，契約頁沒有寫到的部分。
+6. 修改 `geometry/sgb` 時，讀 [SGB 設計](sgb-design/index.qmd)各頁：建構器為什麼先規劃再寫出，以及從 prism 到輸出檔案的每個階段。
+
+[來源沿革](provenance.qmd)、[Notebook 契約](notebook-contract.qmd)、[文件導覽圖](documentation-map.qmd)與[範圍與來源](goals-and-upstream.qmd)回答較窄的問題；你的變更碰到它們的範圍時再讀。
+
+## 檢查變更 {#check}
+
+在工作目錄的根目錄執行。前兩個指令就是 CI 的 `quality` 與 `fast-tests` 工作，引數完全相同：
+
+```bash
+uv run --locked --no-sync python scripts/check_quality.py
+uv run --locked --no-sync python -m pytest tests -m 'not slow and not private_golden and not pdk' -rs --fail-on-skip
+```
+
+`check_quality.py` 會對每個納入版本控制的 Python 檔案執行 Ruff 格式與程式檢查和可讀性檢查；Pyright 只檢查 `src/`；匯入層契約檢查套件內的匯入關係。測試遇到略過就會失敗，因為 `dev` 群組已經安裝測試需要的一切。
+
+修改文件時，還要檢查產生的頁面並渲染網站（Quarto 的版本需在 `scripts/build_docs_site.py` 指定的範圍內）：
+
+```bash
+uv run --locked --no-sync python scripts/generate_code_map.py --check
+uv run --locked --no-sync python scripts/generate_knowledge_reference.py --check
+quarto render --no-execute
+```
+
+渲染會先把英文網站建到 `_site/`，再把中文網站建到 `_site/zh-TW/`。不會執行任何 Notebook 儲存格，也不會啟動求解器。
+
+## 規則與交付 {#rules}
+
+- [`AGENTS.md`](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/AGENTS.md)：儲存庫負責什麼、工作如何交付，以及 pull request 如何審查。
+- [`CODE_STYLE.md`](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/CODE_STYLE.md)：SCGSim 的 Python 怎麼寫。
+- [`DOCS_STYLE.md`](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/DOCS_STYLE.md)：文件怎麼寫、哪一頁由哪個來源負責，以及中文術語。
+- [`MAINTAINING.md`](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/zh-TW/MAINTAINING.md)：維護者指南：每個 CI 工作檢查什麼、文件建置，以及產生的頁面。
+
+變更經由 pull request 進入 `develop`。pull request 的內文以 `Issue:` 一行開頭，寫明它回應的 Issue，格式見 [pull request 範本](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/.github/PULL_REQUEST_TEMPLATE.md)。

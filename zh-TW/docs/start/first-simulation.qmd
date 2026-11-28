@@ -1,0 +1,149 @@
+---
+lang: zh-TW
+title: "第一個模擬"
+description: "用 Palace 算出方形焊墊的電容：一支腳本，從版圖走到結果。"
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/start/first-simulation"
+---
+
+這一頁用一支 Python 腳本，算出一塊 200 µm 見方的金屬焊墊與周圍接地金屬之間的電容；兩者相隔 20 µm，位在 1000 µm 見方的晶片上。計算由開源求解器 Palace 完成，腳本最後會印出以飛法拉（fF）為單位的電容矩陣：
+
+```text
+Capacitance matrix (fF): pad
+     pad     112.54
+```
+
+開始前，你需要一個研究專案，裝好 SCGSim `3.0.0`（含 `palace` extra）以及負責畫出版圖的元件庫 OrcaPen SC PDK，做法見[安裝 SCGSim](install.qmd)；同一台電腦上也要裝好 Palace 0.18.1，見 [Palace 安裝說明](https://awslabs.github.io/palace/stable/install/)。整個過程不需要 AEDT 授權。
+
+## 版圖 {#the-layout}
+
+![焊墊（PAD）位在 20 µm 的間隙中，四周是覆蓋晶片其餘部分的接地金屬（GROUND）。焊墊東側邊緣的橘色薄片，標示共振器研究中放置接面的位置；電容計算用不到它。](../assets/simple-pad-layout.png)
+
+焊墊與接地金屬都畫在晶片頂面，底下是矽基板。形狀、各層厚度與材料都由 PDK 提供。
+
+## 告訴 SCGSim Palace 在哪裡 {#palace-executable}
+
+腳本從環境變數 `SCGSIM_PALACE_EXECUTABLE` 取得 Palace 指令。請在要執行腳本的 shell 中，把它設成 Palace 安裝的 `palace` 指令：
+
+```bash
+export SCGSIM_PALACE_EXECUTABLE="$(command -v palace)"
+```
+
+## 腳本 {#the-script}
+
+把下面的程式存成研究專案中的 `first_simulation.py`。每個編號段落只做一件事，各段的說明放在程式後面。
+
+```python
+import os
+import subprocess
+from pathlib import Path
+from uuid import uuid4
+
+import gdsfactory as gf
+import orcapen_sc_pdk
+from orcapen_sc_pdk import get_material_records
+from orcapen_sc_pdk.tech import get_single_die_layer_stack
+from scgsim.geometry import GeometryPlan
+from scgsim.palace import ElectrostaticSim, resolve_palace_result
+
+# 1. Draw the layout with the PDK: a 200 µm pad, a 20 µm gap, a 1000 µm die.
+orcapen_sc_pdk.activate()
+component = gf.get_component(
+    "square_pad_capacitor", pad_side_um=200.0, gap_um=20.0, die_side_um=1000.0
+)
+
+# 2. Make the plan: the layer stack, the materials, two Nets and a vacuum region.
+plan = GeometryPlan(
+    component=component,
+    root_id="chip",
+    layer_stack=get_single_die_layer_stack(),
+    material_records=get_material_records(),
+    coupon_padding_um=0.0,
+)
+plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
+plan.set_vacuum_region(padding=(0.0, 0.0, 1000.0))
+
+# 3. Check that Palace can model and mesh this layout, and print the report.
+print(ElectrostaticSim.simulation_drc(plan).render_text())
+
+# 4. Set up the capacitance problem: the pad is the terminal, the ground is at 0 V.
+sim = ElectrostaticSim()
+sim.set_plan(plan.prepare())
+sim.set_output_dir(Path(".artifacts/simplepad-palace") / uuid4().hex[:12])
+sim.add_terminal("pad", net_id="pad")
+sim.add_ground(net_id="ground")
+sim.set_electrostatic(unassigned_conductor_policy="error")
+
+# 5. Build the 3D model, mesh it, and write Palace's input file.
+sim.mesh()
+sim.write_config()
+
+# 6. Write the run script and run Palace on this computer with 4 MPI processes.
+handoff = sim.prepare_handoff(
+    profile="direct-local",
+    executable=os.environ["SCGSIM_PALACE_EXECUTABLE"],
+    resources={"command_style": "wrapper", "processes": 4, "threads": 1},
+)
+subprocess.run(["bash", "run_palace.sh"], cwd=handoff.run_dir, check=True)
+
+# 7. Read the result and print the capacitance matrix with its terminal names.
+result = resolve_palace_result(handoff.run_dir, expected_handoff_id=handoff.handoff_id)
+print("Status:", result.status)
+print("Convergence:", result.convergence.verdict.state)
+terminals = {
+    entry["index"]: entry["terminal_name"]
+    for entry in result.provenance.index_map["entries"]
+    if entry["role"] == "terminal"
+}
+print("Capacitance matrix (fF):", *terminals.values())
+for row in result.tables["terminal-C"].rows:
+    values = [row[f"C[i][{column}] (F)"] * 1e15 for column in terminals]
+    print(f"{terminals[int(row['i'])]:>8}", *(f"{value:10.2f}" for value in values))
+```
+
+各段在做什麼：
+
+1. **版圖。** `activate()` 讓 gdsfactory 能使用 PDK 的元件；`get_component` 依指定尺寸畫出焊墊、間隙與接地金屬。
+2. **計畫。** `GeometryPlan` 是版圖，加上 SCGSim 建立 3D 模型還需要的資訊：層堆疊（每一層的厚度與材料）和材料性質。`root_id="chip"` 為版圖命名，所以 PDK 畫的焊墊與接地金屬分別叫做 `chip/PAD` 與 `chip/GROUND`；`coupon_padding_um=0.0` 表示晶片邊緣外不再多加基板。Net 是一塊有名字、被當成同一個導體的金屬，這裡有 `pad` 與 `ground` 兩個。真空區域是晶片周圍、求解器一併計算的空間；這裡它在晶片邊緣處結束，往晶片上下各延伸 1000 µm。
+3. **檢查。** `simulation_drc` 會建立模擬將使用的 3D 模型，找出小到無法產生網格的邊與面，但不會真的產生網格。版圖若沒通過，就停在這一步，錯誤訊息會指出問題在哪裡、該怎麼修。
+4. **電容問題。** 端子是求解器設為 1 V、藉此量測電容的導體；`ground` 這個 Net 則固定在 0 V。`unassigned_conductor_policy="error"` 會讓不屬於任何 Net 的金屬直接報錯，避免有金屬在你沒指定的情況下被接地。每次執行都會在 `.artifacts/simplepad-palace/` 下建立一個新的資料夾。
+5. **網格與輸入。** `mesh()` 建立 3D 模型，再把它切成許多小四面體，也就是 Palace 用來計算的網格。`write_config()` 寫出 Palace 的輸入檔 `config.json`。
+6. **執行。** `prepare_handoff` 在執行資料夾中寫出腳本 `run_palace.sh`，並在資料夾旁放一份 `.tar.gz` 副本，方便搬到其他電腦執行。`direct-local` 表示在這台電腦上執行 Palace；`"wrapper"` 表示 `palace` 指令會自己啟動 MPI，這裡用 4 個行程分攤計算。這個執行腳本會先確認 Palace 接受 `config.json`，再開始求解，並記錄執行是怎麼結束的。
+7. **結果。** `resolve_palace_result` 讀取跑完的執行資料夾，確認它正是這支腳本準備的那一次執行，而且 Palace 已經正常完成。`terminal-C` 是 Palace 的電容表格，單位是法拉；執行的索引對照表（index map）記錄每一列是哪個端子。
+
+## 執行 {#run-it}
+
+在研究專案資料夾中，用已經設定好 `SCGSIM_PALACE_EXECUTABLE` 的 shell 執行：
+
+```bash
+uv run first_simulation.py
+```
+
+模型很小，在工作站上幾秒鐘就能跑完。腳本會先印出檢查報告，接著是 Palace 執行的記錄（同時存在執行資料夾的 `logs/` 中），最後才是結果。略去那段記錄後，輸出如下：
+
+```text
+geometry stage: passed
+meshing stage: passed (0 refusing, 0 warning)
+
+Status: completed
+Convergence: not_declared
+Capacitance matrix (fF): pad
+     pad     112.54
+```
+
+Palace 的記錄中會有一則警告，說部分外部邊界沒有設定邊界條件，因此假設為「ZeroCharge」。這是刻意的：真空區域的外表面不設條件，電場就不會穿出這些面。
+
+## 讀懂結果 {#read-the-result}
+
+兩個檢查階段都通過了：版圖可以建成 3D 模型，也沒有小到無法產生網格的部分。`Status: completed` 表示 Palace 正常跑完，執行資料夾裡有它的全部結果。
+
+這個模擬只有一個端子，所以矩陣只有一列一行。其中的 112.54 fF，是焊墊與所有 0 V 導體之間的電容，在這裡就是焊墊與接地金屬之間的電容：兩者之間每 1 V 電壓，焊墊上會累積多少電荷。Palace 回報的是 Maxwell 電容矩陣。有兩個以上端子時，對角元素是各端子對其他所有導體的電容；非對角元素 C[a][b] 為負值，其絕對值就是端子 a 與 b 之間的電容。
+
+這個數值來自初始網格上的一次求解，沒有做自適應細化（由 Palace 在誤差估計最大的地方加密網格，再解一次）。`Convergence: not_declared` 表示腳本沒有指定哪些數值在細化之間必須停止變化，所以目前沒有任何依據說 112.54 fF 已經穩定，而它其實還沒穩定：改用二階元素並做細化後，同一塊焊墊在第四回合穩定在 95.21 fF。那次執行與宣告收斂的方式見[收斂與讀報告](../guides/convergence-and-reports.qmd#declare-convergence)；能接受多小的變化，取決於你要拿這個電容做什麼。
+
+## 下一步 {#next}
+
+- [Palace：共振模態](../guides/modes-palace.qmd)：計算版圖中各共振模態的頻率與 Q 值。
+- [檢查版圖](../guides/check-a-layout.qmd)：說明檢查會回報什麼，以及怎麼修正它找到的問題。
+- [支援範圍](../reference/supported-scope.qmd)：模擬你自己的版圖之前，版圖必須保證哪些條件。

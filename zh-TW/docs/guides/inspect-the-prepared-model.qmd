@@ -1,0 +1,78 @@
+---
+lang: zh-TW
+title: "檢視已準備的模型"
+description: "mesh() 之後，看看求解器實際會拿到的模型：Palace 的材料、端子與接地、Surface-EPR 面與網格；AEDT 則是存進 AEDT 的模型。"
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/solver-observations"
+aliases:
+  - ../course/solver-observations.html
+---
+
+`mesh()` 之後，你可以看看求解器實際會拿到的模型：每個區域的材料、哪些表面是端子與接地、Surface-EPR 條帶落在哪裡，以及網格與它的品質。結果出乎意料時，或在一次耗時的執行之前，可以藉此確認模型就是你想要的那一個。這一步可以省略，也不會改變執行。它需要 `visualization` extra（見[安裝](../start/install.qmd#extras)）。
+
+## Palace {#palace-inspect-the-mesh-that-will-be-transferred}
+
+呼叫 `sim.mesh()` 與 `sim.write_config()` 之後，開啟執行資料夾：
+
+```python
+from scgsim.visualization import inspect_palace_geometry
+
+preview = inspect_palace_geometry(sim.output_dir)
+preview.show_materials()
+preview.show_boundaries()
+preview.show_surface_epr()
+preview.show_mesh()
+```
+
+每個呼叫都會顯示一張有圖例、含 12 個視角的模型圖集，內容讀自網格與 Palace 的輸入檔，並存進執行資料夾。下圖是[收斂與報告](convergence-and-reports.qmd)那塊方形焊墊的邊界圖集：接地金屬是炭灰色，焊墊（也就是端子）是藍色，沒有指派的外表面是淺灰色。
+
+![方形焊墊的邊界預覽：圖例列出每項指派及其涵蓋的網格三角形數；12 個視角分別從六個方向、四個斜角，以及兩個穿過中央的剖切來看模型。](../images/preview-the-geometry/square-pad-boundaries.png)
+
+那次執行沒有要求 Surface EPR，所以 `show_surface_epr()` 回報這個模式無法取得，而不是畫一張空白的圖。`preview.explore("materials")` 則在筆記本中以可互動的 3D 檢視顯示同一個模型。各模式畫什麼、用什麼顏色，見[預覽幾何](preview-the-geometry.qmd)。
+
+`sim.mesh_summary()` 回傳網格的記錄：尺寸配方、網格器選項、品質門檻與結果，以及各區域的元素數。解析後結果的成本檢視也顯示同一份記錄。那次執行的初始網格是：
+
+| 項目 | 值 |
+|---|---|
+| 尺寸配方 | features（`scgsim.meshing.features/3`） |
+| 幾何階數／FEM 階數 | 1 / 2 |
+| 品質門檻 | 0.01（minSICN） |
+| 最小 SICN／低於門檻的元素數 | 0.0471318 / 0 |
+| 修補迴圈 | clean after 0 of 8 rounds |
+| 四面體數／上限 | 31096 / 2000000 |
+
+minSICN（最小有號反條件數）衡量形狀最差的那個四面體有多端正：正四面體為 1，扁平的接近 0，翻轉的則為負值。這裡每個四面體都高於門檻，所以修補迴圈什麼都不用做。報告的定義見[四面體網格品質](../reference/specs/mesh-quality.qmd#quality-report)。在腳本中，可以把記錄當成字典讀取：
+
+```python
+summary = sim.mesh_summary()
+meshing = summary["meshing"]
+recipe, mesher = meshing["recipe"], meshing["mesher"]
+quality = meshing["linear_mesh"]
+```
+
+## AEDT {#aedt-source-preparation-and-native-preparation-differ}
+
+`prepare_handoff()` 只寫出檔案，不會開啟 AEDT，所以此時還沒有 AEDT 模型可看。若要看，請在有 AEDT 的電腦上，把模型在 AEDT 中建立並存檔一次，但不求解。在已準備的執行資料夾中執行：
+
+```bash
+python -m scgsim.aedt.run --handoff metadata/aedt_handoff_metadata.json --execute --prepare-only
+```
+
+請使用交接套件自己的中繼資料路徑（`handoff.metadata_path`），路徑相對於執行資料夾。這會用掉這個執行資料夾：它只記錄了準備、沒有求解，之後也不能當成全新的執行再跑一次。要求解時，請重新準備一份交接套件。
+
+接著開啟那個資料夾：
+
+```python
+from pathlib import Path
+from scgsim.visualization import inspect_aedt_geometry
+
+prepared_only_run_dir = Path(".artifacts/aedt-prepared-only")  # the folder above
+preview = inspect_aedt_geometry(prepared_only_run_dir)
+preview.show_materials()
+preview.show_boundaries()
+```
+
+這會開啟執行資料夾所記錄版本的 AEDT，把模型讀回來。AEDT 的 Surface-EPR 與網格檢視可能無法取得。若要看的是存檔的 `.aedt` 專案而不是執行資料夾，請一併傳入它的 `design`，以及與已安裝 AEDT 相符的 `aedt_version`。
+
+接下來可以[執行模型](run-elsewhere.qmd)，或回去[選擇其他計算](../start/choose-a-simulation.qmd)。

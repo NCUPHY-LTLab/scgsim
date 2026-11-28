@@ -1,8 +1,8 @@
 """Offline source recipe equivalence and ownership, without solver/mesh work."""
 
+import json
 from contextlib import contextmanager
 from copy import deepcopy
-import json
 from pathlib import Path
 from threading import Barrier, get_ident
 from types import SimpleNamespace
@@ -15,18 +15,25 @@ from scgsim.geometry import (
     PhysicalLayerDeclaration,
     build_gds_stack_geometry_input,
 )
+from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.grid import GeometryGridContext
-from scgsim.geometry._primitives.grid import (
-    geometry_grid_scope,
-    source_grid_audits,
-    _source_recipe_map,
+from scgsim.geometry.source import occurrence as occurrence
+from scgsim.geometry.source import plan as plan_module
+from scgsim.geometry.source import stack_layers
+from scgsim.geometry.source.recipes import (
+    Audited,
+    run_source_recipe,
+    source_recipe_job,
+    source_recipe_map,
 )
-from scgsim.geometry.source import _occurrence as occurrence
 from scgsim.preparation import preparation_resources
+
+SCOPE = GridScope(GeometryGridContext(0.001))
 
 
 @pytest.fixture
 def native_source():
+    """Build native source geometry used by serial and parallel recipes."""
     cell = gdstk.Cell("SOURCE")
     cell.add(gdstk.rectangle((0, 0), (2, 2), layer=1))
     cell.add(gdstk.rectangle((4, 0), (6, 2), layer=1))
@@ -34,7 +41,8 @@ def native_source():
 
 
 def entity(name, point):
-    return occurrence._entity_from_layer_record(
+    """Create a conductor selector record at a world-frame point."""
+    return stack_layers.entity_from_layer_record(
         {
             "semantic_id": name,
             "role": "metal",
@@ -55,37 +63,36 @@ def entity(name, point):
 def test_recipe_results_context_audits_and_serial_extraction_match(
     native_source, monkeypatch
 ):
+    """Preserve recipe output, audit order, and caller-thread extraction."""
+
     # Source selectors are world-frame facts; both execution paths use this transform.
     def prepared_jobs():
         for index, point in enumerate(((11, 21), (15, 21))):
-            yield occurrence._source_recipe_job(
-                occurrence._occurrence_polygons_for_entity,
+            yield source_recipe_job(
+                occurrence.occurrence_polygons_for_entity,
+                SCOPE,
                 entity(f"metal_{index}", point),
-                source_cell=native_source,
+                source_polygons=occurrence.read_polygons_by_layer(native_source),
                 transform=(1, 0, 0, 1, 10, 20),
             )
 
     caller = get_ident()
     extraction_threads = []
-    original = occurrence._extract_polygons_by_layer
+    # White-box observation verifies worker recipes reuse caller-thread extraction.
+    original = occurrence._extract_polygons_by_layer  # noqa: SLF001 - observe private extraction boundary
 
     def extract(*args, **kwargs):
         extraction_threads.append(get_ident())
         return original(*args, **kwargs)
 
     monkeypatch.setattr(occurrence, "_extract_polygons_by_layer", extract)
-    with geometry_grid_scope(GeometryGridContext(0.001)):
-        serial = _source_recipe_map(occurrence._run_source_recipe, prepared_jobs())
-        serial_audits = deepcopy(source_grid_audits())
-    with geometry_grid_scope(GeometryGridContext(0.001)):
-        with preparation_resources(max_workers=2):
-            parallel = _source_recipe_map(
-                occurrence._run_source_recipe, prepared_jobs()
-            )
-        parallel_audits = source_grid_audits()
-    assert parallel == serial
-    assert parallel_audits == serial_audits
-    assert [row["source_entity_id"] for row in parallel_audits] == [
+    serial = source_recipe_map(run_source_recipe, prepared_jobs())
+    serial_audits = deepcopy(serial.audits)
+    with preparation_resources(max_workers=2):
+        parallel = source_recipe_map(run_source_recipe, prepared_jobs())
+    assert parallel.value == serial.value
+    assert parallel.audits == serial_audits
+    assert [row["source_entity_id"] for row in parallel.audits] == [
         "metal_0",
         "metal_1",
     ]
@@ -93,85 +100,77 @@ def test_recipe_results_context_audits_and_serial_extraction_match(
 
 
 def test_job_native_objects_and_record_inputs_are_isolated(native_source):
+    """Give parallel recipes detached records and native polygon copies."""
     original_points = [p.points.tolist() for p in native_source.polygons]
     record = {"nested": [1]}
 
-    def mutate(value, *, cell, polygons_by_layer):
-        assert cell is None
+    def mutate(value, *, polygons_by_layer):
         value["nested"].append(2)
         polygons_by_layer[(1, 0)][0].translate(100, 0)
-        return value, polygons_by_layer[(1, 0)][0].points.tolist()
+        return Audited((value, polygons_by_layer[(1, 0)][0].points.tolist()))
 
     def make_jobs():
         for _ in range(2):
-            yield occurrence._source_recipe_job(
-                mutate, record, source_cell=native_source
+            yield source_recipe_job(
+                mutate,
+                record,
+                source_polygons=occurrence.read_polygons_by_layer(native_source),
             )
 
     with preparation_resources(max_workers=2):
-        results = _source_recipe_map(occurrence._run_source_recipe, make_jobs())
+        results = source_recipe_map(run_source_recipe, make_jobs()).value
     expected_points = [[x + 100, y] for x, y in original_points[0]]
     assert results == [({"nested": [1, 2]}, expected_points)] * 2
     assert record == {"nested": [1]}
     assert [p.points.tolist() for p in native_source.polygons] == original_points
 
 
-def test_first_comparison_failure_keeps_audit_prefix_and_allows_clean_next_map(
-    native_source,
-):
+def refused_after_selection(scope, value, **kwargs):
+    """Select genuinely, then refuse."""
+    occurrence.occurrence_polygons_for_entity(scope, value, **kwargs)
+    raise ValueError(f"source mismatch {value.semantic_id[-1]}")
+
+
+def test_first_recipe_failure_in_source_order_and_a_clean_next_map(native_source):
+    """Raise the first failure in source order, then run the next map with its own audits."""
+
     def invalid_jobs():
         for index, point in enumerate(((1, 1), (99, 99))):
-            yield occurrence._source_recipe_job(
-                occurrence._occurrence_polygons_for_entity,
+            yield source_recipe_job(
+                refused_after_selection,
+                SCOPE,
                 entity(f"metal_{index}", point),
-                source_cell=native_source,
+                source_polygons=occurrence.read_polygons_by_layer(native_source),
                 transform=(1, 0, 0, 1, 0, 0),
-                expected=[],
-                comparison_error=f"source mismatch {index}",
             )
 
-    errors = []
-
-    def observed_run(job):
-        try:
-            return occurrence._run_source_recipe(job)
-        except ValueError as error:
-            errors.append(str(error))
-            raise
-
-    with geometry_grid_scope(GeometryGridContext(0.001)):
-        with preparation_resources(max_workers=2):
-            with pytest.raises(ValueError, match="source mismatch 0"):
-                _source_recipe_map(observed_run, invalid_jobs())
-            assert "source mismatch 0" in errors
-            assert len(errors) == 2
-            assert any("source mismatch" not in error for error in errors)
-            assert [r["source_entity_id"] for r in source_grid_audits()] == ["metal_0"]
-            result = _source_recipe_map(
-                occurrence._run_source_recipe,
-                [
-                    occurrence._source_recipe_job(
-                        occurrence._occurrence_polygons_for_entity,
-                        entity("next", (1, 1)),
-                        source_cell=native_source,
-                        transform=(1, 0, 0, 1, 0, 0),
-                    )
-                ],
-            )
-            assert result
-            assert [r["source_entity_id"] for r in source_grid_audits()] == [
-                "metal_0",
-                "next",
-            ]
+    with preparation_resources(max_workers=2):
+        with pytest.raises(ValueError, match="source mismatch 0"):
+            source_recipe_map(run_source_recipe, invalid_jobs())
+        result = source_recipe_map(
+            run_source_recipe,
+            [
+                source_recipe_job(
+                    occurrence.occurrence_polygons_for_entity,
+                    SCOPE,
+                    entity("next", (1, 1)),
+                    source_polygons=occurrence.read_polygons_by_layer(native_source),
+                    transform=(1, 0, 0, 1, 0, 0),
+                )
+            ],
+        )
+        assert result.value
+        assert [r["source_entity_id"] for r in result.audits] == ["next"]
 
 
 def test_ground_include_and_port_recipe_outputs_match():
+    """Match serial and parallel outputs for ground, include, and port recipes."""
     cell = gdstk.Cell("GROUND_SOURCE")
     cell.add(gdstk.rectangle((1, 1), (2, 2), layer=1))
     cell.add(gdstk.rectangle((0, 0), (4, 4), layer=2))
     cell.add(gdstk.rectangle((5, 0), (6, 1), layer=3))
     cell.add(gdstk.rectangle((0, 0), (1, 1), layer=4))
-    ground = occurrence._entity_from_layer_record(
+    ground = stack_layers.entity_from_layer_record(
         {
             "semantic_id": "ground",
             "role": "metal",
@@ -188,49 +187,50 @@ def test_ground_include_and_port_recipe_outputs_match():
     )
 
     def prepared_jobs():
-        yield occurrence._source_recipe_job(
-            occurrence._occurrence_ground_polygons_for_entity,
+        polygons = occurrence.read_polygons_by_layer(cell)
+        yield source_recipe_job(
+            occurrence.occurrence_ground_polygons_for_entity,
+            SCOPE,
             ground,
-            source_cell=cell,
+            source_polygons=polygons,
             transform=(1, 0, 0, 1, 0, 0),
             plane_layer=(2, 0),
         )
-        yield occurrence._source_recipe_job(
-            occurrence._occurrence_include_polygon,
+        yield source_recipe_job(
+            occurrence.occurrence_include_polygon,
+            SCOPE,
             {
                 "source_local_id": "include",
                 "layer": [3, 0],
                 "selector_point_um": [5.5, 0.5],
             },
-            source_cell=cell,
+            source_polygons=polygons,
             transform=(1, 0, 0, 1, 0, 0),
         )
-        yield occurrence._source_recipe_job(
-            occurrence._occurrence_port_polygon,
+        yield source_recipe_job(
+            occurrence.occurrence_port_polygon,
+            SCOPE,
             {
                 "name": "port",
                 "layer": 4,
                 "datatype": 0,
                 "selector_point_um": [0.5, 0.5],
             },
-            source_cell=cell,
+            source_polygons=polygons,
             transform=(1, 0, 0, 1, 0, 0),
         )
 
-    with geometry_grid_scope(GeometryGridContext(0.001)):
-        serial = _source_recipe_map(occurrence._run_source_recipe, prepared_jobs())
-        serial_audits = deepcopy(source_grid_audits())
-    with geometry_grid_scope(GeometryGridContext(0.001)):
-        with preparation_resources(max_workers=2):
-            parallel = _source_recipe_map(
-                occurrence._run_source_recipe, prepared_jobs()
-            )
-        assert source_grid_audits() == serial_audits
-    assert parallel == serial
-    assert len(parallel[0][0]["holes"]) == 1
+    serial = source_recipe_map(run_source_recipe, prepared_jobs())
+    serial_audits = deepcopy(serial.audits)
+    with preparation_resources(max_workers=2):
+        parallel = source_recipe_map(run_source_recipe, prepared_jobs())
+    assert parallel.audits == serial_audits
+    assert parallel.value == serial.value
+    assert len(parallel.value[0][0]["holes"]) == 1
 
 
 def test_public_adapter_exact_metadata_and_audit_order(tmp_path):
+    """Preserve exact adapter metadata and source audit ordering."""
     library = gdstk.Library(unit=1e-6, precision=1e-9)
     cell = library.new_cell("ADAPTER")
     cell.add(gdstk.rectangle((0, 0), (2, 2), layer=1))
@@ -280,11 +280,28 @@ def test_public_adapter_exact_metadata_and_audit_order(tmp_path):
 def test_public_plan_exact_detached_snapshot_for_identical_emitted_fixture(
     tmp_path, monkeypatch
 ):
-    import gdsfactory as gf
-    from scgsim.geometry.source import plan as plan_module
+    """Compare detached plan snapshots from serial and parallel preparation."""
+    plan, plan_module, emitted, emitted_bytes = _build_plan_fixture(
+        tmp_path, monkeypatch
+    )
+    serial, parallel, worker_threads = _prepare_serial_and_parallel_plan(
+        plan, plan_module, monkeypatch
+    )
+    _assert_parallel_snapshot(serial, parallel, emitted_bytes, worker_threads)
+    _assert_error_priority_and_recovery(serial, emitted, tmp_path)
+
+
+def _build_plan_fixture(tmp_path, monkeypatch):
+    """Create a public plan and freeze its genuine GDS fixture bytes."""
+    # Keep optional gdsfactory loading inside the public-plan fixture test path.
+    import gdsfactory as gf  # noqa: PLC0415 - keep optional dependency local to this fixture
 
     # Restore process-local PDK state after this public generic fixture.
-    monkeypatch.setattr(gf.pdk, "_ACTIVE_PDK", gf.pdk._ACTIVE_PDK)
+    monkeypatch.setattr(
+        gf.pdk,
+        "_ACTIVE_PDK",
+        gf.pdk._ACTIVE_PDK,  # noqa: SLF001 - preserve active PDK during test setup
+    )
     gf.gpdk.PDK.activate()
     component = gf.Component()
     component.add_polygon(((0, 0), (2, 0), (2, 2), (0, 2)), layer=(1, 0))
@@ -328,7 +345,6 @@ def test_public_plan_exact_detached_snapshot_for_identical_emitted_fixture(
         layer_stack=stack,
         material_records={"PEC": {"kind": "conductor"}, "vacuum": {"kind": "vacuum"}},
         coupon_padding_um=1,
-        grid_size_um=0.001,
     )
     # Freeze genuine fixture emission bytes/path for full metadata equality;
     # this does not normalize timestamps or substitute geometry in product code.
@@ -351,32 +367,34 @@ def test_public_plan_exact_detached_snapshot_for_identical_emitted_fixture(
 
     monkeypatch.setattr(type(component), "write_gds", fixed_fixture_write)
     monkeypatch.setattr(plan_module, "TemporaryDirectory", fixed_fixture_directory)
-    serial = plan.prepare()
-    from scgsim.geometry.source import adapter as adapter_module
+    return plan, plan_module, emitted, emitted_bytes
 
+
+def _prepare_serial_and_parallel_plan(plan, plan_module, monkeypatch):
+    """Prepare serially, then observe genuine selector work on worker threads."""
+    serial = plan.prepare()
     barrier = Barrier(2)
     worker_threads = []
-    original_selector = plan_module._occurrence_polygons_for_entity
+    original_selector = plan_module.occurrence_polygons_for_entity
 
     def observed_selector(*args, **kwargs):
         # Observe genuine selectors, without substituting their outputs.
-        if kwargs.get("cell") is None:
-            barrier.wait(timeout=5)
-            worker_threads.append(get_ident())
+        barrier.wait(timeout=5)
+        worker_threads.append(get_ident())
         return original_selector(*args, **kwargs)
 
     with monkeypatch.context() as watched:
         watched.setattr(
-            plan_module, "_occurrence_polygons_for_entity", observed_selector
-        )
-        watched.setattr(
-            adapter_module, "_occurrence_polygons_for_entity", observed_selector
+            plan_module, "occurrence_polygons_for_entity", observed_selector
         )
         with preparation_resources(max_workers=2):
             parallel = plan.prepare()
-    assert (
-        len(worker_threads) == 4
-    )  # Plan extraction plus adapter expected-value batch.
+    return serial, parallel, worker_threads
+
+
+def _assert_parallel_snapshot(serial, parallel, emitted_bytes, worker_threads):
+    """Check thread use, exact plan equality, and detached metadata."""
+    assert len(worker_threads) == 2  # One extraction per occurrence Entity.
     assert len(set(worker_threads)) == 2
     assert get_ident() not in worker_threads
     assert parallel.gds_bytes == serial.gds_bytes == emitted_bytes
@@ -387,19 +405,26 @@ def test_public_plan_exact_detached_snapshot_for_identical_emitted_fixture(
     copied.metadata["detached"] = True
     assert "detached" not in parallel.geometry_input.metadata
 
-    # Keep current expected-record checks and source-order error priority.
+
+def _assert_error_priority_and_recovery(serial, emitted, tmp_path):
+    """Refuse the saved stack with another GDS, then read the saved pair as prepare() lowered it."""
     saved_stack = tmp_path / "saved.stack.json"
-    broken = deepcopy(serial.stack)
-    broken["layers"][0]["geometry"]["source_occurrence_polygons_um"] = []
-    broken["layers"][1]["metadata"]["source_occurrence_path"] = "missing"
-    saved_stack.write_text(json.dumps(broken))
+    other_gds = tmp_path / "other.gds"
+    other_gds.write_bytes(emitted.read_bytes() + b"\0")
+    saved_stack.write_text(json.dumps(serial.stack))
     with preparation_resources(max_workers=2):
-        with pytest.raises(
-            ValueError, match="polygon source differs for 'coupon/first'"
-        ):
-            build_gds_stack_geometry_input(gds_file=emitted, stack_file=saved_stack)
-        assert occurrence._EXTRACTION_CACHE.get() is None
-        saved_stack.write_text(json.dumps(serial.stack))
-        assert build_gds_stack_geometry_input(
+        with pytest.raises(ValueError, match="written for the GDS with SHA-256"):
+            build_gds_stack_geometry_input(gds_file=other_gds, stack_file=saved_stack)
+        assert occurrence._EXTRACTION_CACHE.get() is None  # noqa: SLF001 - verify failed adapter scope cleanup
+        reloaded = build_gds_stack_geometry_input(
             gds_file=emitted, stack_file=saved_stack
-        ).polygons
+        )
+    prepared = serial.geometry_input
+
+    def shapes(source):
+        return [(p.polygon_id, p.layer, p.exterior, p.holes) for p in source.polygons]
+
+    assert shapes(reloaded) == shapes(prepared)
+    assert [e.semantic_id for e in reloaded.entities] == [
+        e.semantic_id for e in prepared.entities
+    ]

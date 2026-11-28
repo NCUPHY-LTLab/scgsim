@@ -1,0 +1,57 @@
+---
+title: "Notebook contract"
+description: "The rules a public component-simulation notebook of OrcaPen SC PDK follows when it calls SCGSim."
+scgsim-kind: "contract"
+scgsim-status: "STABILIZED"
+scgsim-id: "docs/notebook-ux"
+aliases:
+  - ../notebook-ux.html
+---
+
+The public component-simulation notebooks live in
+[OrcaPen SC PDK](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk), and SCGSim
+keeps no copy of them. This page gives the rules such a notebook follows when
+it calls SCGSim, for whoever writes or reviews one;
+[Choose a simulation](../start/choose-a-simulation.qmd#public-inputs) links the
+notebooks themselves.
+
+## The order of the cells {#stage-local-controls}
+
+A notebook shows each step where it happens, with its own settings beside it.
+Only three settings are global: the workflow action, the run ID and the run
+root. The steps, as a Palace capacitance notebook calls them:
+
+1. **Source.** Build the component and the `GeometryPlan`, assign the Nets
+   (`plan.set_nets`) and the vacuum region (`plan.set_vacuum_region`), and
+   show the source summary and `ElectrostaticSim.simulation_drc(plan)` before
+   anything is prepared.
+2. **Model.** Bind the snapshot (`sim.set_plan(plan.prepare())`) and set the
+   terminals, the ground and the problem settings.
+3. **Mesh and config.** `sim.mesh()`, then `sim.write_config()`.
+4. **Handoff.** `sim.prepare_handoff(...)` with an explicit execution profile.
+5. **Run.** Run the handoff on its host, as an explicit step the reader sees.
+6. **Returned run.** `resolve_palace_result(...)` with the handoff ID, then
+   the identity, the numerical evidence and the cost, and only then the
+   physical result.
+
+An AEDT notebook follows the same order with `EigenmodeSim` (or the
+`prepare_*_from_geometry` functions), `python -m scgsim.aedt.run` on the AEDT
+host and `resolve_results`. The backend's own settings stay visible in the
+notebook; the handoff, Desktop ownership, readback, hashing and result
+resolution stay in SCGSim and are not re-implemented as notebook helpers. An
+incomplete receipt or an unreadable final table is shown as what it is, never
+as success. The [report model](../reference/specs/report-model.qmd) owns the
+order of the views, and the
+[execution profiles](../reference/specs/execution-profiles.qmd) own the run
+script, the resources and the returned identity.
+
+## Source and result custody {#source-and-result-custody}
+
+The PDK owns its materials, its fabrication facts and each component's local
+semantics. The notebook assigns the named occurrences and the final Net map
+through the `GeometryPlan`. A public notebook contains no private geometry,
+selectors, dimensions, screenshots, configs, meshes, receipts or artifacts
+([publication boundary](provenance.qmd#publication-boundary)). Ignoring an
+artifact folder in Git does not keep its files for a later resolution: the
+study's owner keeps that evidence. A notebook that runs does not by itself
+show that its numbers are accurate.

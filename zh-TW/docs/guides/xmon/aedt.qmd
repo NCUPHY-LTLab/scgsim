@@ -1,0 +1,119 @@
+---
+lang: zh-TW
+title: "以 AEDT 計算覆晶 Xmon"
+description: "準備覆晶 Xmon 的 HFSS 本徵模態計算：modeling=\"solid\"、表面薄膜、邊距與接面，求頻率、Q 值與 EPR。"
+scgsim-kind: "course"
+scgsim-status: "STABILIZED"
+scgsim-id: "docs/tutorial-xmon-aedt"
+execute:
+  enabled: false
+aliases:
+  - ../../tutorial-xmon-aedt.html
+---
+
+本頁為[共用的計畫](inputs.qmd)中的覆晶 Xmon 準備 HFSS 本徵模態計算，金屬建成實體（`modeling="solid"`）：求量子位元模態的頻率與 Q 值，以及各表面、介電質與接面的參與率，接面以 11.78 nH 電感表示。HFSS 會一直細化，直到模態頻率在回合（pass）之間的變化不超過 0.1 %，這與 [Palace 頁](palace.qmd)宣告的條件相同。這個儲存庫沒有這次計算的結果紀錄。
+
+你需要：
+
+- 準備計算的電腦：含 `aedt-epr` extra 的 SCGSim 與 OrcaPen SC PDK；準備時不會開啟 AEDT；
+- 執行計算的電腦：AEDT 2024.2、PyAEDT 1.3.0 與授權（[執行已準備的模型](../run-elsewhere.qmd#prepare-the-solver-host)）。
+
+請先在同一個 Python 工作階段執行[共用的計畫](inputs.qmd)：它定義了 `plan` 與 `port_name`。
+
+## 表面薄膜 {#configure-surface-and-junction-epr}
+
+[]{#declare-surface-epr}在計畫上設定薄膜，與 [Palace 頁](palace.qmd#configure-eigenmode-and-epr-outputs)完全相同：每類表面一層，MA（金屬–空氣）、MS（金屬–基板）與 SA（基板–空氣），各厚 2 nm，使用 PDK 的 `LiteratureCentral` 預設值（建模假設），並設 0.5 µm 與 1.0 µm 兩個離間隙邊緣的邊距。
+
+```python
+from orcapen_sc_pdk import validate_interface_preset_records
+
+presets = validate_interface_preset_records()
+plan.set_surface_epr({
+    kind: {
+        "film_thickness_m": presets[f"LiteratureCentral_{kind}"]["thickness"] * 1e-6,
+        "permittivity": presets[f"LiteratureCentral_{kind}"]["permittivity"],
+        "loss_tangent": presets[f"LiteratureCentral_{kind}"]["loss_tangent"],
+        "source": presets[f"LiteratureCentral_{kind}"]["source"],
+        "preset": f"LiteratureCentral_{kind}",
+        "inset_margins_um": (0.5, 1.0),
+    }
+    for kind in ("MA", "MS", "SA")
+})
+snapshot = plan.prepare()
+```
+
+邊距會切進 AEDT 匯入的模型，宣告的每一類表面都會積分，包含金屬的側面。
+
+## 接面 {#bind-the-junction}
+
+接面屬於計畫：[共用的計畫](inputs.qmd)把它宣告一次，即薄片 `port_name` 上的 11.78 nH 電感。只有電感、沒有電阻的元件在 HFSS 中是接面：薄片上、D1 接地平面與 Xmon 焊墊之間的 Lumped RLC，並像 Palace 一樣切成兩者之間的矩形（[接面參考](../../reference/specs/aedt-runtime.qmd#aedt-automatic-junction-partition)）。它的 EPR id 就是薄片的名稱 `port_name`。
+
+## 準備計算 {#select-reported-rows-and-prepare-a-handoff}
+
+```python
+from pathlib import Path
+
+from scgsim.aedt import (
+    AedtResources,
+    EprAnalysisRequest,
+    EigenmodeRunControl,
+    EigenmodeSim,
+)
+
+AEDT_VERSION = "2024.2"  # The AEDT release of the computer that runs it.
+sim = EigenmodeSim(modeling="solid", aedt_version=AEDT_VERSION)
+sim.set_plan(snapshot)
+sim.set_output_dir(Path.cwd() / ".artifacts" / "public-xmon-aedt-solid")
+sim.set_eigenmode(
+    project_name="public_xmon_solid_eigenmode",
+    design_name="Xmon",
+    run_control=EigenmodeRunControl(
+        setup_name="Setup1",
+        minimum_frequency_ghz=3.0,
+        num_modes=1,
+        maximum_passes=20,
+        maximum_delta_frequency_percent=0.1,
+        minimum_passes=1,
+        minimum_converged_passes=1,
+    ),
+    resources=AedtResources(cores=4, ram_limit_percent=80),
+)
+sim.set_epr_request(
+    EprAnalysisRequest(
+        mode_indices=(1,),
+        surface_epr_groups=None,  # every Surface EPR group
+        junction_ids=(port_name,),
+        bulk_domain_ids=None,  # every dielectric solid and the Region
+    )
+)
+```
+
+- `modeling="solid"` 把金屬建成具有薄膜厚度的實體，也就是 100 nm 的鋁；`"thin_film"` 則會建成薄片。
+- `EigenmodeRunControl` 要求 3 GHz 以上的第一個模態，最多 20 個自適應回合，在頻率於回合之間的變化不超過 0.1 % 時停止。
+- `AedtResources` 給出 AEDT 可以使用的核心數與記憶體比例；請依你的 AEDT 電腦設定。
+- `EprAnalysisRequest` 選擇要回報的內容：模態 1、所有表面 EPR 群組、接面，以及所有塊體區域：介電質實體（例如兩片矽晶片）與代表計畫真空區域的 Region。`None` 選全部，`()` 不選，ID 的 tuple 則選那些。這個選擇不會改變求解。
+
+寫出執行資料夾之前，先看看輸入：
+
+```python
+from IPython.display import display
+
+display(sim.input_summary())
+```
+
+再寫出它：
+
+```python
+handoff = sim.prepare_handoff()
+print(handoff.run_dir, handoff.script_path, handoff.archive_path)
+```
+
+`prepare_handoff()` 建立模型並寫出執行資料夾與封存檔；它不會開啟 AEDT。每次準備都需要新的輸出資料夾。
+
+## 執行、讀取與後續 {#execute-resolve-and-continue-the-analysis}
+
+在 AEDT 電腦上[執行這個資料夾](../run-elsewhere.qmd#aedt-execute-the-prepared-package-locally)，整個帶回來，再以 `resolve_results` 讀取（[收斂與報告](../convergence-and-reports.qmd#aedt-read-the-sealed-family-evidence)）：`physics_results()` 給出頻率與 Q，`epr_result()` 給出每個自適應回合的參與率。HFSS 的停止條件只看頻率；你需要的參與率，也請看它的歷程（[解讀結果](../convergence-and-reports.qmd#interpret-for-scq-use)）。
+
+若要從最終已存的場再算一次參與率，用[從 AEDT 已存的場計算 EPR](../saved-fields.qmd)；若要套用其他損耗正切，用[不重新求解，改變損耗假設](../offline-loss.qmd)。
+
+兩個頁面從同一個計畫出發，外表面也使用相同的條件：Palace 中是理想磁導體，HFSS 中是 Perfect H。比較結果時，請把每次計算自己的設定與收斂情形放在旁邊。

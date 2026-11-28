@@ -1,0 +1,54 @@
+---
+lang: zh-TW
+title: "為 AEDT 準備共平面波導"
+description: "建立一段短共平面波導試片的計畫，作為 HFSS 本徵模態與 Q3D 的輸入。"
+scgsim-kind: "course"
+scgsim-status: "STABILIZED"
+scgsim-id: "docs/course/aedt-inputs"
+aliases:
+  - ../course/aedt-inputs.html
+---
+
+本頁建立一小段共平面波導（CPW）的計畫，也就是一個試片：長 500 µm、寬 10 µm 的訊號線，兩側各隔 6 µm 是寬 80 µm 的接地條，材料是 500 µm 矽基板上 100 nm 的鋁。它的結果 `snapshot` 是[以 HFSS 計算共振模態](modes-hfss.qmd)的輸入；HFSS、Q3D 與 Palace 的模擬都以相同方式接收計畫的 `snapshot`。
+
+這個試片不能用來算 S 參數：HFSS Driven Terminal 需要每個埠各有一片埠薄片，而這個試片沒有（[以 HFSS 計算 S 參數](s-parameters-hfss.qmd)）。若要傳輸線每單位長度的電容與電感，Q2D 改用截面作為輸入（[以 Q2D 計算傳輸線參數](line-parameters-q2d.qmd)）。
+
+![從上方看 CPW 試片：10 µm 的訊號線（金色）位在兩條 80 µm 的接地條（灰色）之間，各隔 6 µm，基板為 500 µm × 182 µm 的矽。尺寸單位為 µm；圖中是版圖，不是計算結果。](../assets/cpw-source.svg){#fig-public-cpw-source}
+
+## 建立 CPW 計畫 {#make-the-cpw-plan}
+
+```python
+import orcapen_sc_pdk
+from orcapen_sc_pdk import get_material_records
+from orcapen_sc_pdk.cells import finite_ground_cpw_coupon
+from orcapen_sc_pdk.tech import get_single_die_layer_stack
+from scgsim.geometry import GeometryPlan
+
+orcapen_sc_pdk.activate()
+plan = GeometryPlan(
+    finite_ground_cpw_coupon(),
+    root_id="chip",
+    layer_stack=get_single_die_layer_stack(),
+    material_records=get_material_records(),
+    coupon_padding_um=0.0,
+)
+plan.set_nets({
+    "signal": ("chip/SIGNAL",),
+    "ground": ("chip/GROUND_PLUS", "chip/GROUND_MINUS"),
+})
+plan.set_vacuum_region(padding=(100.0, 100.0, 1000.0))
+snapshot = plan.prepare()
+```
+
+需要含 `aedt-epr` extra 的 SCGSim 與 OrcaPen SC PDK（[安裝 SCGSim](../start/install.qmd#extras)），不需要 AEDT。
+
+每一行決定的事：
+
+- `finite_ground_cpw_coupon()` 是 PDK 的元件，使用預設尺寸。PDK 把三個金屬圖形命名為 `SIGNAL`、`GROUND_PLUS` 與 `GROUND_MINUS`；每個都是一個 Entity，也就是 SCGSim 追蹤的具名圖形。
+- `root_id="chip"` 把版圖放在 `chip` 這個名稱下，所以圖形名稱是 `chip/SIGNAL` 等等。
+- `get_single_die_layer_stack()` 是單一晶片：矽基板與其上的鋁膜 `D0_TOP_M1`，上方沒有第二片晶片。`coupon_padding_um=0.0` 不在試片本身的 500 µm × 182 µm 之外多加基板。
+- `set_nets` 把 Entity 分成 Net，每個 Net 是一塊具名、作為同一個導體的金屬：`signal`，以及由兩條接地條組成的 `ground`。怎麼分組由你決定，不是 PDK 決定。
+- `set_vacuum_region(padding=(x, y, z))` 設定模型周圍的真空區域：x 與 y 方向各在試片外延伸 100 µm，上方與下方各 1000 µm。HFSS 與 Q3D 直接把這個範圍當作它們的 Region。
+- `plan.prepare()` 回傳 `snapshot`，也就是模擬所接收的計畫固定快照。它不建立模型，也不開啟 AEDT。
+
+請在同一個 Python 工作階段保留 `snapshot`，接著閱讀[以 HFSS 計算共振模態](modes-hfss.qmd)。[以 Q3D 計算電容](capacitance-q3d.qmd)以相同方式接收快照，而[使用自己的模型](prepare-a-layout.qmd)說明如何為自己的版圖建立計畫。

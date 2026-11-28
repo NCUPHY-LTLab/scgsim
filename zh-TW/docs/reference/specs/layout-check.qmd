@@ -1,0 +1,94 @@
+---
+lang: zh-TW
+title: "版圖檢查"
+description: "simulation_drc 量測什麼：細小結構的類別與界限、發現的負責方、mesh() 內的檢查、各類別加入的設定，以及 AEDT Eigenmode 的檢查。"
+scgsim-kind: "contract"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/reference/specs/layout-check"
+---
+
+這一頁是版圖檢查 `simulation_drc` 的參考。怎麼執行它、怎麼讀報告，見[檢查版圖](../../guides/check-a-layout.qmd)。
+
+Palace 的檢查分兩個階段，從不產生網格：
+
+1. **幾何階段。** 執行該類別 `mesh()` 所執行的同一段準備與幾何建構。建不出來的版圖會被拒絕，並拋出建構時的錯誤。這個階段停在第一個拒絕處。
+2. **網格階段。** 只有建構成功的模型才會進到這裡。檢查會量測建出的模型的每條邊與每個面，一次列出所有對網格器而言太細的部分。拒絕時拋出 `SimulationDrcError`，其 `report` 是兩個階段的 `SimulationDrcReport`；只有警告時則直接回傳這份報告。
+
+## 網格器處理不了的細小結構 {#what-the-meshing-stage-reports}
+
+只有幾個格點長的邊或面，網格器無法用可用的四面體填滿：它在周圍細化，又會冒出新的劣質元素。這類幾何本身是有效的，所以幾何階段讓它通過。網格階段讀取建出的模型對其面與邊的記錄，把每個這樣的邊或面歸入一個類別：
+
+| 類別 | 量測對象 | 判定條件 | 處置 |
+|---|---|---|---|
+| A | 牆面的柱距：它所立的外框邊在兩個側壁柱之間的長度，沿著該邊量（曲面牆取圓弧長） | 小於 10 個格點 | 拒絕 |
+| B | 水平面的寬度 2A/P（A 為面積，P 為周長），或它最尖的角 | 小於 10 個格點，或角小於 1° | 拒絕 |
+| C | 不與任何牆面相鄰的水平邊的長度 | 小於 25 個格點 | 警告 |
+
+界限以格點數表示，所以會隨版圖的格點縮放：在 1 nm 的格點上，A 類會找出寬度小於 10 nm 的牆面。每項發現都同時列出以 µm 與格點數表示的尺寸。例如一塊 200 µm 見方的焊墊，與接地之間只畫 5 nm 的間隙（[檢查版圖](../../guides/check-a-layout.qmd#read-a-refused-report)中被拒絕的例子），其間隙面的寬度 2A/P 是 0.00499997 µm，即 5 個格點：B 類，拒絕。這些界限與處置是固定的，集中在 `scgsim.meshing.FineStructureLimits`；`simulation_drc` 不接受其他界限。
+
+### Surface-EPR 條帶 {#band-widths}
+
+Surface-EPR 請求的每條條帶，寬度都至少要等於 B 類的界限，也就是 10 個格點。第一條條帶的寬度等於第一個邊距，之後每條條帶的寬度是相鄰兩個邊距的差：`(0.5, 1.0)` µm 會切出兩條 0.5 µm 寬的條帶。較窄的條帶會在建構任何東西之前以 `ValueError` 拒絕，訊息會指出規格（或 `inset_margins_by_entity_um` 中的導體）、條帶、以 µm 與格點數表示的寬度，以及界限。寬度剛好等於界限的條帶，在被截斷的地方（例如晶片邊緣）仍可能被 B 類拒絕：截斷的那一段，寬度 2A/P 會略小於條帶寬度。請選擇比界限更寬的條帶。
+
+::: {.callout-tip title="讓每個導體的核心保持夠寬"}
+使用 Surface-EPR 條帶時，請讓每個導體的核心（超出最大邊距的部分）比它的條帶寬得多。導體收窄到剛好是最大邊距的兩倍時，兩側的條帶在中線相遇：模型仍是精確的侵蝕，也能產生網格，只是在這個頸部會有 C 類的短邊警告。再寬一點，導體就會留下一條細窄的核心，被 B 類拒絕，見 [Surface-EPR 邊距](../supported-scope.qmd#rules-margins)。
+:::
+
+### 一項發現說了什麼 {#finding}
+
+每項發現都會標明它的階段、類別、量測方式與尺寸、模型中的面或邊及其物理群組、它所來自的版圖物件與條帶請求、這些物件所在的圖層、以 µm 表示的位置與外框、網格器為何處理不了，以及修改方式。負責方依構成該面或邊的繪製邊與條帶請求判定：
+
+- **layout**：這個結構只由繪製的邊圍成，或是一條位在這類結構的條帶最寬邊距之內、重現該結構的條帶曲線。由畫版圖的人修正。不是模型建構器造成的細小邊或面，就是版圖問題：SCGSim 只回報，不修補。
+- **erosion**：兩條互不相鄰的繪製邊各自往內偏移的條帶在這裡相遇，例如導體寬度只比兩倍邊距略大。精確侵蝕本身就有這個結構。請修改交給 `plan.set_surface_epr` 的邊距，或修改導體寬度。另一種情形是：條帶的短邊偏移自一條比條帶邊距還短的直線繪製邊，例如以多邊形畫出的曲線上的一段弦；修改方式會指出那條繪製邊、它的位置與長度。請把這段圓弧宣告為精確圓弧，或改用較長的弦來畫。
+- **sgb**：版圖沒有細小結構的地方卻出現了條帶曲線。這是 SCGSim 模型建構器 SGB 的缺陷；請附上這項發現回報給 SCGSim。版圖不需要改。
+
+兩條繪製邊共用一個頂點時即為相鄰；封閉外框的最後一條邊與第一條邊也算相鄰。
+
+## `mesh()` 內的同一個檢查 {#the-same-check-inside-mesh}
+
+`EigenmodeSim.mesh()` 與 `ElectrostaticSim.mesh()` 先建構幾何，對建出的模型執行這個網格階段，之後才啟動網格器：
+
+- **有拒絕項目時**，在產生任何網格之前拋出 `SimulationDrcError`。其 `report` 的發現，與 `simulation_drc` 對同一個模型給出的相同。建出的幾何會留在輸出資料夾中，不回傳網格路徑。
+- **只有警告時**，`mesh()` 不會停止，照常產生網格。
+
+`mesh()` 檢查的是以計畫及模擬自己的設定（例如它的 route 與埠）建出的模型；`simulation_drc` 檢查的則是以傳入的計畫、傳入的 route，以及[檢查使用的設定](#what-the-check-uses)建出的模型。對同一份計畫，相同的 route 與近似設定在兩者中建出相同的模型；兩個模型不同時，發現也可能不同。
+
+修補迴圈沒得到乾淨的網格而停下時，`mesh()` 也用同樣的方式回報。錯誤訊息與文字品質報告會先列出網格階段在整個模型中找到的東西：每個類別與量測方式各有幾項、是拒絕還是警告、以 µm 與格點數表示的最小尺寸、各負責方的數量，以及最小的那一項的完整內容，附上負責方與修改方式。細小結構無論在哪裡都可能耗掉修補迴圈的輪數，所以即使某個位置本身沒有發現，這些項目也可能有關。JSON 品質報告在 `meshing_stage` 下列出每一項發現。接著是剩下的劣質元素以 µm 表示的位置（`stop_places`），以及這些位置上的發現，附上負責方與修改方式。一個位置是修補迴圈在該處細化所涵蓋的範圍。沒有任何發現的位置，由 SCGSim 負責說明；模型在其他地方有發現時，那些也要處理。品質報告見[四面體網格品質](mesh-quality.qmd)。
+
+## 檢查使用的設定 {#what-the-check-uses}
+
+計畫以模擬使用它的方式使用：它的 Net、真空區域、Surface-EPR 規格、試片外加的基板、埠片與集總元件。其餘設定來自呼叫，或是固定的：
+
+- 以 `route` 與 `approximation_profile` 傳入的 route 與近似設定，與 [`set_route`](physical-representation.qmd#palace-caller-profile) 接受的相同，預設值與拒絕方式也相同；未傳入時為 Route B；
+- `EigenmodeSim`：計畫上的集總元件作為它的集總埠；計畫沒有宣告任何元件的埠片不在模型中，也不檢查；
+- `ElectrostaticSim`：不設端子，產生網格之前用不到端子；也不實現任何集總元件，讓它們保持開路。
+
+報告不論是回傳的，或是拒絕時錯誤所帶的，最後都在 `lumped elements:` 之下，為計畫的每個集總元件列一行，說明模擬把它做成什麼，並為模擬不放進模型的每張埠片各列一行。
+
+未傳入 `route` 時，檢查使用 Route B；只給 `route="A"` 時使用 `thin_film` 近似設定；`route="A"` 搭配 `substrate_face` 或 `metal_gap_equivalent` 時，使用該設定及其 `film_bindings`。與計畫中薄膜不相符的近似設定，會由幾何建構拒絕，錯誤與 `mesh()` 拋出的相同。Route C 不是 Palace 的 route，會像 `set_route` 一樣被拒絕；route 或近似設定被拒絕時，訊息會指向 `simulation_drc` 的呼叫。兩種 route 都要用的版圖，請對每種 route 各檢查一次。
+
+沒有 Net 時，任何導體都沒有 Net，所以兩個導體一接觸，就會被當成不同 Net 的接觸而拒絕：銦凸塊連接兩片接地面的覆晶版圖會因此被拒絕，直到兩片接地面與每顆凸塊都在同一個 Ground Net 中。沒有真空區域的計畫（計畫沒設定，層堆疊也沒有 `VACUUM_REGION`），會以模擬對它拋出的錯誤被拒絕。以 (0, 0, 1000) µm 外加的真空區域止於版圖的平面範圍，所以請畫出決定這個範圍的東西，例如晶片外框或接地面。只在一個點碰到這個範圍的導體，例如周圍什麼都沒畫的單獨圓形焊墊，會以 `NonManifoldError` 被拒絕；[只在一點碰到邊界的導體](../known-geometry-problems.qmd#boundary-point-pinch)說明原因與該畫什麼。
+
+`simulation_drc()` 寫入暫存資料夾，結束後移除。幾何階段沒有自己的規則，所以它的錯誤就是同一份計畫、同樣設定下該類別 `mesh()` 會拋出的錯誤。網格階段的規則就是上面的類別。
+
+## AEDT Eigenmode 的檢查 {#aedt-eigenmode-check}
+
+`scgsim.aedt.EigenmodeSim` 由同一份 SGB 幾何建立模型，以 STEP 檔匯入 HFSS，所以它有自己的 `simulation_drc()`。它檢查該模擬在 AEDT 啟動之前的那段流程，不需要 AEDT，只需要 `scgsim[aedt]`（STEP 匯出使用 OCP CAD 核心）：
+
+```python
+from scgsim.aedt import EigenmodeSim
+
+report = EigenmodeSim.simulation_drc(plan, modeling="solid")  # or "thin_film"; no default
+print(report.render_text())
+```
+
+它接受與 Palace 檢查相同的計畫，只是以 `modeling` 取代 `route` 與 `approximation_profile`：`"thin_film"` 把每個導體做成薄片（Route A），`"solid"` 把每個導體做成具有膜厚的實體（Route C）。兩種都要用的版圖，請各檢查一次。它依模擬執行的順序檢查：
+
+1. 在 `modeling` 決定的 route 上建出計畫的 SGB 模型，包含 Surface-EPR 條帶；
+2. STEP 匯出及匯入前對它的檢查、AEDT Region 與計畫真空區域的比對，以及 Net 與集總元件在 AEDT 中的名稱：兩個 ID 若會變成同一個 AEDT 名稱，就會被拒絕，並指出兩者；
+3. 匯入的第一步：每個邊界放在匯入會保留的面上，以及每片埠片；
+4. 在這些面上選取每一列 Surface EPR。
+
+某一步拒絕時，會原封不動地拋出 `prepare_handoff()` 在同一步會拋出的錯誤，請像讀 `prepare_handoff()` 的拒絕一樣讀它。AEDT 的 Region 就是計畫的真空區域，所以沒有真空區域的計畫會被拒絕。AEDT 自己產生網格，所以沒有網格階段：`scgsim.aedt` 的 `SimulationDrcReport` 只有幾何階段，以及集總元件的各行。計畫上的每個集總元件，都依模擬實現它的方式檢查，其埠片切成兩個導體之間的矩形；計畫沒有宣告任何元件的埠片不在模型中。元件的數值不影響幾何。通過代表模型建得出來、也匯入得了。它不保證另一種 `modeling`，也不保證 AEDT 能為模型產生網格或求解。
+
+HFSS Driven Terminal 與 Q3D 沒有模擬類別：`prepare_hfss_driven_from_geometry` 與 `prepare_q3d_from_geometry` 由計畫的快照建立模型，在寫出交接套件之前先對它執行匯入的第一步，所以匯入無法實現的模型會在那裡被拒絕，不需要 AEDT。

@@ -1,0 +1,273 @@
+"""Surface-EPR specs: the ``MA``/``MS``/``SA`` film parameters and the inset margins SGB cuts as bands; the plan's rules.
+
+``MA`` is the metal-air interface, ``MS`` metal-substrate and ``SA`` substrate-air.  A spec gives the film
+(thickness, permittivity or a dielectric material, loss tangent) and, optionally, the inset margins of its
+bands: ``inset_margins_um`` for every face of its type, ``inset_margins_by_entity_um`` for chosen conductors.
+Both are backend-neutral: ``GeometryPlan.set_surface_epr`` checks the specs by these rules and its snapshot
+carries them normalized, Palace and AEDT read the same normalized specs, and the margins are geometry that
+:mod:`scgsim.geometry.surface_epr` turns into SGB inset requests.  The rules read nothing of SGB: the faces a
+band can lie on are the shared vocabulary of :mod:`scgsim.geometry.models.band_faces`.
+"""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Iterable, Mapping
+from numbers import Real
+from typing import Any, cast
+
+from scgsim.geometry.models.band_faces import BANDED_FACE_KINDS
+from scgsim.semantics.epr import film_assumptions
+
+
+def normalize_surface_epr_specs(
+    specs: Mapping[str, Mapping[str, Any]],
+    *,
+    materials: Mapping[str, Mapping[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Normalize configured MA/MS/SA layers from numeric or explicit material data."""
+    if not isinstance(specs, Mapping):
+        raise TypeError("surface_epr specs must be a mapping.")
+    unknown_types = set(specs).difference({"MA", "MS", "SA"})
+    if unknown_types:
+        raise ValueError(
+            f"surface_epr has unsupported interface types: {sorted(unknown_types)}."
+        )
+    result: dict[str, dict[str, Any]] = {}
+    for interface_type, raw in sorted(specs.items()):
+        result[interface_type] = _normalize_interface_spec(
+            interface_type, raw, materials
+        )
+    return result
+
+
+SPEC_FIELDS = frozenset(
+    {
+        "thickness",
+        "film_thickness_m",
+        "permittivity",
+        "material_id",
+        "loss_tangent",
+        "source",
+        "preset",
+        "face_kinds",
+        "required",
+        "inset_margins_um",
+        "inset_margins_by_entity_um",
+    }
+)
+"""The fields a Surface-EPR spec may carry."""
+
+
+def _normalize_interface_spec(
+    interface_type: str,
+    raw: Mapping[str, Any],
+    materials: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Normalize one interface: its fields, film thickness, film material, face kinds and margins, in that order."""
+    if not isinstance(raw, Mapping):
+        raise TypeError(f"Surface EPR {interface_type} spec must be a mapping.")
+    _check_fields(interface_type, raw)
+    thickness = _film_thickness(interface_type, raw)
+    numeric, loss_tangent, resolved = _film_material(interface_type, raw, materials)
+    source = raw.get("source", "material" if "material_id" in resolved else "explicit")
+    preset = raw.get("preset")
+    film_assumptions({"source": source, "preset": preset}, partial=True)
+    _set_face_kinds(interface_type, raw, resolved)
+    required = raw.get("required", True)
+    if not isinstance(required, bool):
+        raise TypeError(f"Surface EPR {interface_type} required must be a bool.")
+    _set_inset_margins(interface_type, raw, resolved)
+    if "face_kinds" in resolved and (
+        "inset_margins_um" in resolved or "inset_margins_by_entity_um" in resolved
+    ):
+        check_bandable_face_kinds(interface_type, resolved["face_kinds"])
+    return {
+        **thickness,
+        "permittivity": float(cast(Any, numeric)),
+        "loss_tangent": None if loss_tangent is None else float(loss_tangent),
+        "source": source,
+        "preset": preset,
+        "required": required,
+        **resolved,
+    }
+
+
+def check_bandable_face_kinds(interface_type: str, face_kinds: list[str]) -> None:
+    """Refuse a face kind SGB cannot band.
+
+    A spec names a face by the ``face_kind`` of the sidecar group it lies on, which is SGB's own vocabulary:
+    ``sheet``, ``top``, ``bottom`` and ``interface`` map onto themselves.  The remaining kind a surface group
+    has, ``sidewall``, has no SGB equivalent because SGB never bands sidewalls.
+    """
+    unbandable = [kind for kind in face_kinds if kind not in BANDED_FACE_KINDS]
+    if unbandable:
+        raise ValueError(
+            f"Surface EPR {interface_type} face_kinds {unbandable} cannot carry inset margins; "
+            f"SGB bands only {list(BANDED_FACE_KINDS)} (sidewalls are never banded)."
+        )
+
+
+def _check_fields(interface_type: str, raw: Mapping[str, Any]) -> None:
+    unknown = set(raw).difference(SPEC_FIELDS)
+    if unknown:
+        raise ValueError(
+            f"Surface EPR {interface_type} has unknown fields: {sorted(unknown)}."
+        )
+
+
+def _film_thickness(interface_type: str, raw: Mapping[str, Any]) -> dict[str, float]:
+    """The film thickness as the spec states it: native ``thickness`` or ``film_thickness_m``, exactly one."""
+    thickness = raw.get("thickness")
+    thickness_m = raw.get("film_thickness_m")
+    if (thickness is None) == (thickness_m is None):
+        raise ValueError(
+            f"Surface EPR {interface_type} requires exactly one native thickness or film_thickness_m."
+        )
+    if thickness is not None and not positive_real(thickness):
+        raise ValueError(f"Surface EPR {interface_type} requires positive thickness.")
+    if thickness_m is not None:
+        film_assumptions({"film_thickness_m": thickness_m}, partial=True)
+        return {"film_thickness_m": float(cast(Any, thickness_m))}
+    return {"thickness": float(cast(Any, thickness))}
+
+
+def _film_material(
+    interface_type: str,
+    raw: Mapping[str, Any],
+    materials: Mapping[str, Mapping[str, Any]],
+) -> tuple[Any, Any, dict[str, Any]]:
+    """The film's permittivity, its loss tangent, and the material it names (``{"material_id": ...}`` or empty)."""
+    numeric = raw.get("permittivity")
+    material_id = raw.get("material_id")
+    if (numeric is None) == (material_id is None):
+        raise ValueError(
+            f"Surface EPR {interface_type} requires exactly one of permittivity or material_id."
+        )
+    numeric, default_loss, resolved = _resolve_film_material(
+        interface_type, material_id, numeric, materials
+    )
+    if not positive_real(numeric):
+        raise ValueError(
+            f"Surface EPR {interface_type} requires positive resolved permittivity."
+        )
+    loss_tangent = raw.get("loss_tangent", default_loss)
+    film_assumptions({"loss_tangent": loss_tangent}, partial=True)
+    return numeric, loss_tangent, resolved
+
+
+def _set_face_kinds(
+    interface_type: str, raw: Mapping[str, Any], resolved: dict[str, Any]
+) -> None:
+    """Retain the face kinds the spec narrows its faces to, lower-cased and sorted."""
+    face_kinds = raw.get("face_kinds")
+    if face_kinds is None:
+        return
+    if not isinstance(face_kinds, (list, tuple)) or not face_kinds:
+        raise ValueError(
+            f"Surface EPR {interface_type} face_kinds must be a non-empty sequence."
+        )
+    normalized_faces = sorted({str(value).strip().lower() for value in face_kinds})
+    if not all(value for value in normalized_faces):
+        raise ValueError(f"Surface EPR {interface_type} face_kinds must be non-empty.")
+    resolved["face_kinds"] = normalized_faces
+
+
+def _resolve_film_material(
+    interface_type: str,
+    material_id: Any,
+    numeric: Any,
+    materials: Mapping[str, Mapping[str, Any]],
+) -> tuple[Any, Any, dict[str, Any]]:
+    """Resolve explicit dielectric identity and its optional default loss."""
+    if material_id is not None:
+        if not isinstance(material_id, str) or not material_id.strip():
+            raise ValueError(
+                f"Surface EPR {interface_type} material_id must be non-empty."
+            )
+        material = materials.get(material_id)
+        if not isinstance(material, Mapping) or material.get("kind") != "dielectric":
+            raise ValueError(
+                f"Surface EPR {interface_type} material_id must resolve an explicit dielectric material."
+            )
+        numeric = material.get("permittivity")
+        default_loss = material.get("loss_tangent")
+        resolved = {"material_id": material_id}
+    else:
+        default_loss = None
+        resolved = {}
+    return numeric, default_loss, resolved
+
+
+def _set_inset_margins(
+    interface_type: str, raw: Mapping[str, Any], resolved: dict[str, Any]
+) -> None:
+    """Retain the margins SGB cuts into the model as bands: the spec's, and those of customised conductors."""
+    if "inset_margins_um" in raw:
+        resolved["inset_margins_um"] = _validated_margins(
+            raw["inset_margins_um"], f"Surface EPR {interface_type} inset_margins_um"
+        )
+    if "inset_margins_by_entity_um" in raw:
+        resolved["inset_margins_by_entity_um"] = _by_entity_margins(
+            interface_type, raw["inset_margins_by_entity_um"]
+        )
+
+
+def _by_entity_margins(interface_type: str, raw: Any) -> dict[str, list[float]]:
+    """Margins per customised conductor, checked like ``inset_margins_um``."""
+    label = f"Surface EPR {interface_type} inset_margins_by_entity_um"
+    if interface_type == "SA":
+        raise ValueError(
+            f"{label} customises conductors, and an SA interface lies between solution regions; "
+            "use inset_margins_um for SA."
+        )
+    if not isinstance(raw, Mapping) or not raw:
+        raise TypeError(f"{label} must be a non-empty mapping of entity id to margins.")
+    result: dict[str, list[float]] = {}
+    for entity, margins in sorted(raw.items(), key=lambda item: str(item[0])):
+        if not isinstance(entity, str) or not entity:
+            raise ValueError(f"{label} keys must be non-empty entity ids.")
+        result[entity] = _validated_margins(margins, f"{label}[{entity!r}]")
+    return result
+
+
+def _validated_margins(margins: Any, label: str) -> list[float]:
+    """The ordered, strictly increasing positive margins of one sequence."""
+    if isinstance(margins, (str, bytes)) or not isinstance(margins, (list, tuple)):
+        raise TypeError(f"{label} must be an ordered non-empty sequence.")
+    if not margins:
+        raise ValueError(f"{label} must be non-empty.")
+    normalized = []
+    for margin in margins:
+        if not positive_real(margin):
+            raise ValueError(
+                f"{label} values must be finite positive reals "
+                "(the whole surface is the baseline row)."
+            )
+        normalized.append(float(margin))
+    if any(b <= a for a, b in zip(normalized, normalized[1:], strict=False)):
+        raise ValueError(f"{label} must be strictly increasing.")
+    return normalized
+
+
+def margins_of(spec: Mapping[str, Any], entities: Iterable[str]) -> list[float]:
+    """The inset margins (µm) of a face of ``entities`` under ``spec``.
+
+    ``inset_margins_by_entity_um`` customises conductors one by one; every other face takes the spec's
+    ``inset_margins_um``.  A spec with neither has no margins.
+    """
+    by_entity = spec.get("inset_margins_by_entity_um") or {}
+    for entity in entities:
+        if entity in by_entity:
+            return list(by_entity[entity])
+    return list(spec.get("inset_margins_um", ()))
+
+
+def positive_real(value: Any) -> bool:
+    """Whether ``value`` is a finite positive real number (a bool is not a number here)."""
+    return (
+        isinstance(value, Real)
+        and not isinstance(value, bool)
+        and math.isfinite(float(value))
+        and float(value) > 0.0
+    )

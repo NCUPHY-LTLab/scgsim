@@ -1,0 +1,234 @@
+---
+title: "Check a layout"
+description: "Run simulation_drc on your plan before you simulate: a passing and a refused report, how to read a finding, and which check to run."
+scgsim-kind: "contract"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/layout-modeling-check"
+aliases:
+  - ../layout-modeling-check.html
+---
+
+Before you mesh or solve, run the layout check, `simulation_drc`, on the plan
+you will give the simulation. It builds the 3D model that simulation would
+build, looks for anything too small for the mesher, and says where it is and
+who fixes it. It meshes and solves nothing: for the square pad below it takes
+under a second, so you can run it whenever the layout changes.
+
+## The recipe {#recipe}
+
+Build the plan, call the check of the simulation you will run, and print the
+report. This is the plan of [First simulation](../start/first-simulation.qmd),
+built by a function so that the gap between pad and ground can change:
+
+```python
+import gdsfactory as gf
+import orcapen_sc_pdk
+from orcapen_sc_pdk import get_material_records
+from orcapen_sc_pdk.tech import get_single_die_layer_stack
+from scgsim.geometry import GeometryPlan
+from scgsim.palace import ElectrostaticSim
+
+orcapen_sc_pdk.activate()
+
+
+def pad_plan(gap_um):
+    """The square pad of First simulation, with the gap to the ground in µm."""
+    component = gf.get_component(
+        "square_pad_capacitor", pad_side_um=200.0, gap_um=gap_um, die_side_um=1000.0
+    )
+    plan = GeometryPlan(
+        component=component,
+        root_id="chip",
+        layer_stack=get_single_die_layer_stack(),
+        material_records=get_material_records(),
+        coupon_padding_um=0.0,
+    )
+    plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
+    plan.set_vacuum_region(padding=(0.0, 0.0, 1000.0))
+    return plan
+
+
+report = ElectrostaticSim.simulation_drc(pad_plan(gap_um=20.0))
+print(report.render_text())
+```
+
+The 20 µm gap passes:
+
+```text
+geometry stage: passed
+meshing stage: passed (0 refusing, 0 warning)
+```
+
+The check runs in two stages. The **geometry stage** builds the model, as the
+simulation's `mesh()` would; a layout that cannot be built stops here with the
+error the build raises, such as two Nets that touch. The **meshing stage**
+measures every edge and face of the built model and lists those too small for
+the mesher. [How a plan is built](prepare-a-layout.qmd) explains what the plan
+holds.
+
+## Read a refused report {#read-a-refused-report}
+
+Draw the same pad with a 5 nm gap. The model still builds, but a 5 nm slit is
+far too narrow to fill with usable tetrahedra, so the meshing stage refuses it
+and raises `SimulationDrcError`, whose `report` holds every finding:
+
+```python
+from scgsim.palace import SimulationDrcError
+
+try:
+    ElectrostaticSim.simulation_drc(pad_plan(gap_um=0.005))
+except SimulationDrcError as error:
+    print(error.report.render_text())
+```
+
+```text
+geometry stage: passed
+meshing stage: refused (2 refusing, 2 warning)
+  meshing stage, refuse B: face width 2A/P 0.00498753 um (4.99 grid steps) < 10 grid steps at (100.0025, 0.0000, 0.0000) um, f:78b2f2949a9aec64 in PORT::PORT_SHEET__chip/o_junction_lumped__0000 on layer D0_TOP_M1; from PORT_SHEET__chip/o_junction_lumped__0000/polygon0/ring0/edge2, PORT_SHEET__chip/o_junction_lumped__0000/polygon0/ring0/edge6, chip/GROUND/polygon0/ring1/edge2, chip/PAD/polygon0/ring0/edge1; owner layout. A face this narrow forces flat elements along its whole length; refining it does not make them better shaped. Fix: widen or remove the sliver between these polygons.
+  meshing stage, refuse B: face width 2A/P 0.00499997 um (5 grid steps) < 10 grid steps at (0.0000, 0.0000, 0.0000) um, f:cd87e808586a1f62 in SA::D0_SUBSTRATE|VACUUM_REGION__interface on layer D0_TOP_M1; from PORT_SHEET__chip/o_junction_lumped__0000/polygon0/ring0/edge2, PORT_SHEET__chip/o_junction_lumped__0000/polygon0/ring0/edge6, chip/GROUND/polygon0/ring1/edge0, chip/GROUND/polygon0/ring1/edge1, chip/GROUND/polygon0/ring1/edge3, chip/GROUND/polygon0/ring1/edge4, chip/GROUND/polygon0/ring1/edge5, chip/PAD/polygon0/ring0/edge0, chip/PAD/polygon0/ring0/edge2, chip/PAD/polygon0/ring0/edge3, chip/PAD/polygon0/ring0/edge4, chip/PAD/polygon0/ring0/edge5; owner layout. A face this narrow forces flat elements along its whole length; refining it does not make them better shaped. Fix: widen or remove the sliver between these polygons.
+  meshing stage, warn C: edge length 0.005 um (5 grid steps) < 25 grid steps at (100.0025, -1.0000, 0.0000) um, e:37415fdfc71dddc3 in PORT::PORT_SHEET__chip/o_junction_lumped__0000, SA::D0_SUBSTRATE|VACUUM_REGION__interface on layer D0_TOP_M1; from PORT_SHEET__chip/o_junction_lumped__0000/polygon0/ring0/edge6; owner layout. An edge this short needs elements of its own length around it, which costs repair rounds and elements. Fix: join the short outline edge into its neighbours.
+  meshing stage, warn C: edge length 0.005 um (5 grid steps) < 25 grid steps at (100.0025, 1.0000, 0.0000) um, e:78e284ff15d36d88 in PORT::PORT_SHEET__chip/o_junction_lumped__0000, SA::D0_SUBSTRATE|VACUUM_REGION__interface on layer D0_TOP_M1; from PORT_SHEET__chip/o_junction_lumped__0000/polygon0/ring0/edge2; owner layout. An edge this short needs elements of its own length around it, which costs repair rounds and elements. Fix: join the short outline edge into its neighbours.
+```
+
+Each finding is one line. The first one reads:
+
+| Part of the line | What it says |
+|---|---|
+| `refuse B` | It stops the layout (`warn` does not), and it is class B: a face too narrow. |
+| `face width 2A/P 0.00498753 um (4.99 grid steps) < 10 grid steps` | Its size, against the limit. On this layout's 1 nm grid, 10 grid steps are 0.01 µm. |
+| `at (100.0025, 0.0000, 0.0000) um` | Where it is, in layout coordinates: x = 100.0025 µm is the middle of the gap beside the pad's east edge at x = 100 µm. |
+| `in PORT::PORT_SHEET__chip/o_junction_lumped__0000` | The object in the model: the junction sheet the PDK draws across the gap. |
+| `on layer D0_TOP_M1` | The layer of the drawn objects it comes from. |
+| `from chip/PAD/polygon0/ring0/edge1, ...` | The drawn edges that bound it. |
+| `owner layout` | Who acts: the layout is drawn this way. |
+| `Fix: widen or remove the sliver between these polygons.` | What to change. |
+
+The second finding is the substrate surface in the same 5 nm ring around the
+pad; the two warnings are the 5 nm ends of the junction sheet. Widen the gap
+and both refusals go.
+
+The owner says who acts on a finding:
+
+| Owner | Who acts |
+|---|---|
+| `layout` | You: the fine feature is drawn in the layout. SCGSim reports it and never repairs it. |
+| `erosion` | You: Surface-EPR bands from two edges meet, as on a conductor barely wider than twice its margin. Change the margins or the conductor's width. |
+| `sgb` | SCGSim: the model builder made a fine feature the layout does not have. Report it to SCGSim with the finding; the layout needs no change. |
+
+A geometry-stage refusal is the build's own error, such as `ContactError` for
+two Nets that touch, with its place in µm. [When something
+fails](../reference/supported-scope.qmd#when-something-fails) gives the owner
+and the next step for each error. If a message does not match the layout you
+drew, report it to SCGSim.
+
+### Surface-EPR margins too narrow {#margins-too-narrow}
+
+A Surface-EPR request whose band is narrower than 10 grid steps is refused
+before anything is built. Ask for a 5 nm margin on the same pad:
+
+```python
+from orcapen_sc_pdk import (
+    get_interface_preset_records,
+    validate_interface_preset_records,
+)
+
+presets = validate_interface_preset_records(get_interface_preset_records())
+film = presets["LiteratureCentral_MA"]
+plan = pad_plan(gap_um=20.0)
+plan.set_surface_epr(
+    {
+        "MA": {
+            "thickness": film["thickness"],
+            "permittivity": film["permittivity"],
+            "loss_tangent": film["loss_tangent"],
+            "inset_margins_um": (0.005,),
+        }
+    }
+)
+try:
+    ElectrostaticSim.simulation_drc(plan)
+except ValueError as error:
+    print(error)
+```
+
+```text
+Surface EPR bands narrower than the meshing stage's face-width limit of 10 grid steps (0.01 um): MA inset_margins_um band=0 (0 to 0.005 um) is 0.005 um (5 grid steps) wide. A band this narrow is a face the mesher cannot use. Widen the inset margins given to plan.set_surface_epr so that every band is at least 10 grid steps wide. Change it in the call to GeometryPlan.set_surface_epr.
+```
+
+With `(0.5, 1.0)` µm, as in [Prepare a layout](prepare-a-layout.qmd#surface-epr),
+the same pad passes both stages with no warning.
+
+## Which check to run {#which-check-to-run}
+
+Each simulation class checks the model it builds itself, so run the check of
+every simulation the cell is meant for:
+
+| The cell is meant for | The call |
+|---|---|
+| Palace Eigenmode | `scgsim.palace.EigenmodeSim.simulation_drc(plan, route=...)` |
+| Palace Electrostatic | `scgsim.palace.ElectrostaticSim.simulation_drc(plan, route=...)` |
+| AEDT HFSS Eigenmode | `scgsim.aedt.EigenmodeSim.simulation_drc(plan, modeling=...)` |
+| AEDT HFSS Driven Terminal or Q3D | No separate call: `prepare_hfss_driven_from_geometry` and `prepare_q3d_from_geometry` run the same steps before AEDT starts, and refuse there |
+
+`route` is the Palace geometry approximation: `"B"`, the default, keeps the
+metal's thickness, and `"A"` makes each film a sheet of zero thickness; pass
+`approximation_profile` as you pass it to `set_route`. `modeling` is the AEDT
+one, `"thin_film"` or `"solid"`, with no default. A pass on one route or
+modeling says nothing about another, and Palace and AEDT never stand for each
+other. Only the two Palace classes, on the same plan and route, build the same
+model when the plan has no port sheet; with port sheets they differ, because
+Eigenmode cuts each sheet to a lumped port.
+
+For a cell meant for several simulations, check the one plan with each:
+
+```python
+import scgsim.aedt
+import scgsim.palace
+
+plan = pad_plan(gap_um=20.0)
+checks = [
+    (scgsim.palace.EigenmodeSim, {"route": "B"}),
+    (scgsim.palace.ElectrostaticSim, {"route": "B"}),
+    (scgsim.aedt.EigenmodeSim, {"modeling": "solid"}),
+]
+for simulation, options in checks:
+    report = simulation.simulation_drc(plan, **options)
+    print(f"{simulation.__module__}.{simulation.__name__}")
+    print(report.render_text())
+```
+
+A refusal raises, so the loop stops at the first class that refuses the plan.
+The Palace checks need `scgsim[palace]`, the AEDT check `scgsim[aedt]`; neither
+needs a solver or an AEDT licence.
+
+## What the check takes from the plan {#build-the-plan}
+
+The check takes the `GeometryPlan` itself, before `prepare()`, and uses it as
+the simulation will: its Nets, its vacuum region, its Surface-EPR request, its
+junctions and port sheets, and its coupon padding. It adds nothing of its own
+and leaves the plan as it was. So build the plan once, check it, and give
+`plan.prepare()` to the simulation. Something other than a `GeometryPlan`,
+such as the component or a snapshot, is refused with the plan to build.
+
+::: {.callout-note title="What a pass means"}
+A pass means the model of this plan, on the route or modeling checked, builds
+and has no edge or face the meshing stage refuses. It does not promise that
+another route, Electrostatic terminals or extra ports will build, and it does
+not promise a clean mesh: `mesh()` can still stop with `MeshRepairError` and
+name where it stopped. To check one exact set-up, run that simulation's own
+`mesh()`.
+:::
+
+## More detail {#more-detail}
+
+- []{#what-the-meshing-stage-reports}The three classes of fine structure, their
+  limits in grid steps, the width of Surface-EPR bands and the owners:
+  [Layout check reference](../reference/specs/layout-check.qmd#what-the-meshing-stage-reports).
+- []{#the-same-check-inside-mesh}`mesh()` runs the same meshing stage before it
+  starts the mesher:
+  [the check inside `mesh()`](../reference/specs/layout-check.qmd#the-same-check-inside-mesh).
+- []{#what-the-check-uses}What each class adds to the plan, and the route
+  arguments: [what the check uses](../reference/specs/layout-check.qmd#what-the-check-uses).
+- []{#aedt-eigenmode-check}What the AEDT Eigenmode check covers:
+  [the AEDT check](../reference/specs/layout-check.qmd#aedt-eigenmode-check).
+- The rules a layout must meet: [Supported scope](../reference/supported-scope.qmd#layout-rules).

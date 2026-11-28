@@ -1,0 +1,104 @@
+---
+title: "Physical representation: films, sheets and volumes"
+description: "The approximation profiles that decide whether a metal film becomes a sheet or a volume and how the stack heights change, with a dimensioned example, and the Palace set_route calls that choose them."
+scgsim-kind: "contract"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/specs/physical-representation"
+aliases:
+  - ../../specs/physical-representation.html
+---
+
+A metal film of 100 nm can enter the model as a volume of that thickness or as
+a sheet of zero thickness. An *approximation profile* makes that choice for
+every film of the stack and says what happens to the heights above it. A
+Palace simulation chooses its profile with `set_route`; an AEDT request with
+`modeling`. [Route A and Route B](../../concepts/routes.qmd) explains when to
+use which; this page gives each profile's exact effect.
+
+## The profiles {#profiles}
+
+Take a 100 nm aluminium film on a 500 µm silicon substrate: silicon from
+z = −500 to 0 µm, the film from 0 to 0.1 µm, vacuum above. The five profiles
+are distinct; none is another's alias.
+
+| Profile | Route | The film becomes | Heights above the film | Chosen by |
+|---|---|---|---|---|
+| `route_b` | B | A 0.1 µm volume whose surface is a perfect conductor; its inside is left out of the mesh | Unchanged | Palace `set_route("B")`, the default |
+| `thin_film` | A | A sheet at z = 0, where the film sits | Move down by 0.1 µm | Palace `set_route("A")`; AEDT `modeling="thin_film"` |
+| `substrate_face` | A | A sheet on the substrate face you bind it to, z = 0 | Unchanged | Palace `set_route("A", approximation_profile=...)` |
+| `metal_gap_equivalent` | A | For two facing films of a flip-chip, a sheet on each substrate face; both thicknesses are removed | Move down by each film's thickness | Palace `set_route("A", approximation_profile=...)` |
+| `solid` | C | A 0.1 µm volume kept in the model | Unchanged | AEDT `modeling="solid"` |
+
+For a flip-chip the difference shows in the gap. With a 0.1 µm film on each die,
+a bottom substrate face at z = 0, a top substrate face at z = 10.2 µm and
+10.0 µm of vacuum between the films:
+
+| Profile | Bottom sheet | Top sheet | Sheet-to-sheet gap |
+|---|---|---|---|
+| `thin_film` | z = 0 | z = 10.0 | 10.0 µm, the metal-to-metal gap |
+| `substrate_face` | z = 0 | z = 10.2 | 10.2 µm, the substrate-to-substrate gap |
+| `metal_gap_equivalent` | z = 0 | z = 10.0 | 10.0 µm, the metal-to-metal gap |
+
+`thin_film` removes every film of the stack; `metal_gap_equivalent` removes
+exactly the two facing films you bind, one attached at its lower face and one
+at its upper face, on two different substrates. Bumps and posts stay volumes
+in every profile; their ends move with the heights. The outlines, holes,
+materials and Net names are the same in all of them.
+
+These heights were computed with SCGSim's own mapping
+(`scgsim.geometry.interpret_physical_layers`) for declarations of these films.
+
+## Palace: `set_route` {#palace-caller-profile}
+
+`ElectrostaticSim` and `EigenmodeSim` choose the profile with `set_route()`,
+before `mesh()`. One call states the whole setting: it replaces the route and
+the profile together.
+
+| Call | Profile used |
+|---|---|
+| `set_route("B")`, or no call | `route_b` |
+| `set_route("A")` | `thin_film` |
+| `set_route("A", approximation_profile=profile)` | `substrate_face` or `metal_gap_equivalent`, with their bindings |
+
+A face profile names, for each film, the dielectric Entity it lies on and that
+Entity's face:
+
+```python
+from scgsim.geometry.models.physical import ApproximationProfile
+
+profile = ApproximationProfile(
+    name="substrate_face",
+    revision="v1",
+    parameters={"film_bindings": authored_film_bindings},
+)
+sim.set_route("A", approximation_profile=profile)
+```
+
+`authored_film_bindings` maps each declared physical layer ID to exactly
+`supporting_entity_id` (a dielectric Entity) and `supporting_side` (`"upper"`
+or `"lower"`), for example
+`{"D0_M1": {"supporting_entity_id": "D0_SUB", "supporting_side": "upper"}}`.
+`substrate_face` takes one or two bindings; `metal_gap_equivalent` exactly two,
+on two different substrates facing each other. A missing or wrong binding is
+refused before any native work, with the call shape to use.
+
+`input_summary()` shows the route and the profile, the default included. A
+profile the plan's films do not fit (Route A with `route_b` or `solid`, Route B
+with `thin_film`) is refused when `mesh()` builds, not at `set_route()`. The
+Surface-EPR films stay the plan's, `plan.set_surface_epr(specs)`, whatever the
+profile.
+
+## AEDT: `modeling` {#aedt-modeling}
+
+An HFSS or Q3D request uses `thin_film` for `modeling="thin_film"` and `solid`
+for `modeling="solid"`; [AEDT: solid or thin_film](aedt-runtime.qmd#aedt-solid-thin-film)
+shows the heights. Q2D takes its own cross-section and no profile.
+
+## Where the declarations come from {#declarations}
+
+[]{#typed-source-carrier-and-plan}[]{#selected-declarations-and-source-incidence}[]{#fresh-and-historical-layer-records}The
+profiles read the physical declaration of each layer of the PDK's stack:
+whether it is a film of the stack, a local film or a finite volume, its
+material, thickness and the face it is attached at. The PDK writes them;
+a notebook does not. How a PDK author writes them, and which older records are
+refused, is in [GeometryPlan internals](../../contribute/internals/geometry-plan.qmd#physical-declarations).

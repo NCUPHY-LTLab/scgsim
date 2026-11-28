@@ -1,4 +1,8 @@
-"""Opt-in preparation diagnostics, separate from scientific artifacts."""
+"""Opt-in preparation timing, progress, RSS, and profile output.
+
+Diagnostics are written to process-local JSONL and profile files. They do not
+change scientific inputs, outputs, or artifact identities.
+"""
 
 from __future__ import annotations
 
@@ -8,24 +12,41 @@ import math
 import os
 import sys
 import time
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock
-from typing import Iterator, Mapping, TextIO
+from typing import TextIO, TypedDict
 from uuid import uuid4
+
+from scgsim.refusal import refused
+
+_WHERE_DIAGNOSTICS_CALL = "the call to preparation_diagnostics"
+
+
+class _DiagnosticPayload(TypedDict):
+    """JSON-safe worker configuration shared across the native process boundary."""
+
+    output_dir: str
+    progress_interval_s: float
+    profile: bool
+    session_id: str
+    parent_span_id: str | None
 
 
 @dataclass(frozen=True)
 class _DiagnosticConfig:
+    """Validated settings for one diagnostic session and its child spans."""
+
     output_dir: str
     progress_interval_s: float
     profile: bool
     session_id: str
     parent_span_id: str | None = None
 
-    def to_payload(self) -> dict[str, object]:
+    def to_payload(self) -> _DiagnosticPayload:
         return {
             "output_dir": self.output_dir,
             "progress_interval_s": self.progress_interval_s,
@@ -42,22 +63,50 @@ class _DiagnosticConfig:
         session = payload["session_id"]
         parent = payload.get("parent_span_id")
         if not isinstance(directory, str) or not Path(directory).is_absolute():
-            raise ValueError("Diagnostic output_dir must be absolute.")
+            raise ValueError(
+                refused(
+                    "Diagnostic output_dir", "must be absolute", _WHERE_DIAGNOSTICS_CALL
+                )
+            )
         if isinstance(interval, bool) or not isinstance(interval, (int, float)):
-            raise TypeError("Diagnostic progress_interval_s must be numeric.")
+            raise TypeError(
+                refused(
+                    "Diagnostic progress_interval_s",
+                    "must be numeric",
+                    _WHERE_DIAGNOSTICS_CALL,
+                )
+            )
         if not math.isfinite(interval) or interval < 0:
             raise ValueError(
-                "Diagnostic progress_interval_s must be finite and nonnegative."
+                refused(
+                    "Diagnostic progress_interval_s",
+                    "must be finite and nonnegative",
+                    _WHERE_DIAGNOSTICS_CALL,
+                )
             )
         if not isinstance(profile, bool) or not isinstance(session, str) or not session:
-            raise TypeError("Invalid diagnostic profile/session configuration.")
+            raise TypeError(
+                refused(
+                    "Diagnostic profile",
+                    f"must be a bool and session_id a non-empty string; got profile={profile!r}, session_id={session!r}",
+                    _WHERE_DIAGNOSTICS_CALL,
+                )
+            )
         if parent is not None and not isinstance(parent, str):
-            raise TypeError("Invalid diagnostic parent span.")
+            raise TypeError(
+                refused(
+                    "Diagnostic parent_span_id",
+                    f"must be a string or None; got {parent!r}",
+                    _WHERE_DIAGNOSTICS_CALL,
+                )
+            )
         return cls(directory, float(interval), profile, session, parent)
 
 
 @dataclass
 class _Span:
+    """One timed operation and its parent in the current diagnostic tree."""
+
     span_id: str
     parent_span_id: str | None
     name: str
@@ -68,6 +117,8 @@ class _Span:
 
 @dataclass
 class _Recorder:
+    """Serialize concurrent stage events into one process-local JSONL stream."""
+
     config: _DiagnosticConfig
     stream: TextIO
     errors: list[str] = field(default_factory=list)
@@ -91,13 +142,13 @@ class _Recorder:
                 }
                 self.stream.write(json.dumps(row, allow_nan=False) + "\n")
                 self.stream.flush()
-            except Exception as error:
+            except Exception as error:  # noqa: BLE001 -- diagnostics must never replace preparation outcomes
                 self.errors.append(type(error).__name__)
 
 
 def _rss() -> dict[str, object]:
     try:
-        import resource
+        import resource  # noqa: PLC0415 -- unavailable on some supported platforms
 
         raw = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         if sys.platform == "darwin":
@@ -114,12 +165,17 @@ def _rss() -> dict[str, object]:
         return {"process_peak_rss_bytes": None, "rss_status": "unavailable"}
 
 
+# Ambient by design: the recorder only writes timing and memory files beside a result; no result reads it.
 _recorder: ContextVar[_Recorder | None] = ContextVar("scgsim_diagnostics", default=None)
+# Ambient by design: the open span only names the parent of the next timing record; no result reads it.
 _span: ContextVar[_Span | None] = ContextVar("scgsim_diagnostic_span", default=None)
 
 
 @contextmanager
-def _stage(name: str, *, counts: dict[str, int] | None = None) -> Iterator[None]:
+def diagnostic_stage(
+    name: str, *, counts: dict[str, int] | None = None
+) -> Iterator[None]:
+    """Record the start, progress context and outcome of one diagnostic stage."""
     recorder = _recorder.get()
     if recorder is None:
         yield
@@ -141,7 +197,8 @@ def _stage(name: str, *, counts: dict[str, int] | None = None) -> Iterator[None]
         _span.reset(token)
 
 
-def _progress(completed: int, total: int | None = None) -> None:
+def progress(completed: int, total: int | None = None) -> None:
+    """Emit throttled progress for the current diagnostic stage."""
     recorder, span = _recorder.get(), _span.get()
     if recorder is None or span is None:
         return
@@ -151,7 +208,8 @@ def _progress(completed: int, total: int | None = None) -> None:
         recorder.emit("progress", span, completed=completed, total=total)
 
 
-def _worker_config() -> dict[str, object] | None:
+def worker_config() -> _DiagnosticPayload | None:
+    """Capture diagnostic settings and the parent span for a worker."""
     recorder = _recorder.get()
     if recorder is None:
         return None
@@ -166,7 +224,13 @@ def _diagnostic_session(config: _DiagnosticConfig) -> Iterator[None]:
     directory = Path(config.output_dir)
     directory.mkdir(parents=True, exist_ok=True)
     if config.profile and sys.getprofile() is not None:
-        raise RuntimeError("A current-thread profiler is already active.")
+        raise RuntimeError(
+            refused(
+                "A current-thread profiler",
+                "is already active",
+                _WHERE_DIAGNOSTICS_CALL,
+            )
+        )
     stem = f"{config.session_id}-{os.getpid()}-{uuid4().hex}"
     # Exclusive creation rejects invalid/unwritable destinations before preparation.
     stream = (directory / f"{stem}.jsonl").open("x", encoding="utf-8")
@@ -178,7 +242,7 @@ def _diagnostic_session(config: _DiagnosticConfig) -> Iterator[None]:
     try:
         if profiler is not None:
             profiler.enable()
-        with _stage("preparation.session"):
+        with diagnostic_stage("preparation.session"):
             yield
     except BaseException as error:
         primary = error
@@ -192,16 +256,20 @@ def _diagnostic_session(config: _DiagnosticConfig) -> Iterator[None]:
                 with path.open("xb"):
                     pass
                 profiler.dump_stats(str(path))
-            except Exception as error:
+            except Exception as error:  # noqa: BLE001 -- retain the user's error and report cleanup failure as a note
                 recorder.errors.append(type(error).__name__)
         _span.reset(span_token)
         _recorder.reset(token)
         try:
             stream.close()
-        except Exception as error:
+        except Exception as error:  # noqa: BLE001 -- retain the user's error and report cleanup failure as a note
             recorder.errors.append(type(error).__name__)
         if recorder.errors:
-            detail = "Preparation diagnostics failed: " + ", ".join(recorder.errors)
+            detail = refused(
+                "Preparation diagnostics",
+                "failed: " + ", ".join(recorder.errors),
+                f"the diagnostics folder {directory}",
+            )
             if primary is not None:
                 primary.add_note(detail)
             else:
@@ -234,7 +302,8 @@ def preparation_diagnostics(
 
 
 @contextmanager
-def _worker_diagnostics(payload: Mapping[str, object] | None) -> Iterator[None]:
+def worker_diagnostics(payload: Mapping[str, object] | None) -> Iterator[None]:
+    """Run a worker within the supplied diagnostic session."""
     if payload is None:
         yield
         return

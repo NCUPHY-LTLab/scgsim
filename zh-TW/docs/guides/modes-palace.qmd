@@ -1,0 +1,194 @@
+---
+lang: zh-TW
+title: "以 Palace 計算共振模態"
+description: "以 Palace 計算共振器的模態頻率、Q 值與能量參與率，並看懂 Q 從哪裡來。"
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/palace-eigenmode"
+aliases:
+  - ../course/palace-eigenmode.html
+---
+
+Palace 的本徵模態（Eigenmode）求解器會算出版圖的共振模態：每個模態的頻率、品質因數 Q，以及模態能量在模型各部分的分配（能量參與率，EPR）。本頁把[第一個模擬](../start/first-simulation.qmd)的 200 µm 焊墊變成 LC 共振器：在焊墊東側的接面薄片（[版圖圖](../start/first-simulation.qmd#the-layout)中的橘色）放一個 10 nH 電感，連接焊墊與接地。腳本會印出：
+
+```text
+Status: completed
+Convergence: converged at pass 2
+Mode 1: 5.1040 GHz, Q = 4.174e+06
+junction  p = -0.9940
+D0_SUBSTRATE  p = 0.9215
+VACUUM_REGION p = 0.0785
+MA            p = 7.133e-07, 1/Q = 2.354e-09
+MS            p = 8.340e-05, 1/Q = 3.919e-08
+SA            p = 6.456e-05, 1/Q = 1.097e-07
+```
+
+這個模態在 5.104 GHz。它的 Q 值 4.17 × 10⁶ 只來自矽基板的損耗；下面幾行是晶片各表面的參與率與損耗，Palace 的 Q 並不包含它們。[讀懂結果](#read-the-result)會逐一拆解這些數字。
+
+你需要和第一個模擬相同的安裝：含 `palace` extra 的 SCGSim、OrcaPen SC PDK、Palace 0.18.1，並把 `SCGSIM_PALACE_EXECUTABLE` 設為 `palace` 命令（[第一個模擬](../start/first-simulation.qmd#palace-executable)）。
+
+## 腳本 {#the-script}
+
+把下面的程式存成研究專案裡的 `pad_modes.py`：
+
+```python
+import os
+import subprocess
+from pathlib import Path
+from uuid import uuid4
+
+import gdsfactory as gf
+import orcapen_sc_pdk
+from orcapen_sc_pdk import get_material_records, validate_interface_preset_records
+from orcapen_sc_pdk.tech import get_single_die_layer_stack
+from scgsim.geometry import GeometryPlan, LumpedElement
+from scgsim.palace import EigenmodeSim, ModeFrequency, resolve_palace_result
+
+# 1. The layout and plan of First simulation: a 200 µm pad in a 20 µm gap on a 1000 µm die.
+orcapen_sc_pdk.activate()
+component = gf.get_component(
+    "square_pad_capacitor", pad_side_um=200.0, gap_um=20.0, die_side_um=1000.0
+)
+plan = GeometryPlan(
+    component=component,
+    root_id="chip",
+    layer_stack=get_single_die_layer_stack(),
+    material_records=get_material_records(),
+    coupon_padding_um=0.0,
+)
+plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
+plan.set_vacuum_region(padding=(0.0, 0.0, 1000.0))
+
+# 2. Thin lossy films on the metal-air, metal-substrate and substrate-air surfaces (PDK presets).
+presets = validate_interface_preset_records()
+plan.set_surface_epr({
+    kind: {
+        "film_thickness_m": presets[f"LiteratureCentral_{kind}"]["thickness"] * 1e-6,
+        "permittivity": presets[f"LiteratureCentral_{kind}"]["permittivity"],
+        "loss_tangent": presets[f"LiteratureCentral_{kind}"]["loss_tangent"],
+        "source": presets[f"LiteratureCentral_{kind}"]["source"],
+        "preset": f"LiteratureCentral_{kind}",
+    }
+    for kind in ("MA", "MS", "SA")
+})
+
+# 3. The resonator: a 10 nH inductor on the junction sheet between pad and ground.
+port = "chip/o_junction_lumped"
+plan.set_lumped_elements([LumpedElement(port, inductance_h=10e-9)])
+sim = EigenmodeSim()
+sim.set_plan(plan.prepare())
+sim.set_output_dir(Path(".artifacts/pad-modes") / uuid4().hex[:12])
+sim.set_eigenmode(num_modes=1, target=3e9)
+sim.set_epr_request(surface_interfaces=("MA", "MS", "SA"), port_names=(port,))
+
+# 4. Refine the mesh until mode 1's frequency settles (see Convergence and reports).
+sim.set_numerical(order=2, amr_max_passes=4, amr_update_fraction=0.7)
+sim.set_convergence(ModeFrequency(modes=[1]).within(percent=1.0))
+
+# 5. Mesh, write Palace's input, run Palace with 4 MPI processes.
+sim.mesh()
+sim.write_config()
+handoff = sim.prepare_handoff(
+    profile="direct-local",
+    executable=os.environ["SCGSIM_PALACE_EXECUTABLE"],
+    resources={"command_style": "wrapper", "processes": 4, "threads": 1},
+)
+subprocess.run(["bash", "run_palace.sh"], cwd=handoff.run_dir, check=True)
+
+# 6. Read the mode, then the energy participations and the surface loss they imply.
+result = resolve_palace_result(handoff.run_dir, expected_handoff_id=handoff.handoff_id)
+print("Status:", result.status)
+verdict = result.convergence.verdict
+print("Convergence:", verdict.state, "at pass", verdict.pass_number)
+mode = result.tables["eig"].rows[0]
+print(f"Mode 1: {mode['Re{f} (GHz)']:.4f} GHz, Q = {mode['Q']:.4g}")
+epr = result.epr_result().rows[0]
+for junction in epr["junction"]:
+    print(f"junction  p = {junction['participation']:+.4f}")
+for domain in epr["bulk"]:
+    print(f"{domain['domain_id']:<13} p = {domain['participation']:.4f}")
+whole_surfaces = [
+    item for item in epr["surface"] if item["evaluation_kind"] == "unmasked_baseline"
+]
+for kind in ("MA", "MS", "SA"):
+    surfaces = [item for item in whole_surfaces if item["interface_kind"] == kind]
+    participation = sum(item["participation"] for item in surfaces)
+    inverse_q = sum(item["inverse_q"] for item in surfaces)
+    print(f"{kind:<13} p = {participation:.3e}, 1/Q = {inverse_q:.3e}")
+```
+
+第 1、5 段與第 6 段的前幾行與[第一個模擬](../start/first-simulation.qmd#the-script)相同。新的部分：
+
+- **第 2 段**在三種表面上各放一層有損耗的薄膜：MA（金屬–空氣，金屬的頂面與側面）、MS（金屬–基板，金屬底下）與 SA（基板–空氣，間隙中裸露的基板）。每層薄膜厚 2 nm，介電常數與損耗正切取自 PDK 的 `LiteratureCentral` 預設值；這些是依文獻整理的建模假設，不是量測值。薄膜是幾何的一部分，所以設在計畫上；沒有呼叫 `set_surface_epr` 就不會計算表面 EPR。方法見 [Surface EPR](../concepts/surface-epr.qmd)。
+- **第 3 段**做出共振器。`set_lumped_elements` 在 PDK 的接面薄片 `chip/o_junction_lumped` 上、焊墊與接地之間放一個 10 nH 電感。它與薄膜一樣設定在計畫上，所以這個計畫的每個模擬都有它（[集總元件](../reference/specs/geometry-plan.qmd#lumped-elements)）。`num_modes=1` 與 `target=3e9` 要求 3 GHz 以上的第一個模態。`set_epr_request` 選擇要回報哪些參與率，不會改變求解。
+- **第 4 段**要求二階元素，讓 Palace 最多細化網格四次，並在模態 1 的頻率與前一個回合（pass）相比變化不超過 1 % 時停止。宣告的說明見[收斂與報告](convergence-and-reports.qmd#declare-convergence)；請依你的用途選門檻。[]{#declare-when-refinement-has-converged}`amr_update_fraction=0.7` 是每個回合要細化的誤差估計比例；本徵模態模擬只要做細化就必須給這個值。
+
+在研究專案中、設定過 `SCGSIM_PALACE_EXECUTABLE` 的 shell 裡執行：
+
+```bash
+uv run pad_modes.py
+```
+
+在一台工作站上以 4 個 MPI 行程執行，花了兩分多鐘。
+
+## 讀懂結果 {#read-the-result}
+
+**頻率。** 第 1 回合在 31,104 個四面體的第一個網格上得到 5.0889 GHz；第 2 回合在 63,619 個四面體上得到 5.1040 GHz，變化 0.30 %，所以這次執行在第 2 回合收斂。檢查一下：用[以 Palace 計算電容](capacitance-palace.qmd)得到的焊墊電容 C = 95.43 fF 與 L = 10 nH，理想 LC 電路的共振頻率是
+
+$$
+f = \frac{1}{2\pi\sqrt{LC}} = \frac{1}{2\pi\sqrt{10\,\mathrm{nH}\times 95.43\,\mathrm{fF}}} = 5.152\ \mathrm{GHz},
+$$
+
+比 Palace 的結果高 0.9 %。接面參與率 −0.9940 表示電感器承載了模態 99.4 % 的電感能量，所以這個焊墊幾乎就是理想的 LC 共振器。Palace 給埠的參與率帶正負號；AEDT 則把同一個量回報為正值（[Surface EPR](../concepts/surface-epr.qmd#quantities-and-normalization)）。
+
+**Q 值。** Palace 的 Q 只計入模型中材料的損耗。這裡唯一有損耗的材料是矽基板，它在 PDK 紀錄中的損耗正切是 2.6 × 10⁻⁷。基板承載模態 92.15 % 的電能（`D0_SUBSTRATE p = 0.9215`；其餘 7.85 % 在真空中），所以
+
+$$
+\frac{1}{Q} = p_\mathrm{Si} \tan\delta_\mathrm{Si} = 0.9215 \times 2.6\times10^{-7} = 2.396\times10^{-7},
+\qquad Q = 4.17\times10^{6}.
+$$
+
+模型中若沒有任何有損耗的材料，就完全沒有損耗，Palace 會回報無限大的 Q；報告會標示為「native-reported infinite Q」（[本徵模態參考](../reference/specs/palace-eigenmode.qmd#native-eigenmode-q)）。
+
+::: {.callout-important title="高 Q 模態需要更嚴格的線性求解容差"}
+在預設的 `set_numerical(tolerance=1e-6)` 下，模態頻率、Surface EPR 與體積電場參與率都夠準確。但 Palace 由複數本徵頻率算出的 Q（Re f / (2 Im f)）在模態 Q 很高時並不準：Im f 比 Re f 小得多，求解器的近似線性求解會讓它大幅偏移，卻幾乎不影響 Re f 與電場。以 7.36 GHz 附近的 hanger 共振器為例，預設回報 Q = 13,948，比 `set_numerical(tolerance=1e-9)` 的 11,142 高 25 %；後者與獨立的 Driven S21 凹口擬合（11,141）一致。若要使用這個 Q，請設定 `tolerance=1e-9`，代價是 Eigenmode 求解時間增加約 45 %。由參與率算出的表面損耗 Q 不需要這樣做，帶電阻之埠的耦合 Q 也不需要（[見下方](#port-as-a-load)）：同一個 hanger 的兩個饋線埠，耦合 Q 在 `tolerance=1e-6` 與 `1e-9` 之間只變了 0.04 %，回報的 Q 卻變了 25 %。
+:::
+
+**表面損耗。** 表面薄膜不在求解之中。求解之後，Palace 由表面上的電場與薄膜的厚度、介電常數算出每個表面的參與率 p，並以 1/Q = p tan δ 算出損耗。最後三行是各類表面整面列（`evaluation_kind` 為 `"unmasked_baseline"`）的總和；這次計算沒有其他列：
+
+| 表面 | 參與率 p | 損耗正切 | 1/Q |
+|---|---:|---:|---:|
+| MA，金屬–空氣 | 7.133 × 10⁻⁷ | 3.3 × 10⁻³ | 2.354 × 10⁻⁹ |
+| MS，金屬–基板 | 8.340 × 10⁻⁵ | 4.70 × 10⁻⁴ | 3.919 × 10⁻⁸ |
+| SA，基板–空氣 | 6.456 × 10⁻⁵ | 1.7 × 10⁻³ | 1.097 × 10⁻⁷ |
+
+所有表面合計 1/Q = 1.513 × 10⁻⁷，相當於表面限制的 Q = 6.61 × 10⁶。再加上基板的 2.396 × 10⁻⁷，得到 1/Q = 3.909 × 10⁻⁷，也就是這兩種損耗管道下的 Q = 2.56 × 10⁶。這不是元件的 Q：模型沒有導體損耗、輻射或其他損耗，而損耗正切是假設，之後不必重新求解就能更改（[不重新求解，改變損耗假設](offline-loss.qmd)）。基板–空氣表面占最大份：它的參與率和金屬–基板相近，損耗正切卻高 3.6 倍。
+
+## 可以調整的設定 {#build-the-real-backend-inputs}
+
+- **網格。** `sim.set_mesh(...)` 設定第一個網格，與電容計算相同（[網格與元素階數](capacitance-palace.qmd#mesh-controls)）。`mesh()` 之後，`sim.mesh_summary()` 還會在求解前估計所選元素階數下的未知數個數。
+- **更多模態。** `set_eigenmode(num_modes=...)` 會在 `target`（單位 Hz）以上找更多模態；之後 `ModeFrequency(modes=[1, 2])` 會同時檢查兩個模態。
+- **外邊界。** 真空區域的外表面不給邊界條件，在 Palace 的本徵模態求解器中這等於理想磁導體（PMC）。HFSS 在其 Region 表面設定的 Perfect H 是同一個條件。
+- **把金屬當成薄片。** 在 `mesh()` 之前呼叫 `sim.set_route("A")`，與電容計算相同（[把金屬當成薄片](capacitance-palace.qmd#select-the-geometry-approximation-and-build-inputs)）。
+- []{#port-as-a-load}**把埠當成負載。** 帶電阻的集總元件（例如 `LumpedElement(sheet, resistance_ohm=50.0)`）或 `LumpedPort` 是負載：模態經由它損耗能量，所以 Palace 的 Q 是有載 Q。結果的 `external` 群組給出每個這類埠所占的損耗，即它的耦合 1/Q：
+
+  ```python
+  for port in epr["external"]:
+      print(f"{port['port_name']}  1/Q_ext = {port['inverse_q']:.3e}")
+  ```
+
+  這個焊墊唯一的元件是電感，所以這裡是空的。耦合損耗與表面損耗一樣可以相加：hanger 共振器的耦合 Q 是 1 /（各饋線埠 `inverse_q` 的總和）。
+
+## 間隙附近的表面 EPR {#surface-epr-margin-rows}
+
+電場以及表面參與率在間隙邊緣最大。在 `plan.set_surface_epr` 某層薄膜的規格中加上 `"inset_margins_um": (0.5, 1.0)`，會在每個整面列旁邊，再加上離間隙邊緣至少 0.5 µm 與至少 1.0 µm 的那部分表面的列。邊距會切進幾何，所以同樣要在 `prepare()` 之前設在計畫上。
+
+邊距列（`evaluation_kind` 為 `"requested_margin"`，距離記在 `margin_um`）計算的是整面列已經包含的一部分表面：它是同一個表面的另一種算法，絕不是可以相加的一項。所以腳本只加總整面列。若要讀邊距列，請逐列列出：
+
+```python
+for item in epr["surface"]:
+    if item["evaluation_kind"] == "requested_margin":
+        print(item["name"], item["margin_um"], f"p = {item['participation']:.3e}")
+```
+
+[邊距](../concepts/surface-epr.qmd#surface-distance-band-correction)以圖說明，[本徵模態參考](../reference/specs/palace-eigenmode.qmd#surface-epr-margins)列出鍵與限制，[覆晶 Xmon 範例](xmon/palace.qmd)實際使用了它們。

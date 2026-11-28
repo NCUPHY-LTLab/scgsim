@@ -1,0 +1,90 @@
+---
+title: "Resonant modes with HFSS"
+description: "Prepare an HFSS Eigenmode run of a plan's 3D model, and read each mode's frequency and Q when it returns."
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/aedt-eigenmode"
+aliases:
+  - ../course/aedt-eigenmode.html
+---
+
+HFSS Eigenmode, in Ansys AEDT, finds a model's resonant modes and returns
+each mode's frequency in GHz and its Q, as HFSS computes them from the
+model's materials and boundaries. It needs no ports. SCGSim builds the 3D
+model from the plan, the same model Palace meshes, and AEDT imports it into an
+empty Eigenmode design.
+
+This page prepares the run for the CPW coupon of
+[Prepare a coplanar waveguide for AEDT](aedt-cpw-inputs.qmd). This repository
+holds no recorded result of it. When the run returns,
+`resolve_results(handoff.run_dir).physics_results()` gives one row per mode,
+with the keys `mode`, `frequency_ghz` and `q_factor`.
+
+## Prepare the run {#prepare-the-run}
+
+Run this in the Python session where you made `snapshot`. It needs SCGSim
+with its `aedt-epr` extra; it writes the run folder without opening AEDT.
+
+```python
+from pathlib import Path
+from scgsim.aedt import EigenmodeRunControl, EigenmodeSim
+
+AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
+sim = EigenmodeSim(modeling="thin_film", aedt_version=AEDT_VERSION)
+sim.set_plan(snapshot)
+sim.set_output_dir(Path(".artifacts/public-cpw-eigenmode"))
+sim.set_eigenmode(
+    project_name="public_cpw_eigenmode",
+    design_name="CpwFiniteGroundEigenmode",
+    run_control=EigenmodeRunControl(
+        setup_name="Setup1", minimum_frequency_ghz=3.0, num_modes=2,
+        maximum_passes=6, maximum_delta_frequency_percent=5.0,
+    ),
+)
+handoff = sim.prepare_handoff()
+print(handoff.spec_path, handoff.archive_path)
+```
+
+What the inputs mean:
+
+- `modeling="thin_film"` builds each metal film as a sheet on its face;
+  `"solid"` builds it as a solid of the film's thickness, here 100 nm of
+  aluminium. [Choose the geometric approximation](../concepts/model-and-numerics.qmd#choose-the-geometric-approximation)
+  explains the difference.
+- `aedt_version` is the AEDT release the run will use; the solver computer
+  needs exactly that release.
+- `EigenmodeRunControl` is HFSS's own search and refinement: the two lowest
+  modes above 3 GHz, and up to six adaptive passes, which stop once the mode
+  frequencies change by at most 5 % between passes. Choose these for your
+  model; [Convergence and reports](convergence-and-reports.qmd#interpret-for-scq-use)
+  says what the returned convergence status does and does not tell you.
+- The materials come from the plan's records, and HFSS's Region, the box of
+  empty space it solves in, is the plan's vacuum region. HFSS gives its faces
+  Perfect H, the condition Palace's Eigenmode solver also uses at the outer
+  faces of its vacuum region.
+- `prepare_handoff()` writes the run folder: the model, the request
+  `aedt_spec.json`, the script `run_aedt.sh`, and an archive of the folder.
+
+## Check, run and read {#check-run-and-read}
+
+`EigenmodeSim.simulation_drc(plan, modeling="thin_film")`, given the plan
+before `prepare()`, checks without AEDT that the model builds and can be
+imported ([Check a layout](check-a-layout.qmd#aedt-eigenmode-check)).
+
+Run the folder on a computer with AEDT
+([Run a prepared model](run-elsewhere.qmd#aedt-execute-the-prepared-package-locally)),
+bring it back whole, and read it with `resolve_results`
+([Convergence and reports](convergence-and-reports.qmd#aedt-read-the-sealed-family-evidence)).
+The report keeps HFSS's convergence status and the change between its last
+passes next to the frequencies
+([HFSS convergence reference](../reference/specs/aedt-runtime.qmd#hfss-convergence-observations)).
+
+## Loss and participation {#loss-and-participation}
+
+This run reports frequency and Q only. To see how a mode's energy is shared
+among the surfaces, the substrate and a junction, and what loss that implies,
+add an EPR request to the same simulation: the
+[flip-chip Xmon example](xmon/aedt.qmd) shows it. A port sheet can also carry
+a linear R, L or C, declared on the plan as a `LumpedElement`
+([Lumped elements](../reference/specs/geometry-plan.qmd#lumped-elements));
+this coupon has no port sheet.

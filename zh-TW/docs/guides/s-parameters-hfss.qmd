@@ -1,0 +1,60 @@
+---
+lang: zh-TW
+title: "以 HFSS 計算 S 參數"
+description: "在版圖中畫好的埠薄片上放集總埠，準備兩埠 HFSS Driven Terminal 計算，以及版圖為此需要什麼。"
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/aedt-driven-terminal"
+aliases:
+  - ../course/aedt-driven-terminal.html
+  - ../course/aedt-driven-modal.html
+---
+
+Ansys AEDT 的 HFSS Driven Terminal 會在一段頻率掃描上回傳模型的兩埠 S 參數，並附上 Touchstone 檔。SCGSim 由計畫建立 3D 模型（與 Palace 建網格用的是同一個模型），並在版圖中畫好的兩片埠薄片上各放一個集總埠（lumped port）。這個儲存庫沒有 Driven Terminal 的計算結果紀錄。
+
+[]{#ports-that-wait-for-issue-135}在本版本中，埠只有放在埠薄片上的集總埠這一種：Region 表面上的波埠（wave port），以及整個 HFSS Driven Modal 求解類型都不提供。宣告了這類埠的請求會在 AEDT 啟動前被拒絕；[issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135) 追蹤這兩項。
+
+## 版圖需要什麼 {#what-the-layout-needs}
+
+埠薄片（port sheet）是版圖中位於埠圖層上的一小塊矩形，一端接觸埠的訊號金屬，另一端接觸參考金屬（通常是接地）。元件在 `component_semantics` 的埠清單中宣告它，並註明它所在的金屬層。[第一個模擬的版圖](../start/first-simulation.qmd#the-layout)中，焊墊東側的橘色薄片就是一例：`square_pad_capacitor` 把它宣告為 `o_junction_lumped`，它跨過 20 µm 的間隙，連接焊墊與接地。
+
+兩埠網路需要兩片這樣的薄片。這些指南所用版本的 OrcaPen SC PDK 中，沒有任何版圖有兩片；請在你自己的元件中加上。埠以元件宣告薄片時用的名稱、再加上放入部分的路徑指名它的薄片：第一個模擬的計畫中，那片薄片是 `chip/o_junction_lumped`。
+
+## 準備計算 {#prepare-the-run}
+
+下面的程式是兩埠請求的形式。薄片 `chip/port_1` 與 `chip/port_2`，以及 Net `ground`，代表你版圖中對應的名稱；Net 是一塊具名、作為同一個導體的金屬。`plan` 是你的計畫，做法如[為 AEDT 準備共平面波導](aedt-cpw-inputs.qmd)。
+
+```python
+from pathlib import Path
+from scgsim.aedt import (
+    FrequencySweepSpec, HfssRunControl, prepare_hfss_driven_from_geometry,
+)
+from scgsim.geometry import LumpedPort
+
+AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
+plan.set_lumped_elements([
+    LumpedPort("chip/port_1", reference_net="ground", impedance_ohm=50.0),
+    LumpedPort("chip/port_2", reference_net="ground", impedance_ohm=50.0),
+])
+handoff = prepare_hfss_driven_from_geometry(
+    plan.prepare(),
+    aedt_version=AEDT_VERSION,
+    modeling="solid",  # or "thin_film"
+    project_name="two_port",
+    design_name="DrivenTerminal",
+    run_control=HfssRunControl(
+        "Setup1", "Sweep1", FrequencySweepSpec(4.0, 8.0, points=201)
+    ),
+    output_dir=Path(".artifacts/driven-handoff"),
+)
+print(handoff.spec_path, handoff.archive_path)
+```
+
+各項輸入的意思：
+
+- 計畫上的每個 `LumpedPort` 是一個埠：它所在的薄片、參考導體的 Net（薄片連接的另一個導體是訊號），以及埠阻抗（Ω）。埠 1 是你給的第一個，埠 2 是第二個；兩個埠共用同一個參考。埠屬於計畫，所以同一個計畫的 Palace 或 HFSS 本徵模態研究也會看到它們，作為負載。
+- `plan.prepare()` 會拒絕版圖沒有畫出的薄片、沒有連接兩個導體的薄片，以及不是任一導體之 Net 的 `reference_net`，並指出薄片的圖層與位置。`prepare_hfss_driven_from_geometry` 由計畫建立模型，並拒絕埠數不是兩個、或帶有不是埠之集總元件的計畫。
+- `HfssRunControl` 設定求解與掃描：這裡是 4 GHz 到 8 GHz 共 201 點。請依你需要的響應選擇範圍與點數（[掃描參考](../reference/specs/aedt-runtime.qmd#hfss-driven-sweep-count)）。
+- Driven 模型不帶接面、集總 RLC 負載或表面 EPR；這些屬於 [HFSS 本徵模態](modes-hfss.qmd)。
+
+在 AEDT 中，這次計算會把模型匯入空白的 Driven Terminal 設計，並在每片薄片上放一個集總埠，其端子位在薄片與訊號金屬相接的邊上（[參考](../reference/specs/aedt-runtime.qmd#hfss-driven-terminal-sgb)）。在有 AEDT 的電腦上執行這個資料夾（[執行已準備的模型](run-elsewhere.qmd#aedt-execute-the-prepared-package-locally)），再讀取它（[收斂與報告](convergence-and-reports.qmd#aedt-read-the-sealed-family-evidence)）：讀取時會確認每個埠都是從儲存的設計中、在指定的薄片上讀回的，並依埠的順序回傳 S 參數與 Touchstone 檔。

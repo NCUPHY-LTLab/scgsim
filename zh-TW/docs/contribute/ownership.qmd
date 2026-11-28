@@ -1,0 +1,51 @@
+---
+title: "依區域分工"
+description: "src/scgsim 每個區域不得接管其他區域的哪些責任、變更時要維持的狀態界線，以及哪些事不屬於 SCGSim。"
+lang: zh-TW
+scgsim-kind: "project"
+scgsim-status: "ACCEPTED"
+scgsim-id: "docs/ownership"
+aliases:
+  - ../ownership.html
+---
+
+`src/scgsim` 的每個區域負責從版圖到報告之間的一段工作；修改程式時，這段工作要留在原來的區域。本頁列出每個區域不得接管哪些事，以及那些事由哪個區域負責。每個資料夾做什麼、工作依什麼順序經過它們，寫在[程式碼地圖](code-map.qmd#stage-tables)，本頁不重複。
+
+## 每個區域不得接管的事 {#scgsim-2.0-ownership}
+
+| 區域 | 不得接管 | 改由誰負責 |
+|---|---|---|
+| `scgsim.geometry`（`source`、`interpretation`、`junctions`、`surface_epr`） | 建立 3D 模型；Palace 或 AEDT 的物理；執行狀態 | `geometry/sgb`；各後端 |
+| `scgsim.geometry.models`、`geometry.exact`、`geometry.grid` | 為各階段共用的紀錄另寫第二份定義 | 沒有其他地方：每種紀錄只在這裡定義一次 |
+| `scgsim.geometry.sgb` | 網格化；求解器狀態；版圖與元件來源 | `meshing`；各後端；PDK 與 `GeometryPlan` |
+| `scgsim.meshing` | Palace 屬性；求解器狀態；判定物理收斂 | `palace/mesh`；執行的收斂宣告 |
+| `scgsim.semantics` | 可變的後端物件；把求解器標記當成來源事實 | 各後端，它們把標記當作觀察資料 |
+| `scgsim.contracts` | `scgsim` 的任何其他程式碼，以及數值、版圖、繪圖、網格與求解器函式庫 | 沒有：階段之間交接的檔案只在這裡定義 |
+| `scgsim.palace.simulation` | 提交求解；把兩種問題合成一份狀態 | 執行 `palace/run` 寫出的交接的人 |
+| `palace/source`、`palace/mesh`、`palace/config` | 彼此的步驟：幾何請求、網格、`config.json` | 以該步驟命名的階段 |
+| `palace/run` | 提交求解器；讀取結果 | 執行它的人；`palace/results` |
+| `palace/results`、`palace/reports` | 執行求解器；所有求解器共用的物理量 | Palace 本身；各後端自己的報告 |
+| `scgsim.aedt.specs`、`aedt.preparation` | Desktop 或執行階段狀態；`EigenmodeSim` 的狀態；求解結果 | `aedt/runtime`；`aedt/eigenmode.py`；`aedt/results` |
+| `scgsim.aedt.runtime` | 建立幾何；跨求解器家族的物理 | 由 `geometry/sgb` 建立 AEDT 匯入的模型 |
+| `aedt/batch.py`、`aedt/batch_stages.py` | 建立模型或 Desktop；提交排程；把多個模型放進同一個專案 | `aedt/runtime`；呼叫端 |
+| `scgsim.aedt.epr` | 一般 Eigenmode 設計的建立、求解與匯出；Desktop 的生命週期；結果保管 | `aedt/runtime` 的 HFSS 家族；`aedt/results` |
+| `aedt/results`、`aedt/presentation` | 執行求解器（results）；原生計算與驗證（presentation） | `aedt/runtime`；`aedt/results` |
+| `scgsim.visualization` | 求解器狀態、執行狀態或物理驗收 | 各後端與其結果 |
+| `scgsim.presentation` | 領域投影或科學計算 | 各後端的報告 |
+
+和匯入有關的幾列，由 [CI 檢查的順序](code-map.qmd#checked-order)中的匯入契約強制；其他各列靠審查維持。
+
+## 狀態界線 {#state-boundaries}
+
+- Palace 的 Electrostatic 與 Eigenmode 共用一個核心（`palace/simulation`），但各自保有可變狀態，設定改變時也各自退回（[生命週期](architecture.qmd#palace-preparation-lifecycle)）。
+- Gmsh 在全新的工作程序中執行：一輪網格化（`meshing/driver.py`），以及 Palace 的群組降階（`palace/mesh/process.py`）。
+- AEDT 的 `EigenmodeSim` 保有可變設定；收據的每次變更與 Desktop 的生命週期，由單一交易（`aedt/runtime/transaction.py`）負責（[AEDT 生命週期](architecture.qmd#aedt-execution-lifecycle)）。
+- 幾何快照與產生它的物件脫離；後端標記是觀察資料，從來不是識別資訊的來源。
+
+搬移程式碼時，要維持這些界線，以及它們定下的失敗順序。
+
+## 不屬於 SCGSim 的事 {#outside-scgsim}
+
+[OrcaPen SC PDK](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk) 負責元件幾何、材料與堆疊資料，以及公開的元件模擬 Notebook；SCGSim 不保留 Notebook 的副本（[Notebook 契約](notebook-contract.qmd)）。原生的 Palace 與 AEDT 由使用者自行安裝；SCGSim 不會安裝它們，也不會自行執行交接。Python 指令碼或 Notebook 直接呼叫 SCGSim，不需要上層工作區。
+
+[]{#implementation-and-project-references}其他貢獻者頁面依閱讀順序列在[為 SCGSim 貢獻](index.qmd#reading-order)。

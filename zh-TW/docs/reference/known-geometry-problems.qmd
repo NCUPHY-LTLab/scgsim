@@ -1,0 +1,63 @@
+---
+title: "已知的幾何問題"
+lang: zh-TW
+description: "版圖常無意間畫出、而 SCGSim 會拒絕的幾何：spline 曲線，以及只在一點碰到模型邊緣或彼此的導體，附圖與各自的版圖修正方式。"
+scgsim-kind: "contract"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/known-geometry-problems"
+aliases:
+  - ../known-geometry-problems.html
+---
+
+有兩種幾何，會讓原本遵守規則的建構停止：spline 曲線，以及只在一點碰到模型邊緣、或碰到同一 Net 另一塊的導體。本頁為每一種說明問題在哪裡、SCGSim 為什麼拒絕，以及如何修改版圖。圖在 SGB 的 1 nm 格點上重繪各個案例；問題以紅色標示，右側的放大圖聚焦在它上面。每個版圖都要遵守的規則見[支援範圍](supported-scope.qmd)；[版圖檢查](../guides/check-a-layout.qmd)幾秒內就能找出這兩種問題。
+
+## spline 必須畫成多邊形 {#spline-curves}
+
+![B-spline 條帶與它的控制多邊形（紅色虛線）：spline 邊界所宣告的曲線。](../assets/supported-geometry/problem-spline-curve.svg){fig-alt="一條彎曲的條帶，五個控制點以紅色虛線多邊形相連。"}
+
+把邊宣告成 spline 邊界曲線的單元，會使建構停止：
+
+```text
+UnsupportedCurveError: … 'bspline' curves are not supported yet (this version carries lines and circular arcs)
+```
+
+`interpolation_spline` 也一樣，集總埠的導體上也是。SGB 精確地偏移直線與圓弧；spline 的偏移沒有精確形式，所以 SGB 不讀 spline。**請把條帶畫成多邊形**：取樣到每個頂點約轉 3° 的 spline 會以精確條帶建立，如[單元 21](supported-geometry.qmd#pads-and-parts)所示；以 PDK 的 258 個點畫出的同一條帶也一樣。
+
+## 只在一點碰到邊界的導體 {#boundary-point-pinch}
+
+輪廓只在單一點碰到模型邊緣的導體，例如緊貼版圖邊緣、周圍什麼都沒有的圓形焊墊或菱形，會以 `NonManifoldError` 拒絕。**請畫出晶粒外框或接地平面，讓它、而不是焊墊，決定那條邊。**
+
+::: {layout-ncol=2}
+![**在邊界截斷的 CPW：通過。** 中央條帶與兩條接地條帶都止於邊界 x = 0，各自占據其中一段（粗線）。](../assets/supported-geometry/problem-boundary-cpw.svg){fig-alt="一條 CPW，三條條帶止於晶粒左緣，各條帶與邊緣相接處以粗線標示，並放大中央條帶的末端。"}
+
+![**沿邊界的方形焊墊：通過。** 焊墊左緣沿邊界延伸 12 µm。](../assets/supported-geometry/problem-boundary-square.svg){fig-alt="兩條接地條帶之間的方形焊墊，左緣位於晶粒左緣，並放大它的下角。"}
+
+![**以一個頂點碰到邊界的圓形焊墊：拒絕。** 64 邊形焊墊只在 x = 0、y = 20 µm 處碰到邊界（紅色）。](../assets/supported-geometry/problem-boundary-round.svg){fig-alt="兩條接地條帶之間的圓形焊墊，以一個紅點碰到晶粒左緣，並放大該點上下真空相接之處。"}
+
+![**以尖端碰到邊界的菱形：拒絕。** 尖端是菱形在邊界上的唯一一點（紅色）。](../assets/supported-geometry/problem-boundary-diamond.svg){fig-alt="兩條接地條帶之間的菱形，以紅色標示的尖端碰到晶粒左緣，並放大該尖端。"}
+:::
+
+**邊界在哪裡。** 在平面方向，模型止於版圖的盡頭：平面方向沒有加寬的真空區域，例如規劃以 (x, y, z) = (0, 0, 1000) µm 加寬的真空區域，止於版圖的平面範圍。圖中的晶粒為 60 × 40 µm，左緣 x = 0 是邊界，淺色區是金屬高度處的真空，白色是模型之外。接地條帶為 60 × 12 µm，焊墊寬 12 µm，CPW 的中央條帶寬 4 µm。
+
+**出了什麼問題。** 在金屬的高度沿著邊界走。導體穿過或止於邊界（如 CPW 的條帶）、或沿著邊界延伸（如方形焊墊的邊）時，金屬會占據邊界的一段，兩側的真空各以一個面與金屬相接。圓形焊墊或菱形碰到邊界處，金屬只占據 (0, 20) µm 這一點：該點下方與上方的真空沿著通過它的垂直線相接，如放大圖所示。這樣的地方叫*夾點*（pinch），含有夾點的實體是*非流形*（non-manifold）。網格產生器需要每個面兩側各有一個區域，所以 SCGSim 在產生網格之前拒絕這個版圖。拒絕訊息指出導體、它的層與該點，結尾連結到本節：
+
+```
+non-manifold pinch: conductor chip/centre_0000 on layer metal
+of Net chip/centre_0000 reaches the edge of VACUUM_REGION only
+at (0.0000, 20.0000) um, z 0.0..0.2 um (slab[0,1/5]), a point
+on the model's planar boundary, … Fix the layout: draw the die
+outline or a ground plane around it, or set a vacuum region.
+See …#boundary-point-pinch
+```
+
+通過的兩個版圖，加上邊距 0.5 與 1.0 µm 的 `MA` 條帶後仍通過；被拒絕的兩個，加上條帶後也以同樣方式被拒絕：拒絕發生在切任何條帶之前。
+
+![修正：在焊墊左側 4 µm 處畫一圈接地，邊界移到 x = −10 µm，並且整段由接地占據（粗線）。](../assets/supported-geometry/problem-boundary-fixed.svg){fig-alt="兩條接地條帶之間的圓形焊墊，左側以第三條條帶相連，使接地沿晶粒整個左緣延伸，並放大焊墊與該條帶之間的真空。"}
+
+**版圖修正。** 畫出晶粒外框或接地平面，讓它決定平面邊界，就像真實晶片一樣。在圓形焊墊或菱形左側 4 µm 處畫一圈接地，兩者都會通過。在平面方向加寬的真空區域，也能讓邊界離開焊墊，在 `mesh()` 與 `simulation_drc` 中都一樣；但它改變了你模擬的模型，所以優先畫出外框。SCGSim 不會自行移動頂點，因為它照給定的輪廓建立模型。
+
+不是導體的區域也會同樣夾住真空：輪廓只在一點碰到邊界的有限介質島會被拒絕，訊息指出該區域。請在它周圍畫出晶粒外框，或讓島沿一條邊碰到邊界，或與邊界保持距離。
+
+### 版圖內部的同一規則 {#pinch-inside-the-layout}
+
+在版圖內部，同一規則會拒絕只在一個角相接的兩個同 Net 導體：該處的金屬，或兩塊之間的真空，會沿著通過該角的垂直線與自己相接。拒絕訊息為「… touches itself along the vertical edge at (x, y) um …: two cells of one domain meet only at a vertex.」兩個不是導體的區域，例如在一角相接的兩個介質島，也以同樣方式被拒絕。**讓兩塊共用一條邊，或把它們分開。**在邊界處，另一塊是版圖不會畫出的模型外部，所以那裡的修正是移動邊界。這條規則是[任何區域都不可只沿一條垂直邊與自己相接](supported-scope.qmd#rules-conductors)。

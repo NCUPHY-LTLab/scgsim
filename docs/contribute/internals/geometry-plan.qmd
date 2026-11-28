@@ -1,0 +1,642 @@
+---
+title: "GeometryPlan internals"
+description: "How a GeometryPlan's sources become the normalized build input: source authorities, grid noding, occurrence and ground-contribution records, the semantic projection, AEDT's shared facts, preparation caches, physical declarations for PDK authors, calls below the supported entry, and the lattice of lumped-port sheets."
+scgsim-kind: "implementation"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/contribute/internals/geometry-plan"
+---
+
+This page is for contributors to `scgsim.geometry`. It records how a
+`GeometryPlan` turns its sources into the normalized input SGB builds from, and
+which records travel in the snapshot. What a user calls, and what each call
+accepts, is on [GeometryPlan and SGB](../../reference/specs/geometry-plan.qmd).
+
+## Source authorities {#source-authorities}
+
+The in-tree `scgsim.geometry` API is SCGSim's source-geometry authority. It
+reads structured PDK and component semantics and never reconstructs geometry
+meaning from solver-generated labels. `scgsim.geometry` is the source-facing
+facade: `GeometryPlan`, detached snapshots, normalized input models, adapters,
+stack, vacuum and curve preparation, and summaries. Palace builds the geometry
+with `scgsim.geometry.sgb` (`build_sgb_geometry`) and meshes it with
+`scgsim.meshing`. The source validator is `scgsim.geometry.source.validation`.
+
+`GeometryPlan` composes two authorities. PDK `LayerStack` records supply
+materials, process layers, Z and thickness, conductor and solution roles, and
+host volumes. Component annotations supply local Entity identity, ports,
+functional conductor regions and topology selectors. The notebook composes
+named occurrences and assigns the final Net map; it does not author PDK or
+component facts.
+
+The
+[physical representation contract](../../reference/specs/physical-representation.qmd) separates
+source physical classification from selected solver representation. One neutral
+plan binds each original Entity and physical layer to its effective geometry,
+support and complete enclosure trace. A body retains its actual source
+endpoints and holes; a nominal layer span is not a replacement body. Missing
+qualified contact or host incidence remains absent rather than inferred.
+
+Palace and AEDT consume the same chosen interpretation. Different explicit
+profiles retain their different approximation meanings; source attachment
+normals do not decide native HFSS field-side selection. Historical recorded
+source and runtime cohorts retain their original interpretation and identity.
+
+## Grid noding and the change ledger {#grid-noding}
+
+`GeometryPlan` and `build_gds_stack_geometry_input(...)` take the grid from
+the GDS they read: its database unit, `source_dbu_um`, is the shared layout
+grid. SCGSim reads the DBU and does not mutate shared PDK or global state.
+`metadata.geometry_grid` records `schema_version` with value
+`scgsim.geometry.grid.v1`, the grid's `grid_size_um`, and `coordinate_frame`
+with value `assembly_xy`. It identifies the shared fixed-precision grid for
+assembly XY/layer arrangement. Every later stage reads the grid from it; an
+input without `metadata.geometry_grid` is refused with a `ValueError` that names
+the two calls which declare it. Original source identity is retained alongside the
+computational change ledger, and walls inherit their snapped layout endpoints.
+Z coordinates, film thickness, mesh, quadrature, and solver tolerances remain
+separate; the XY grid does not assert that every 3D coordinate lies on it.
+The fixed-grid XY boundaries are noded once for each Z range. A Z range's
+network holds every operand whose closed Z range meets that range, touching
+included, and every operand that has no Z range; operands whose Z ranges are
+separated never share nodes. A bump that spans the D0-to-D1 gap is therefore
+noded with the metal of both dies, while a D1 vertex does not split a D0
+outline. One limit follows from this grouping: when a D0 conductor and a bump
+share an edge and a D1 vertex lies on it, the bump outline gets that vertex
+and the D0 outline does not. Within each network, every original directed ring
+edge carries its operand, ring and segment order through explicit grid-pixel
+incidence; coincident edges retain every source. Raw intersection and
+native-grid near-vertex events split these directed paths before rounding.
+
+Directed edge transitions determine face membership, and each operand is reconstructed
+from those same cells without another grid snap. Ambiguous source paths or
+inconsistent labels fail explicitly. Source recipes round flattened layout
+points to the grid before their Booleans, so a mask placed through a rotated
+reference and drawn again directly unions to one outline. Physical contact,
+hole and component checks still compare against the original, unrounded
+inputs.
+
+## Source occurrence records {#source-occurrence-records}
+
+For component-semantics schema v2, the paired stack adds derived source
+occurrence records, not a new user polygon-selection API. Each
+`metadata.source_occurrences` row binds a registered path and parent path to a
+cell name, composed transform, and `reference_index`: the zero-based reference
+ordinal in that parent, or `null` for the root. One registered occurrence names
+one actual GDS reference. Consumers must first expand arrays into explicit
+individual references; `GeometryPlan` does not auto-expand arrays. Each layer's
+`geometry.source_occurrence_polygons_um` and each
+`metadata.port_sheet_source_layers` entry's `source_occurrence_polygon_um`
+preserve selected exterior and hole loops in micrometres. The reader checks
+the paired GDS hash, binds each path to its recorded parent reference and child
+cell, converts the source database units, reapplies the composed transform,
+and recomputes those loops. This keeps touching same-layer geometry from
+separate named occurrences distinct. Existing schema-v1 stack readers keep
+their selector decoding behavior.
+
+## Ground-plane contributions {#ground-plane-contributions}
+
+In the public Xmon composition, the reusable child keeps its local pad,
+coupler, mask, and a ground-arm metal contribution. That arm overlaps the
+residual ground plane, so it is not a separate conductor Entity; modeling it
+as one would duplicate metal. The root composition supplies one D0 and one D1
+plane through the stack recipe, then unions the occurrence-local arm geometry
+into the D1 plane through an explicit physical conductor-layer binding; the
+draw or mask layer does not imply that target. It does not copy full
+ground-plane Entities into each child occurrence or create planes
+automatically.
+
+Component-semantics v2 also accepts
+`component_semantics.ground_plane_contributions`. Each record has exactly
+`local_id`, `plane_id`, `level`, `layer`, and `selector_point_um`. The local ID
+names a component-local metal contribution; `plane_id` names a root-local
+derived plane. `level` is the physical conductor level and must match the
+target plane's `metadata.logical_layer_id`; `layer` is the source GDS
+layer/datatype pair used with the local selector point. Thus a draw or mask
+layer does not implicitly choose the target conductor face.
+
+Preparation uses the selector to resolve one connected occurrence-local metal
+region on the declared source GDS layer. That region can contain multiple
+fused raw GDS polygons. The root-plane and occurrence paths use the same local
+plane/mask/include geometry recipe. GeometryPlan applies the occurrence
+transform once, verifies the resulting exterior and hole loops against the
+paired GDS, and records them in the root plane's
+`geometry.source_occurrence_includes`. The root plane's
+`metadata.ground_plane_contribution_sources` retains the occurrence path, local
+ID, physical level, and source layer. A selected region that contains a
+separately declared local conductor on the same physical level is rejected.
+These includes become part of the residual plane before polygon lowering; they
+are not separate conductor Entities or Net assignments, and GeometryPlan does
+not infer connectivity or promise separate measurements.
+
+## Rectangular junction derivation {#rectangular-junction-derivation}
+
+The shared geometry interpreter derives the complete central rectangle and
+terminal-owned end metals once, from the source database units and existing
+physical attachment, before planning contacts, interfaces, and construction
+catalogues. Palace Route A continues to apply its existing
+host-interface, common-plane, and common-volume rules. Palace and AEDT consume
+the same derived source partition; AEDT validates that request rather than
+deriving another rectangle. The request of each lumped element comes from the
+plan's `LumpedElementRecord`: its sheet and its two conductors, in the order of
+the authored direction, which `prepare()` resolved from the sheet's overlaps.
+The element's R, L and C are carried to the solvers unread by the geometry and
+do not choose the physical terminal owners.
+
+## The source-to-backend contract in full {#source-contract-table}
+
+| Fact or operation | Contract |
+|---|---|
+| Component definition | Holds local polygons, source Entity IDs, ports, topology selectors, and local component facts. Reusing a component does not rewrite its local IDs. Schema v2 does not assign final Nets or expose a public `Group` API inside the component. |
+| Component occurrence | `register_instance(path, reference)` binds a named path to the actual GDSFactory occurrence. Parent segments are registered before children. The path scopes entity and polygon identities before flattening; rotation and reflection apply consistently to geometry, selectors, and ports. |
+| Notebook net mapping | Authors only the final `Net -> Entity` map on the `GeometryPlan`; components do not carry intermediate or child net assignments. Membership may be assigned once to one net; duplicate membership on the same net is deduplicated. There is no public component `Group` API, implicit connectivity, or child-net merge framework. |
+| Assignment validation | Mapping updates are atomic. Unknown or ambiguous entity references and an entity assigned across different nets reject the whole update. An unmapped entity remains unassigned (`None`); a backend requires a net binding only where that backend operation needs one. |
+| Source lineage | The immutable snapshot preserves source Entity and polygon identities separately from derived group membership. An Entity is lineage, not a promise of a raw per-Entity measurement or field expression. A `semantic_group_id` is not reused as Entity identity or source lineage. |
+| Computational groups | New physical mesh grouping serves high-count geometry only. Copies may share one computational physical group when explicit Net, material, local source Entity ID, parent occurrence context, and role all match. Qualified Entity/member lineage remains available; an unassigned Net stays separate. For example, the eight sibling Ground bumps in this coupon map to one physical group while retaining eight Entity IDs. Legacy recorded physical-group policy remains version-specific. AEDT owner/interface/integral groups remain backend-specific and keep their existing policy. |
+| Backend lowering | Palace and AEDT consume the same prepared source snapshot through their existing preparation paths. Native aggregates retain their source members and coverage. This does not promise per-patch native results, per-Entity raw measurements, or per-Entity field expressions. |
+| Vacuum geometry | Authored vacuum entities keep their names, materials, hosts, and per-domain analysis identity. At the source-input level, the plan adds one outer background domain as the semantic complement of modeled bodies and custom regions under the established SGB priority/cut rules. The backend owns how it represents that partition natively. The public `D0_TO_D1_GAP` remains a distinct vacuum entity. |
+| AEDT object names | New native names are readable and deterministic, sanitized and disambiguated as needed, and remain bound to the original qualified Entity ID. Historical prepared names keep their version-specific reader policy. |
+| Boundary defaults | Palace leaves an unspecified external vacuum boundary at its natural PMC condition. HFSS assigns the same condition, Perfect H, on the faces of its Region. |
+
+Source preparation establishes
+the geometry input contract; it does not imply native geometry validation or
+solver execution.
+
+## Q3D source normalization {#accepted-q3d-source-normalization}
+
+The Q3D GeometryPlan frontend is part of the public API. Its recognized `airbridge_deck`
+and `airbridge_post` records remain role-neutral source
+geometry in the normalized snapshot; they are not given a Palace route
+representation or a native conductor role by normalization. A selected Palace
+route continues to reject conductors it cannot represent. AEDT Q3D solves
+the SGB model of the snapshot, with its final caller-authored Net membership
+and explicit physical ground roles; authored arcs reach it as exact arcs in the
+model's STEP. This source contract does not assert completion of a Q3D
+solve or returned matrix observation.
+
+## Curve construction {#curve-construction}
+
+SGB builds the declared lines and circular arcs into one exact planar
+arrangement on the integer grid, extrudes it over the authored stack, and writes
+the BREP and XAO files itself; it runs no OCC Boolean and no shell repair. Each
+face keeps its source identity in the sidecar, and Gmsh only opens the written
+XAO to check it before meshing. A construction error stops the build; there is
+no straight-edge fallback or volume repair.
+
+Geometry order and finite element order are separate choices. Curved model
+geometry does not make a positive surface inset an exact curved-perimeter
+distance; see the
+[EPR interpretation](../../concepts/surface-epr.qmd#surface-identity-masks-and-loss-assumptions).
+
+## Internal semantic projection {#internal-semantic-projection}
+
+SGB projects already-validated source facts once per source/model revision into
+`scgsim.semantics`. The immutable projection is reused while planning a model;
+it is not rebuilt by deep-copying a full stack for every interface pair.
+Interface classification and each owner projection remain distinct operations:
+solution solid/vacuum ordering is not interchangeable with declared surface
+owners, legacy two-owner records, sheet owners, or aggregate physical-group
+owners.
+
+The projection can express finite PEC, surface-sheet MA/MS, local MM/MA patch
+evidence, explicit side meaning, and outer/hole/seam provenance without
+claiming that classification proves contact. Declared, planned, and observed
+records remain distinguishable. Native tags and groups are opaque observations,
+not reconstructed successes, and duplicate observations do not multiply one
+semantic contribution.
+
+Explicit authored interface kind and owner metadata take precedence
+over derived defaults. Route-A sheet contact footprints remain an `MM`
+topology relation but lower as the existing `MS` cap with its established
+physical-name prefix; the surrounding sheet may still carry its independently
+classified MA/MS evidence.
+
+Route-A profile selection is optional for a direct semantic-core consumer.
+A Palace simulation on Route A without a profile uses `thin_film`
+(`set_route("A")`); `substrate_face` or `metal_gap_equivalent` with their film
+bindings are passed as `set_route("A", approximation_profile=...)`. Route B
+without a profile uses the identity profile `route_b`. With no core profile, coordinates remain unchanged and no collapse is
+recorded. `metal_gap_equivalent` remains the existing effective coordinate
+normalization; no reversible-collapse claim is made.
+
+For a stack with no PDK vacuum layer, omitted conductor host declarations are
+bound to the internally generated background only when the caller selects
+`plan.set_vacuum_region()`. The same normalized polygon-versus-substrate-region
+contact check supplies Route-A physical support for both authored-host and
+generated-background stacks. It considers complete exteriors and holes and
+requires a unique positive-area contact; a bounding-box intersection,
+point/edge touch, or auto-region edge is insufficient. An authored
+but unresolved host name still fails instead of being silently rebound.
+Single-substrate `substrate_face` has no opposing die or gap value; two
+opposed substrates keep physical `substrate_face` and the distinct
+two-face-only `metal_gap_equivalent` normalization. The generated Region is
+profiled after the source geometry and partitioned around actual dielectric
+and finite-PEC occupancy. Route-A sheets do not subtract a fictitious volume.
+
+Route-A support is local rather than a whole-sheet label. The sheet polygon is
+partitioned by exact bottom/top solution coverage before bare SA/AA surfaces
+are constructed, so substrate holes remain holes and a partly supported stress
+case retains separate supported and exposed children. Each child keeps ordered
+bottom/top evidence; an MM contact cap retains only the side left after the
+contact cut. Port footprints select the intersecting child and fail if they
+cross incompatible local domain pairs. Fully freestanding sheets remain
+unsupported.
+
+The same local-domain partition is used when conductor faces are removed from
+an SA patch. The planner subtracts only the face overlap with that exact
+solution-pair patch, even when one conductor spans several adjacent domains.
+
+Route B keeps finite geometry and records local top, bottom, and sidewall
+material-side evidence. Geometry adjacency remains a set, whereas the additive
+contribution ledger preserves semantic multiplicity. Two same-kind MA sides
+on one Route-A child share one native surface and one aggregate Palace row;
+they are not duplicated or multiplied. That aggregate requires Palace's
+internal-boundary cracking and does not imply side-resolved numeric output.
+AEDT reads its Surface-EPR rows from the sidecar of the same SGB model.
+
+## Identity requirements {#identity-requirements}
+
+A handoff preserves:
+
+- source SGB revision;
+- semantic surface and volume identities;
+- route choice and topology receipt;
+- generated mesh/config identity;
+- the mapping from solver entities back to semantic geometry.
+
+## Shared source facts for AEDT {#shared-source-facts-for-aedt}
+
+`GeometryPlan` is the shared source frontend for Palace and AEDT. Its prepared
+snapshot includes the normalized `GeometryBuildInput` polygons (including
+hole loops), entities, solution regions, source provenance, and route profile,
+along with the prepared stack and source-occurrence records. Source-linked
+junction declarations retain their terminal nets, direction, dimensions,
+inductance, and capacitance; those fields are not retroactively attributed to
+the normalized `GeometryBuildInput`. AEDT builds the SGB model of the
+snapshot with `prepare_sgb_model` and imports its STEP; it takes object names,
+face groups and Surface-EPR rows from that model's sidecar and guard, not from
+Gmsh surfaces, physical groups or native tags.
+
+The run checks what AEDT imported against the guard: every object and face must
+match the model's sidecar and guard, or the run stops. A native face overlap or
+adjacency query is observed geometry evidence; it cannot manufacture source
+contact intent. Route-A profile normalization still happens once at the shared
+frontend boundary.
+
+## Preparation pool and caches {#preparation-resources}
+
+The scope reuses one pool for independent source recipes, indexed source-path
+batches, zero-area support classification and per-operand reconstruction.
+Results and task-local source audits merge in input order. Fixed-grid operands
+share the same boundary network and labelled cells; source-path ownership and
+face transitions remain deterministic. Unquantized parent planes keep their
+separate construction path. Nested work reuses the budget rather than creating
+another pool. Preparation tasks finish before the meshing child processes
+start. Meshing runs on one Gmsh thread, so it takes no share of the worker budget;
+the scope only keeps it out of a preparation worker.
+
+Each source-preparation call also reuses hierarchy extraction for the same
+freshly read GDS cell and excluded-reference list. The cache ends with that
+call.
+
+Immutable raw polygons and pure subdivisions are also reused within a prepare,
+or adapter call when the complete ordered operands and grid context
+match. Selectors,
+source-record comparisons and physical/contact audits still execute on each
+invocation.
+
+Reconstructed grid-applied faces use one coordinate
+representation per integer grid key, including their boundary-chain anchors;
+raw source coordinates and non-grid local planes remain separate.
+
+A topology
+failure retains its original exception and adds counts, validity, area and
+grid information without coordinates. Error-only witnesses distinguish the
+initial grid realization, labelled cells and reconstructed faces from the
+final shared-cell reconstruction. These witnesses do not replace the model or
+its checks.
+
+## Input summary display {#pre-solve-input-summary}
+
+`scgsim.geometry.summarize_geometry_input(build_input, *, prepared_stack)` returns an
+`InputSummary` with detached `.data` and an HTML representation for notebook
+display. Both Eigenmode facades and `ElectrostaticSim` expose `input_summary()`
+to combine this normalized source with their configured backend settings. AEDT summarizes its
+normalized build input and stack. Palace requires its bound `GeometryPlan` and
+summarizes the input its `mesh()` prepares from that plan, so the plan's vacuum
+region, the ports set on the simulation and the route's conductor
+representation appear as the model will have them.
+Passing a raw component without explicit normalization fails rather than
+guessing a stack. The summary records source, entity, Net, material, Z/vacuum,
+port, EPR, and run-control inputs; unset or unknown values stay explicit. It
+does no file I/O, meshing, catalogue rebuild, or native solver inspection and
+does not claim native geometry or run evidence.
+For the source summary, `source.top_cell_name` uses a valid adapter-selected
+`selected_cell_name` first, then falls back to legacy `top_cell_name` when the
+selected name is unavailable, and otherwise is `None`. This display choice
+does not mutate source metadata or reread the GDS.
+
+Its notebook HTML presents source, backend, route, and count cards, followed by
+Entity/occurrence/Net/material/source-Z, port/host/direction, junction A/B/L/C,
+analysis-choice, film/loss/source/margin-assumption, and solver/resource
+tables. The original detached JSON is in a collapsed disclosure. Unknown
+values remain distinct from zero; `None` means all and an empty tuple means
+none only for a selection, while an absent request is labeled not requested.
+The HTML has no theme
+argument and inherits the front-end light/dark palette; the detached `.data`
+contract is unchanged.
+
+
+## Physical declarations, for PDK authors {#physical-declarations}
+
+A PDK declares how each film or volume is classified; SCGSim never infers it
+from names, Nets, materials, sizes or equal heights. One LayerStack assembly
+frame and one physical layer identity per film are shared across its Entities,
+polygons and child occurrences, and placement applies once before the profile
+is interpreted. A physical declaration distinguishes stack films, local films
+and finite volumes. Original material, normal film thickness, attachment face,
+source interval, Entity identity, polygon holes and actual body endpoints stay
+source facts: a finite volume's nominal layer interval does not replace an
+individual body's interval, and a TSV wall's radial thickness is not its axial
+span.
+
+One physical representation plan holds the selected profile, the source to
+effective coordinate trace, the per-body representation, the support
+projection and the complete enclosure mapping. Palace and AEDT read that plan;
+backend construction, Nets, ports, junctions, RLC treatments and numerical
+controls keep their own owners. A stack film is removed once per physical
+identity; a local film is projected to its authored attachment face without
+removing thickness from unrelated intervals; retained volumes map their actual
+endpoints; and the requested enclosure maps once.
+
+Contact and host incidence remain source records. Missing qualified incidence
+stays missing; it does not block physical lowering, and a consumer that needs
+it reports that limitation instead of guessing. Source contact normals do not
+establish HFSS calculator Surface or Adjacent field sides or native electrical
+continuity.
+
+### The typed source carrier {#typed-source-carrier-and-plan}
+
+The source owner's `LayerLevel.info["physical_layer"]` contains the serialized
+neutral declaration. Preserve all original Level arguments and existing info
+when adding that carrier; no solver target material is written into it.
+
+```python
+from gdsfactory.technology import LayerLevel
+from scgsim.geometry.models.physical import (
+    ApproximationProfile, PhysicalLayerDeclaration, PhysicalRepresentationPlan,
+)
+from scgsim.geometry.interpretation.physical import interpret_physical_geometry
+
+declaration = PhysicalLayerDeclaration.from_payload(authored_declaration)
+level = LayerLevel(
+    **authored_level_arguments,  # existing source arguments, excluding info
+    info={**authored_level_info, "physical_layer": declaration.to_payload()},
+)
+profile = ApproximationProfile("thin_film", "v1", {})
+effective_input, effective_stack, plan = interpret_physical_geometry(
+    normalized_source_input, source_stack, profile,
+)
+recorded_plan = plan.to_payload()
+read_plan = PhysicalRepresentationPlan.from_payload(recorded_plan)
+body = read_plan.map_body(
+    declared_physical_layer_id, actual_source_interval_um, original_source_geometry,
+)
+```
+
+`PhysicalLayerDeclaration` has these exact fields:
+
+- `physical_layer_id`, `source_level_id`, `source_level_and_gds_pair` and
+  `source_interval_um`: source identity, selector association and nominal span.
+- `material_id` and `feature_kind`: original material and `stack_film`,
+  `local_film` or `finite_volume` classification.
+- `physical_dimensions`: source normal film thickness or finite-volume facts;
+  radial wall thickness and axial span remain distinct.
+- `source_contact_facts`: authored attachment face and available source normals.
+- `actual_entity_contact_graph`: the existing authored graph, or `None` when
+  unavailable. Process-connectivity descriptions are not qualified placed
+  footprint/contact proof.
+
+The plan uses schema `scgsim.geometry.physical-representation.v1`. Its tagged
+payload records the explicit profile, source identity, declarations, collapse
+intervals, sheet anchors, per-Entity facts and complete enclosure traces.
+`context` projects those facts for shared planning; `map_body()`,
+`project_support_point()` and `project_enclosure()` supply consumer projections
+without a second profile interpreter.
+
+The declaration's original `material_id` stays source identity. Native AEDT
+PEC material or Perfect E/ThinConductor assignments are backend realization
+and separately observed evidence; they never replace that source identity.
+
+### Selected declarations and source incidence {#selected-declarations-and-source-incidence}
+
+A declaration catalogue is not the selected model. Only the physical levels
+the selected source binds are read; an unused catalogue film does not create a
+collapse event. The selected bridge assembly supplies qualified M1-to-substrate,
+post-to-Ground and deck-to-post source incidence; preserve those records and
+their body and occurrence ownership. They establish source incidence, not
+native continuity or HFSS field-side proof. Generic bridge and bump incidence
+stays unavailable where it is not authored, and missing records are neither
+invented nor made prerequisites for physical lowering.
+
+### Older layer records {#fresh-and-historical-layer-records}
+
+Fresh physical-source preparation consumes neutral `PhysicalLayerDeclaration`
+records and an explicit `ApproximationProfile`. Fresh `aedt_modeling` metadata
+and role-derived route classification are not adapters. A request
+payload with `PhysicalLayerSpec` records and no tagged representation was
+written by an earlier SCGSim and is refused; a new physical-source execution
+requires neutral declarations.
+Explicit Solid bodies without layer declarations retain their finite source
+geometry through the shared identity plan, without minted physical IDs.
+
+The selected plan's tagged payload is the current prepared physical trace. A
+prepared geometry whose trace is untagged (a `PhysicalLayerSpec` layer map) was
+written by an earlier SCGSim and is refused with a replacement preparation
+instruction; read it with the SCGSim commit that wrote it.
+
+### Profile bindings {#profile-bindings}
+
+The source-authorized bindings of `substrate_face` and `metal_gap_equivalent`
+identify actual normalized supporting Entities and their `lower` or `upper`
+faces; they are not reconstructed from layer names, roles or equal Z values.
+`set_route()` takes no keyword that repeats the profile's name and does not
+author bindings or own coordinate arithmetic. `build_route_geometry()` requires
+preparation's effective normalized input and representation context. Use
+neutral declarations with `interpret_physical_layers()` or
+`interpret_physical_geometry()`.
+
+## Calls below the supported entry {#supported-entry}
+
+A layout enters SCGSim through the public API: `GeometryPlan` and the
+simulation classes of `scgsim.palace` and `scgsim.aedt`. The rules, the
+guarantees and the owners on this page are stated for a layout that enters
+this way.
+
+SCGSim also documents one API below that entry, and you can call it with an
+input you build by hand: `scgsim.geometry.sgb.build_sgb_geometry`, the
+geometry builder, with a `GeometryBuildInput` you construct yourself, in place
+of the one a `GeometryPlan` snapshot carries.
+
+Functions inside this package that take lower-level records, such as a prism
+catalogue (SGB's own list of footprints, each extruded over a height range),
+are internal and are not a documented API.
+
+Calling this API with an input you build is internal or advanced use, and
+**its precondition is what the supported entry guarantees**: the input is one
+that `GeometryPlan` and a simulation class could have produced. It starts after
+the checks those two make and does not repeat them. A direct call to
+`build_sgb_geometry` runs
+neither the plan checks of `GeometryPlan` nor the meshing-stage check of
+`mesh()` and `simulation_drc()`.
+
+An input that only this API can build is not a supported use. For such an
+input SCGSim promises only this:
+
+- If it gives a plausible but wrong result without an error, and a cheap check
+  where the input enters can refuse it clearly, SCGSim adds that check.
+- Otherwise SCGSim states the precondition once, where the API is documented,
+  or records the case and leaves the behavior as it is.
+
+When a direct call fails or returns something you did not expect, build the
+same layout through `GeometryPlan` and a simulation class before you report
+it. The rules and owners on this page apply to that build.
+
+
+## Lumped-port sheets on the grid {#lumped-port-lattice}
+
+How a lumped-port sheet becomes a rectangle is stated for users on
+[Lumped ports are made rectangles](../../reference/supported-geometry.qmd#lumped-port-rectangle).
+This is the derivation behind it.
+
+### The rectangle {#lumped-port-angle}
+
+A rectangle whose four corners are grid points runs along a direction of whole
+grid steps: its side along the port is k steps of v = (p, q), where p and q are
+whole numbers with no common factor, and its side across the port is m steps of
+(−q, p). This v is the port's direction on the grid: (1, 0) or (0, 1) along x or
+y, (1, 1) at 45°, and (3, 4) for a side that runs 3 grid steps in x for every 4
+in y. SCGSim reads each sheet as such a rectangle:
+
+1. **Its four corners.** Where a conductor outline crosses a side of the sheet,
+   the grid rounds the crossing to a grid point; on a side at an angle that
+   point can lie off the side by up to half a grid diagonal (0.71 nm on a 1 nm
+   grid), the grid's snap bound. SCGSim drops every vertex that lies within the
+   snap bound of the line between the two corners of its side and keeps the four
+   corners. When a vertex lies so close to a corner that more than one set of
+   four vertices passes this rule, SCGSim reads each set as in step 2 and keeps
+   the one whose rectangle lies nearest its drawn corners; when two lie equally
+   near, SCGSim refuses the port and names both.
+2. **The rectangle.** When the four corners as drawn are grid points of such a
+   rectangle, nothing moves. Otherwise, for example when an instance registered
+   with a `GeometryPlan` and turned by 45° places a sheet drawn along x, so that
+   its corners leave the grid, SCGSim takes the nearest such rectangle whose
+   corners each lie within the snap bound of the drawn corners, and records how
+   far each corner moved. When there is none, or the nearest one does not run
+   along the port direction, SCGSim refuses the port, naming it, its layer and
+   its four drawn corners in µm. A layout passed whole, without a plan, reaches
+   SCGSim with its corners already on the grid; they are its drawn corners.
+
+Between the two cuts, the sheet's long sides are the sides of that rectangle, so
+the port is exactly the rectangle. Beyond the cuts, the end pieces keep the
+vertices the grid shares with the conductors.
+
+### The cuts {#lumped-port-cuts}
+
+A cut across the rectangle has both its ends on grid points only every
+|v| = √(p² + q²) grid steps along the port: at every grid step along x or y,
+every 1.414 nm at 45° on a 1 nm grid, and every 5 nm along (3, 4). These are the
+cut positions. On each end, SCGSim chooses the cut in two steps:
+
+1. It starts at the first cut position, at or past the conductor's farthest
+   reach into the sheet, that leaves one connected end piece: the largest
+   rectangle the sheet holds.
+2. The end piece adds an edge to its conductor along each long side of the
+   sheet, from where the conductor's outline meets that side to the cut. The
+   cut moves one cut position further into the gap at a time until each such
+   edge is zero or at least 10 grid steps long (10 nm on a 1 nm grid), so the
+   side wall that stands on it is not narrower than the fine-structure limit for
+   side walls. Where the conductor's own edge already runs along the side, the
+   end piece continues that edge and adds none.
+
+A gap that holds fewer than two cut positions has no room for the rectangle:
+SCGSim refuses the port and names where the gap lies, its length and the cut
+spacing.
+
+The outline is the one SGB builds: a conductor declared with an exact arc meets
+the side where the arc does, on the grid point SGB rounds the crossing to, not
+where its polygon does, and reaches into the sheet as far as the arc does, also
+where a chord of its polygon faces the sheet. SCGSim reads that outline from
+SGB's own binding of the conductor's boundary records, so a record on a port's
+conductor is refused as it is on any other conductor: with the same
+`InputError` and the same message. Binding a record needs the model grid the
+input declares, which `GeometryPlan` always declares. A sheet that ends on straight conductor edges at right
+angles to it keeps the face and the conductors it had: its cuts lie on those
+edges and its end pieces are empty.
+
+For the circular pad coupon (pad radius 100 µm in a ground opening of radius
+120 µm, a 2 µm sheet, 1 nm grid):
+
+| End | The outline meets the sheet sides at | Largest rectangle | Cut taken | Edge added |
+| --- | --- | --- | --- | --- |
+| Pad, arc of radius 100 µm | x = 99.995 µm | x = 100.000 µm, edge 5 nm | x = 100.005 µm | 10 nm |
+| Ground opening, arc of radius 120 µm | x = 119.996 µm | x = 119.988 µm, edge 8 nm | x = 119.986 µm | 10 nm |
+
+The port is 19.981 µm long, 0.007 µm shorter than the largest rectangle.
+
+### Worked example: the Xmon's junction port at 45° {#lumped-port-xmon}
+
+The [flip-chip Xmon](../../guides/xmon/inputs.qmd) draws its junction sheet at 45°
+across the gap between the ground opening and the Xmon pad, on a 1 nm grid. On
+the grid the sheet has eight vertices, four of them added where the two round
+outlines cross its long sides:
+
+| Vertex | Position (µm) | Read as |
+| --- | --- | --- |
+| A | (−55.443, −24.420) | corner |
+| | (−54.742, −23.719) | on side AB, where the ground opening crosses it: dropped |
+| | (−52.143, −21.120) | on side AB, where the Xmon pad crosses it: dropped |
+| B | (−51.443, −20.420) | corner |
+| C | (−51.633, −20.230) | corner |
+| | (−52.333, −20.930) | on side CD, where the Xmon pad crosses it: dropped |
+| | (−54.933, −23.529) | 0.707 nm outside side CD, half a grid diagonal, where the ground opening crosses it: dropped |
+| D | (−55.633, −24.230) | corner |
+
+- **Direction.** B − A = (4000, 4000) nm = 4000 · (1, 1), so v = (1, 1) and the
+  cut positions are √2 nm = 1.414 nm apart.
+- **Width.** D − A = (−190, 190) nm = 190 · (−1, 1): the port is
+  190 · √2 nm = 268.70 nm wide, as drawn.
+- **Shift.** The four corners are grid points of a rectangle, so none moves. The
+  recorded shifts, below 10⁻¹⁴ µm, are the floating-point rounding of placing
+  the cell.
+- **Cuts.** Counted in cut positions from A:
+
+| End | Largest rectangle | Edge added | Cut taken | Edge added |
+| --- | --- | --- | --- | --- |
+| Ground opening, at A | 708, 1.0013 µm from A | 9.9 nm | 709, 1.0027 µm from A | 11.3 nm |
+| Xmon pad, at B | 3292, 4.6556 µm from A | 11.3 nm | 3292 | 11.3 nm |
+
+The cut at 709 ends at (−54.734, −23.711) and (−54.924, −23.521) µm, the cut at
+3292 at (−52.151, −21.128) and (−52.341, −20.938) µm: these are the port's four
+corners. The port is 2583 · √2 nm = 3.6529 µm long, and SGB builds its face with
+an area of 0.98154 µm².
+
+### What SCGSim records {#lumped-port-record}
+
+The partition record of each port carries what SCGSim did under `lattice`:
+
+| Key | Meaning |
+| --- | --- |
+| `direction_grid` | v = (p, q), the port's direction in whole grid steps |
+| `cut_spacing_um` | the distance between cut positions, \|v\| grid steps |
+| `corners_um` | the rectangle's corners A, B, C and D: A starts the port on its right-hand side, B = A + k v ends it |
+| `drawn_corners_um` | the corners as drawn, before the grid rounded them |
+| `corner_shifts_um` | how far each corner moved from its drawn corner, in x and y |
+| `cuts` | each cut's `index` (cut positions from A), `from_corner_a_um` and its two `ends_um` |
+| `modelled_sheet_um` | the sheet with its long sides straight between the cuts, present only when they were not |
+
+The partition records it in the prepared input as
+`metadata["junction_partitions"][junction_id]["lattice"]`, and the SGB model
+Palace and AEDT both solve is built from that record. A Palace simulation keeps
+it on the port sheet of its prepared geometry, under
+`rectangular_junction_lattice`.
+

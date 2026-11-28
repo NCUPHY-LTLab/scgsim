@@ -1,0 +1,106 @@
+---
+title: "架構與資料流程"
+description: "從版圖到報告的每一步由誰負責，以及一次 Palace 執行與一次 AEDT 執行如何準備、執行與讀回。"
+scgsim-kind: "implementation"
+scgsim-status: "ACCEPTED"
+scgsim-id: "docs/architecture"
+lang: zh-TW
+aliases:
+  - ../architecture.html
+---
+
+本頁說明從版圖到報告的每一步由誰負責，以及一次 Palace 執行與一次 AEDT 執行如何準備、執行與讀回。哪個資料夾是哪個階段，寫在[程式碼地圖](code-map.qmd)；每個區域不得接管什麼，寫在[依區域分工](ownership.qmd)。確切的格式與規則在本頁連結的契約頁。
+
+## 入口套件與同一個模型 {#current-package-structure}
+
+SCGSim 有四個入口套件：`scgsim.geometry`、`scgsim.palace`、`scgsim.aedt` 與 `scgsim.visualization`。一個名稱只有在其中某個套件匯出它，或契約頁記載它時，才是公開的；模組能被匯入，不代表它是公開的。支援的入口，以及在它下層呼叫時必須自行保證的條件，只寫在[支援範圍](../reference/supported-scope.qmd#supported-entry)一處；幾何建構器 `scgsim.geometry.sgb` 位於這個入口之下。`python -m scgsim.aedt.run` 是受支援的指令，也就是 AEDT 交易的入口。
+
+Palace 與 AEDT 求解的模型出自同一個建構器：
+
+1. `scgsim.geometry` 把版圖與堆疊變成 `GeometryPlan`，它的快照就是準備好的輸入（`geometry/source`），再把它解讀成有效輸入（`geometry/interpretation`，其中包含 `geometry/junctions` 的接面分割）。
+2. `geometry/sgb` 從有效輸入建立 3D 模型（`build_sgb_geometry`），並切出 `geometry/surface_epr` 要求的 Surface-EPR 條帶。直線與圓弧邊界保持精確；樣條曲線會被拒絕。
+3. Palace 以 `scgsim.meshing` 對模型的 XAO 產生網格；`scgsim.meshing` 經由 `contracts` 讀取 XAO 與它的 sidecar，從不經由 SGB 或後端。
+4. AEDT 以同一個建構器建立它的模型（`modeling="thin_film"` 用 Route A，`"solid"` 用 Route C），匯出成 STEP 與 guard 檔（`aedt/preparation`：先 `prepare_sgb_model`，再 `export_aedt_step`），放進交接；在 AEDT 中匯入它，並依 sidecar 完成每一項指派（`aedt/runtime/families/sgb_import.py`）。AEDT 不自行建立任何幾何。
+
+## 哪項事實由誰負責 {#contract-boundaries}
+
+| 事實 | 負責者 |
+|---|---|
+| 材料、層、製程、厚度與 3D 堆疊 | PDK |
+| Entity 與它的多邊形、曲線邊界、埠及選擇器 | 元件 |
+| 具名的 occurrence 與最終的 `Net → Entity` 對應 | Notebook 的 `GeometryPlan` |
+| 不可變的準備好輸入 | plan 的快照（`GeometryBuildInput`） |
+| 幾何名稱、拓撲，以及 Route A、B、C 的表面 | `scgsim.geometry.sgb` |
+| 四面體網格、它的尺寸與品質門檻 | `scgsim.meshing` |
+| 執行識別、交接、執行設定檔與收據 | 各後端的執行契約 |
+| 回傳數值的物理意義 | 產生它的求解器；不會把不同求解器的量壓成同一個量 |
+| 公開的元件模擬 Notebook | OrcaPen SC PDK |
+
+## 語意事實 {#internal-semantic-facts}
+
+`scgsim.semantics` 保存與求解器無關的事實：與修訂版本綁定的快照、Route A 投影，以及 EPR 紀錄。它只使用標準函式庫，不匯入 SGB、Palace、AEDT 或原生程式碼。修訂版本不符的事實會被拒絕，而不是重新綁定。後端回報的原生標記只是觀察資料，從來不決定接觸或識別。
+
+## Notebook 與網格品質 {#notebook-and-implementation-boundaries}
+
+公開 Notebook 直接呼叫各入口套件，它的規則寫在 [Notebook 契約](notebook-contract.qmd)。網格品質是 `mesh()` 執行的 `scgsim.meshing` 稽核：它持有門檻並寫出品質報告（[網格品質](../reference/specs/mesh-quality.qmd)）。結果在物理上是否收斂是另一個問題，由執行的收斂宣告回答。
+
+## Palace 準備生命週期 {#palace-preparation-lifecycle}
+
+`ElectrostaticSim` 與 `EigenmodeSim` 各自負責可變的網格、設定、已解析的埠與交接狀態。兩者都是同一個私有基底類別 `scgsim.palace.simulation.core.PalaceSimulation` 的子類別，它持有兩者共用的部分：`set_plan`、`set_output_dir`、`set_route`、`set_mesh`、`input_summary()`、`mesh()`、`simulation_drc`、`mesh_summary()` 與 `prepare_handoff()`。每個問題檔（`simulation/electrostatic.py`、`simulation/eigenmode.py`）只加上自己的 setter、數值預設值與 `write_config()`。真空區域與 Surface-EPR 規格屬於 plan（`GeometryPlan.set_vacuum_region`、`GeometryPlan.set_surface_epr`）；模擬從它綁定的快照讀取它們。
+
+生命週期是一張表，`scgsim.palace.simulation.lifecycle`：
+
+| 階段 | 由誰抵達 | setter 何時退回這裡 |
+|---|---|---|
+| `UNBOUND` | 建立模擬 | |
+| `BOUND` | `set_plan` | `mesh()` 會讀它的值：輸出資料夾、route、網格控制、Eigenmode 的埠 |
+| `MESHED` | `mesh()` | 只有 `write_config()` 讀它的值 |
+| `CONFIG_WRITTEN` | `write_config()` | |
+| `HANDED_OFF` | `prepare_handoff()` | |
+
+在所需階段之前呼叫會被拒絕，訊息會指出要先做哪個呼叫。兩種問題的預設都是 Route B；只有 plan 帶有規格時才會計算 Surface EPR。
+
+`mesh()` 與 `write_config()` 會先退回、捨棄它們要重建的內容，之後才檢查需要的條件。`write_config()` 把每個中繼資料檔經由暫存檔寫出，最後才寫 `config.json`（`config.files.persist_problem_files`），所以 `config.json` 是新的執行資料夾，一定有它需要的每個中繼資料檔，也沒有過時的檔案。這是逐檔成立的，不是整個資料夾的單一交易；在記憶體中退回，也不會刪除磁碟上較舊的檔案。
+
+模擬把設定保存成凍結的值，每個值在建立時檢查，並定義在最早讀取它的階段：
+
+| 屬性 | 型別 | 階段 | 讀取者 |
+|---|---|---|---|
+| `numerical` | `NumericalControls` | `config.numerical` | `write_config()`、`mesh_summary()`（FEM 階數） |
+| `surface_epr_specs`（取自綁定的 plan） | `SurfaceEprSpecs` | `source.surface_epr` | `mesh()`（條帶）、`write_config()`（`Dielectric` 列） |
+| `epr_request`（Eigenmode） | `EprRequest` | `config.index` | `write_config()`（`check_epr_request` 與索引對照） |
+
+`write_config()` 把 `ConfigInput`（網格、材料、Surface-EPR 規格與數值控制）和該問題的 `EigenmodeSettings` 或 `ElectrostaticSettings` 交給設定建構器。建構器為每個設定區段回傳一筆索引紀錄（`PortEntry`、`TerminalEntry`、`EnergyEntry`、`SurfaceEprEntry`），存進 `palace_index_map.json`。
+
+每個階段都從同一個模組 `scgsim.contracts.palace_run_folder` 取得執行資料夾的配置：每個檔案的路徑與結構描述、交接寫出並由 `resolve_palace_result` 檢查的交接識別（`HandoffIdentity`），以及每種問題一筆紀錄（`PalaceProblem`：`EIGENMODE`、`ELECTROSTATIC`）。依問題而不同的程式碼讀這筆紀錄，而不是比較問題名稱；它的 `written_families` 決定一次執行必須回傳哪些表格。只有當某個埠的電路讓它有一欄時，Palace 才會寫出該埠表格（`PortTable`）：帶電感的埠才有 `port-EPR`，帶電阻的埠才有 `port-Q`。這個模組只匯入標準函式庫，所以 `palace/run` 可以把它複製進執行資料夾：收據紀錄器（`metadata/record_palace_return.py`），以及帶有收斂宣告時的收斂執行器（`metadata/run_palace_until_converged.py`），在求解主機上只需要 Python 直譯器。
+
+執行之後，`palace/results` 把回傳的資料夾讀成檢查過的紀錄（`ResolvedRunData`），`palace/reports` 建立給人看的內容（`resolve_palace_result` 回傳 `ResolvedPalaceResult`，帶有信任度、物理與效能三種檢視）。所有公開名稱都從 `scgsim.palace` 匯入。
+
+## AEDT 執行生命週期 {#aedt-execution-lifecycle}
+
+`python -m scgsim.aedt.run` 呼叫 `scgsim.aedt.runtime.transaction.main`。一次交易執行一份準備好的交接，順序如下：
+
+1. 在收據改變之前驗證交接；
+2. 開始收據、記錄執行期來源、匯入 PyAEDT，並開啟它擁有的 Desktop；
+3. 派送到一個求解器家族（HFSS、Q3D 或 Q2D），由它匯入請求帶有的 SGB 模型、求解並匯出；
+4. 記錄結果、釋放 Desktop，並完成收據。即使釋放也失敗，求解器家族的失敗仍是這次執行的失敗。
+
+求解器家族不匯入交易，也不啟動 Desktop；它們之下共用的原生呼叫在 `aedt/runtime/native`。HFSS Eigenmode 與 EPR 共用一份設定控制對照；每個家族的控制項列在[設定控制契約](../reference/specs/aedt-runtime.qmd#aedt-family-setup-controls)。Q3D 執行可以被要求停止或中止，並儲存它的專案（`request_q3d_stop_and_save`、`request_q3d_abort_and_save`）；[]{#q3d-要求停止中止並儲存}規則寫在 [AEDT 執行環境](../reference/specs/aedt-runtime.qmd#q3d-使用者要求停止中止並儲存)。
+
+### 以請求為範圍的 AEDT 版本選擇 {#request-scoped-aedt-version-selection}
+
+請求要指定 AEDT 版本 `"2023.2"` 或 `"2024.2"`，沒有預設值，也不會退回另一個版本；版本屬於該請求與它的交易，不屬於整個程序。`versions.py` 保存每個版本固定的傳輸設定；傳輸參數見[版本契約](../reference/specs/aedt-runtime.qmd#aedt-version-selection)。
+
+### 準備好的原生 HFSS EPR 批次流程 {#prepared-native-hfss-epr-batch-workflow}
+
+HFSS EPR 模型可以在工作站上準備，再到另一台主機上求解：
+
+準備並釋放原生模型（交易）→ 封裝一個模型（`aedt/batch.py`，`prepare_native_batch`）→ 以獨立執行器求解，不需要 PyAEDT Desktop（`run_native_batch`）→ 在新的交易中，於取得擁有權的副本上收集回傳的專案（`collect_native_batch`）→ 離線解析與呈現。
+
+每個封裝、每次嘗試與每個結果都只屬於一個模型；參數掃描就是多個封裝。`aedt/runtime/batch_protocol.py` 是只用標準函式庫的檔案協定；`aedt/runtime/batch_runner.py` 會被複製進封裝，執行求解器時不匯入 PyAEDT 或 SCGSim。封裝、嘗試與收集的定義見[批次契約](../reference/specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch)。
+
+### 收據與執行期來源 {#receipts-and-runtime-source}
+
+交接宣告收據結構描述 `scgsim.aedt.receipt.v3`，準備與執行各自記錄它們執行的執行期來源（`aedt/results/provenance.py`、`aedt/results/runtime_inventory.py`）。收據與執行期來源記錄什麼、哪些較舊的格式會被拒絕，見[來源沿革](provenance.qmd)與[目前的格式](../reference/specs/aedt-runtime.qmd#current-formats)；EPR 執行如何綁定原生模態與它的 pass 快取，見[模態綁定與 pass 快取](../reference/specs/aedt-runtime.qmd#mode-binding-and-pass-cache)。
+
+每個區域不得接管什麼，見[依區域分工](ownership.qmd)；靜態與連線的幾何預覽，見[預覽幾何](../guides/preview-the-geometry.qmd)。

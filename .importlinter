@@ -1,0 +1,209 @@
+[importlinter]
+root_package = scgsim
+include_external_packages = True
+
+# The packages of scgsim in the order they import: a package reads the packages before it, never one
+# after it; import-linter lists the last first. The two solver backends read neither each other nor
+# visualization, which a notebook displays. The contracts below state what is stricter than this order.
+[importlinter:contract:package-layers]
+name = Packages import only the packages before them (base, semantics, presentation, geometry, meshing, backends, visualization)
+type = layers
+containers =
+    scgsim
+layers =
+    visualization
+    aedt | palace
+    meshing
+    geometry
+    presentation
+    semantics
+    preparation | diagnostics
+    contracts | refusal | documentation
+# Every package and module of scgsim is in this list: a new one has to take its place in the order.
+exhaustive = true
+
+# The folders a layout passes through before SGB, in the order they import: the shared records, the exact
+# kernel (exact arithmetic on the model grid and the binding of boundary records), the float grid
+# operations, the source stage, the junction step and the physical interpretation that runs it. A folder reads the folders before it, never one after it; import-linter lists
+# the last folder first.
+[importlinter:contract:geometry-stage-layers]
+name = Geometry stages import only the stages before them (models, exact, grid, source, junctions, interpretation)
+type = layers
+containers =
+    scgsim.geometry
+layers =
+    interpretation
+    junctions
+    source
+    grid
+    exact
+    models
+# Every folder of scgsim.geometry is in this list or named here: a new folder has to take its place in
+# the order. sgb and surface_epr are placed by the contracts below.
+exhaustive = true
+exhaustive_ignores =
+    sgb
+    surface_epr
+
+[importlinter:contract:semantics]
+name = Semantic facts remain independent of geometry solvers and presentation
+type = forbidden
+source_modules =
+    scgsim.semantics
+forbidden_modules =
+    scgsim.geometry
+    scgsim.aedt
+    scgsim.palace
+    scgsim.presentation
+    scgsim.visualization
+    scgsim.preparation
+    scgsim.diagnostics
+    numpy
+    plotly
+    gdsfactory
+    gdstk
+    gmsh
+    shapely
+    pyvista
+    meshio
+    ansys
+
+# The exact kernel reads the shared records and no other geometry folder, so it never rests on the float
+# grid operations. scgsim.geometry.* matches every folder of the geometry package, present or added later;
+# import-linter skips scgsim.geometry.exact itself, and the imports of the shared records are the ones allowed.
+[importlinter:contract:exact-reads-records-only]
+name = The exact kernel reads only the shared geometry records
+type = forbidden
+source_modules =
+    scgsim.geometry.exact
+forbidden_modules =
+    scgsim.geometry.*
+ignore_imports =
+    scgsim.geometry.exact.** -> scgsim.geometry.models.**
+
+# SGB reads the shared records and the exact kernel, and no other geometry folder: the stages before it
+# reach it through its input, never through their code.
+[importlinter:contract:sgb-reads-records-and-exact-only]
+name = SGB reads only the shared geometry records and the exact kernel
+type = forbidden
+source_modules =
+    scgsim.geometry.sgb
+# scgsim.geometry.* matches every folder of the geometry package, present or added later; import-linter
+# skips scgsim.geometry.sgb itself, and the imports of the records and of the kernel are the ones allowed.
+forbidden_modules =
+    scgsim.geometry.*
+ignore_imports =
+    scgsim.geometry.sgb.** -> scgsim.geometry.models.**
+    scgsim.geometry.sgb.** -> scgsim.geometry.exact.**
+
+# geometry.surface_epr and the Palace backend call SGB; no other geometry folder reads it. What the
+# junction partition shares with SGB is the exact kernel, which both read.
+# scgsim.geometry.* matches every folder of the geometry package, present or added later; import-linter
+# skips the forbidden folders themselves, and surface_epr calling SGB is the allowed direction.
+[importlinter:contract:stages-do-not-read-sgb]
+name = The stages before SGB do not read it
+type = forbidden
+source_modules =
+    scgsim.geometry.*
+forbidden_modules =
+    scgsim.geometry.sgb
+    scgsim.geometry.surface_epr
+ignore_imports =
+    scgsim.geometry.surface_epr.** -> scgsim.geometry.sgb.**
+    scgsim.geometry.surface_epr.** -> scgsim.geometry.sgb
+
+# SGB's folders in the order they import: a folder reads the folders before it, never one after it;
+# import-linter lists the last first. This is the order of dependency. The order in time is the step list
+# of sgb.model, where the arrangement runs twice: on the physical prisms alone, for the bands to find
+# their support faces, then with the cut families the bands produce.
+[importlinter:contract:sgb-stage-layers]
+name = SGB stages import only the stages before them (errors and stopwatch, records, prisms, arrangement, bands, topology, checks, model, output, section, build)
+type = layers
+containers =
+    scgsim.geometry.sgb
+layers =
+    build
+    section
+    output
+    model
+    checks
+    topology
+    bands
+    arrangement
+    prisms
+    records
+    errors | stopwatch
+# Every folder and module of scgsim.geometry.sgb is in this list: a new one has to take its place in the order.
+exhaustive = true
+
+[importlinter:contract:sgb-emission-layers]
+name = SGB emission layers point one way (entry, exchange, verification, sidecar, writer)
+type = layers
+layers =
+    scgsim.geometry.sgb.build
+    scgsim.geometry.sgb.output.exchange
+    scgsim.geometry.sgb.output.verification
+    scgsim.geometry.sgb.output.sidecar
+    scgsim.geometry.sgb.output.emission
+
+[importlinter:contract:contracts-import-nothing-else]
+name = Stage contracts import nothing else from scgsim and no third-party package
+type = forbidden
+source_modules =
+    scgsim.contracts
+# scgsim.* matches every top-level subpackage; import-linter skips scgsim.contracts itself.
+forbidden_modules =
+    scgsim.*
+    numpy
+    plotly
+    gdsfactory
+    gdstk
+    gmsh
+    shapely
+    pyvista
+    meshio
+    ansys
+
+# The sidecar definition, scgsim.contracts.sgb_sidecar, is the one scgsim import meshing makes besides its own.
+[importlinter:contract:meshing-reads-contracts-only]
+name = The meshing module reads the sidecar JSON and the XAO, never SGB, AEDT or Palace code
+type = forbidden
+source_modules =
+    scgsim.meshing
+forbidden_modules =
+    scgsim.geometry
+    scgsim.aedt
+    scgsim.palace
+# The class A wall-column limit is one number, owned by the geometry layer's grid model.
+ignore_imports =
+    scgsim.meshing.fine_structure -> scgsim.geometry.models.grid
+
+# The Palace stages in flow order: source, mesh, config, run, then results and the reports that show them.
+# A stage reads the stages before it, never one after it; import-linter lists the last stage first. The
+# simulation classes are the entry: they call source, mesh, config and run, and no stage reads them.
+[importlinter:contract:palace-stage-layers]
+name = Palace stages import only the stages before them (source, mesh, config, run, results, reports; entry simulation)
+type = layers
+containers =
+    scgsim.palace
+layers =
+    simulation
+    reports
+    results
+    run
+    config
+    mesh
+    source
+# Every folder of scgsim.palace is in this list: a new one has to take its place in the order.
+exhaustive = true
+
+# AEDT records the sources its run can import, and that record includes the visualization loaders. They
+# read a Palace run folder through scgsim.contracts alone, so a Palace change never alters AEDT provenance.
+[importlinter:contract:visualization-reads-no-palace-code]
+name = Visualization reads a Palace run folder through the contracts, never Palace or meshing code
+type = forbidden
+source_modules =
+    scgsim.visualization
+forbidden_modules =
+    scgsim.palace
+    scgsim.meshing

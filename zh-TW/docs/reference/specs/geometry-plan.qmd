@@ -1,0 +1,190 @@
+---
+title: "GeometryPlan 與 SGB"
+description: "如何建立 GeometryPlan：依序的呼叫與各自的檢查、格點、重疊、真空區域、集總元件、規劃接受的曲線、路徑，以及二維截面。"
+scgsim-kind: "contract"
+scgsim-status: "ACCEPTED"
+scgsim-id: "docs/geometry-sgb"
+lang: zh-TW
+aliases:
+  - ../../geometry-sgb.html
+---
+
+`GeometryPlan` 保存版圖中所有求解器共用的內容：畫好的元件、它的層堆疊與材料、你宣告的 Net、真空區域、Surface-EPR 薄膜，以及集總元件。`plan.prepare()` 把它凍結成 *快照*，每個模擬再以 `set_plan` 取得這份快照。接著 SCGSim 的幾何建構器 SGB 由它建立三維模型，Palace 與 AEDT 用的是同一個模型。本頁依序列出呼叫、各呼叫檢查什麼、如何宣告集總元件、規劃接受哪些曲線，以及如何切出二維截面。實際的規劃見[準備版圖](../../guides/prepare-a-layout.qmd)；規劃的內部做法見 [GeometryPlan 內部實作](../../contribute/internals/geometry-plan.qmd)。
+
+## 建立規劃 {#component-to-backend-geometry-contract}
+
+以下是[第一次模擬](../../start/first-simulation.qmd)的規劃呼叫，對象是 1000 µm 晶粒中一個 200 µm 的焊墊：
+
+```python
+plan = GeometryPlan(
+    component=component,
+    root_id="chip",
+    layer_stack=get_single_die_layer_stack(),
+    material_records=get_material_records(),
+    coupon_padding_um=0.0,
+)
+plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
+plan.set_vacuum_region(padding=(0.0, 0.0, 1000.0))
+sim.set_plan(plan.prepare())
+```
+
+| 呼叫 | 作用 |
+|---|---|
+| `GeometryPlan(component=..., root_id=..., layer_stack=..., material_records=..., coupon_padding_um=...)` | 接收組好的 GDSFactory 元件、PDK 層堆疊與材料。`root_id` 是根出現實例的名稱，每個 Entity ID 都以它開頭（`chip/PAD`）。 |
+| `register_instance("chip/q0", reference)` | 為版圖中放置的子元件命名，讓它的 Entity 成為 `chip/q0/...`。先註冊父層再註冊子層，每個 GDS reference 呼叫一次；陣列 reference 要先展開成單一 reference。帶有自身元件語意卻未註冊的子元件，`prepare()` 會拒絕（`ValueError`，「it is not registered」）：否則版圖攤平時，它的語意會消失。 |
+| `plan.entities` | 規劃中的 Entity，各帶完整的 `.semantic_id`。 |
+| `set_nets({net_id: (entity_id, ...)})` | 宣告每個 Net 由哪些 Entity 組成。Net 是一塊具名、作為同一個導體的金屬；SCGSim 從不由彼此接觸的形狀推論 Net。一個 Entity 最多屬於一個 Net；不在任何 Net 中的 Entity 保持未指派。含有未知 Entity，或把一個 Entity 放進兩個 Net 的更新，整筆被拒絕。 |
+| `set_vacuum_region(padding=...)` | 模型周圍的真空區域，單位 µm：一個數、一組 (x, y, z)，或每個面一個值。 |
+| `set_surface_epr(specs)` | 依介面類型給出 Surface-EPR 薄膜及其邊距；見 [Eigenmode 參考](palace-eigenmode.qmd#surface-epr-margins)。 |
+| `set_lumped_elements(elements)` | 元件的集總元件，每個都放在版圖所畫的一張集總埠片上：接面或 R、L、C 元件，或激發埠；見[下方](#lumped-elements)。 |
+| `set_entity_priorities({entity_id: priority})` | 決定同一 Net 中兩個重疊的 Entity 誰擁有重疊區；見[下方](#overlap-priority)。 |
+| `prepare()` | 檢查各項宣告並回傳快照：正規化幾何、堆疊、GDS 位元組與出現實例記錄，不保留對元件的即時參照。 |
+
+`prepare()` 的檢查與錯誤列在[版圖必須保證什麼](../supported-scope.qmd#layout-rules)。要改任何東西，就修改規劃、準備新的快照，再呼叫一次 `set_plan`。
+
+### 格點 {#the-grid}
+
+模型格點就是版圖的資料庫單位，由 GDS 讀出：OrcaPen SC PDK 的版圖是 1 nm。請在畫單元之前設定好。模型的每個 XY 座標都落在格點上；高度、薄膜厚度與網格則不受此限。SCGSim 不修改 PDK 或 GDSFactory 的設定。
+
+### 重疊區歸誰 {#overlap-priority}
+
+重疊區依下列順序決定：
+
+1. **導體先於一切。** 金屬最先放置，求解區域從不與它競爭。
+2. **介質優先於真空**，不論兩者的 `mesh_order`。
+3. **兩個介質之間，`LayerLevel.mesh_order` 較小者優先**，這是 GDSFactory 的慣例。
+4. **同一 Net 的兩個 Entity 之間，priority 較高者優先**：元件註記中的 `priority`，或用於彼此重疊放置之出現實例的 `plan.set_entity_priorities(...)`。priority 相同或未給時，會出現列出兩個 Entity 的 `OverlapError`。不同 Net 的導體完全不可重疊。
+
+例如一塊 20 × 20 µm 的氮化矽區塊，`mesh_order=1`，位於 `mesh_order=2` 的矽區域上：重疊處是氮化矽。若那塊區塊是真空，不論數字為何，重疊處都歸矽。規劃內部儲存 `priority = -mesh_order`，所以儲存的 `priority` 一律是數值較高者優先。
+
+### 真空區域 {#vacuum-region}
+
+真空區域屬於規劃。在 `prepare()` 之前以 `plan.set_vacuum_region(padding=...)` 設定，或使用堆疊本身的 `VACUUM_REGION`；SCGSim 從不假設任何邊距。Palace 與 AEDT 得到同一個真空區域，模擬本身沒有真空設定。真空區域在平面方向沒有加寬時，模型止於版圖的平面範圍，這會影響碰到該邊緣的導體；見[只在一點碰到邊界的導體](../known-geometry-problems.qmd#boundary-point-pinch)。兩片晶粒之間宣告的間隙體積 `D0_TO_D1_GAP`，在真空區域內仍是獨立的真空 Entity。
+
+在真空區域的外表面，Palace 保留它的自然邊界條件（PMC），HFSS 則在它的 Region 指定相同的條件 Perfect H。
+
+### 子元件加到接地平面的金屬 {#ground-plane-contributions-user}
+
+子元件可以把金屬加到根元件的接地平面，例如 Xmon 接地伸進淨空區的那段臂。它宣告 `component_semantics.ground_plane_contributions`：每筆記錄恰好包含 `local_id`、`plane_id`（它併入的根平面）、`level`（導體層，必須與該平面相同）、`layer` 與 `selector_point_um`。這塊金屬成為該平面的一部分；它不是獨立的 Entity，也沒有自己的 Net。記錄如何解析，見[內部實作](../../contribute/internals/geometry-plan.qmd#ground-plane-contributions)。
+
+### 集總元件 {#lumped-elements}
+
+[]{#explicit-rectangular-junctions}集總元件是模型不畫成金屬的元件部分：以電感表示的約瑟夫森接面、電阻、電容，或量測所驅動的埠。每個集總元件都放在元件所畫、並在其 `component_semantics` 的 ports 中宣告的一張集總埠片上，連接該埠片落在其上的兩個導體。每個集總元件在規劃上以其埠片的完整名稱宣告一次；每種模擬都從快照讀取它們：
+
+```python
+from scgsim.geometry import LumpedElement, LumpedPort
+
+plan.set_lumped_elements([
+    LumpedElement("chip/o_junction_lumped", inductance_h=10e-9),
+    LumpedPort("chip/o_launcher", reference_net="ground", impedance_ohm=50.0),
+])
+```
+
+| 紀錄 | 它是什麼 |
+|---|---|
+| `LumpedElement(sheet, *, resistance_ohm=None, inductance_h=None, capacitance_f=None)` | 並聯的電阻、電感與電容，單位為歐姆、亨利與法拉；至少給一個。接面是帶有電感、以及（若你建模的話）電容的元件。 |
+| `LumpedPort(sheet, *, reference_net, impedance_ohm)` | 激發埠：位於 `reference_net` 的導體是它的參考，另一個是訊號，`impedance_ohm` 是它的參考阻抗。 |
+
+埠依你給的順序先編號：埠 1 是第一個 `LumpedPort`，也就是 S 矩陣的第 1 列與第 1 行。其他元件依序接在後面，所以在沒有埠的計算中，第一個元件就是 Palace 的埠 `P1`。`prepare()` 會拒絕以下情況，並指出元件、其埠片的圖層與以 µm 表示的範圍：版圖沒有畫出的名稱；落在不只或少於兩個導體上的埠片；同一個 Net 的兩個導體；`reference_net` 不是任一導體之 Net 的埠。結果放在 `snapshot.lumped_elements`，每個元件一筆 `LumpedElementRecord`，含埠片、依埠片方向排列的兩個導體（`start`、`end`）及其 Net。
+
+每種模擬如何處理每個元件，見[支援的計算](../supported-calculations.qmd#lumped-elements)；簡言之，Palace Eigenmode 與 HFSS Eigenmode 會實現每個元件，並把埠當成其阻抗的負載；Palace Electrostatic 與 Q3D 讓它們保持開路；HFSS Driven Terminal 取用那兩個埠。每個被實現元件的埠片，都會切成其兩個導體之間的矩形，Palace 與 AEDT 相同。規劃沒有宣告任何元件的埠片，不屬於 Palace 或 HFSS 的模型。對在規劃之下建立、已正規化的 `GeometryBuildInput`，`with_rectangular_junctions(build_input, specs)` 以 `RectangularJunctionSpec` 與 `JunctionTerminalBinding` 把埠片綁定到它的兩個端點。
+
+## 來源曲線 {#source-curves}
+
+版圖以多邊形進入 SGB，你可以在多邊形上另外宣告曲線。SGB 精確建立**直線段與圓弧**；spline 曲線以 `UnsupportedCurveError` 拒絕。畫成多邊形的曲線一律接受（[畫成多邊形的曲線輪廓](../supported-geometry.qmd#curve-rule)）。Palace 在兩種路徑上都為圓弧產生網格，AEDT 則以模型 STEP 中的精確圓弧匯入。
+
+`SourceCurveSpec` 以 XY 微米描述一條曲線。種類有 `line_segment`（兩個端點）與 `circular_arc`（起點、弧上一點、終點）；`interpolation_spline` 與 `bspline` 可以宣告，但 SGB 會拒絕。可選的 `parameter_interval` 只修剪曲線，不重新擬合。
+
+`BoundaryCurveChainSpec` 把一條有序封閉邊界綁定到 `entity_id`、`boundary_id` 與 `selector_point_um`。選取點落在該 Entity 的金屬中。`role="outer"` 選外輪廓；`role="hole", hole_index=0` 選該多邊形的第一個孔，它的選取點仍落在金屬中，不在孔裡。
+
+元件以本地 ID 宣告 `boundary_curves` 或 `boundary_reconstruction` 記錄；規劃以出現實例完整命名它們，並只套用一次其變換。對已組好的輸入，以完整 ID 呼叫 `plan.set_boundary_curves(records)` 或 `plan.set_boundary_reconstruction(records)`。
+
+`GdsBoundaryReconstructionSpec` 把畫出的多邊形邊還原成圓弧。它以 `segment_indices` 指名邊：索引 `i` 是從畫出的頂點 `i` 到頂點 `(i + 1) % N` 的邊，順序依 GDS 儲存多邊形的方式（請從元件讀取，例如 `component.get_polygons()`，因為 GDSFactory 會依 KLayout 的儲存方式正規化多邊形）。封閉圓取三個 `anchor_indices`；開放圓弧取起點、弧上一點與終點。三個共線的錨點定義不出圓，會在 `prepare()` 被拒絕。`closed=True` 選取整個環。兩個還原不可宣稱同一組邊；由兩個畫出的多邊形融合而成的環沒有畫出的順序，因此其上的還原會被拒絕。
+
+## 路徑 {#current-surface-epr-direction}
+
+路徑決定金屬薄膜如何成為求解器幾何。
+
+| 路徑 | 模型的樣子 | 使用者 |
+|---|---|---|
+| Route A | 每層薄膜是零厚度的理想導體薄片；凸塊保留為有限外殼 | Palace（`set_route("A")`）；AEDT `modeling="thin_film"` |
+| Route B | 每個導體是有限金屬體積，表面為理想導體，內部不產生網格 | Palace（`set_route("B")`，預設） |
+| Route C | 每個導體體積留在模型中 | AEDT `modeling="solid"` |
+
+Palace 的 `set_route` 與 `mesh()` 以 `ValueError` 拒絕 A、B 以外的路徑。[Route A 與 Route B](../../concepts/routes.qmd) 以截面圖說明如何選擇，[AEDT：solid 還是 thin_film](aedt-runtime.qmd#aedt-solid-thin-film)列出兩者的高度。不論哪種路徑，建立模型時都會切出 Surface-EPR 條帶。
+
+## 薄膜與近似方式 {#physical-representation}
+
+每層薄膜變成薄片還是體積、堆疊高度如何改變，由近似方式決定。[物理表示](physical-representation.qmd)列出各近似方式與選擇它們的 Palace 呼叫。
+
+## 二維截面 {#section-models}
+
+SGB 可以沿一條線切開三維模型，得到一條長而均勻的傳輸線（例如 CPW）的二維模型。二維模型天生就有三維模型的 Entity、Net、材料與 Surface-EPR 條帶。此版本沒有求解器讀取它；[Q2D](aedt-runtime.qmd#q2d-native-combined-matrix-export) 使用你自行描述的截面。
+
+例如 `finite_ground_cpw_coupon` 取 OrcaPen SC PDK 預設值（訊號線 10 µm、間隙 6 µm、接地 80 µm、500 µm 矽上 100 nm 鋁），Route B，MA、MS 與 SA 條帶的邊距為 0.5 與 1.0 µm，真空區域加寬 (0, 0, 1000) µm，在中間 x = 0 處橫切，得到這個截面：
+
+| 區域 | `u`（µm） | `z`（µm） | 邊 |
+|---|---|---|---|
+| 接地 `chip/GROUND_MINUS`（排除） | 0 至 80 | 0 至 0.1 | 上方 `MA::chip/GROUND_MINUS__top::band=k`，下方 `MS::...__bottom::band=k`，80 處為 `MA::...__sidewall` |
+| 間隙（真空） | 80 至 86 | 0 至 0.1 | z = 0 的 SA 條帶邊：條帶 0 由 80 至 80.5，條帶 1 至 81，條帶 2 至 85，接著條帶 1 與條帶 0 直到訊號線 |
+| 訊號線 `chip/SIGNAL`（排除） | 86 至 96 | 0 至 0.1 | MA 上表面、MS 下表面，以及 86 與 96 處的 MA 側壁 |
+| 間隙（真空） | 96 至 102 | 0 至 0.1 | SA 條帶與第一個間隙相同 |
+| 接地 `chip/GROUND_PLUS`（排除） | 102 至 182 | 0 至 0.1 | 與第一塊接地相同，側壁在 102 |
+| 基板 `D0_SUBSTRATE` | 0 至 182 | −500 至 0 | 底面為無條帶的 SA，兩端為 `EXT` 側壁 |
+| 真空 `VACUUM_REGION` | 0 至 182 | −1500 至 −500 與 0.1 至 1000.1 | 兩端、頂部與底部為 `EXT` |
+
+這裡 `u` 是沿切線的距離，`z` 是高度。間隙中的每個條帶都從較近的間隙邊量起，所以條帶 2（1.0 µm 以外）從 81 到 85 µm。在 Route B 中，導體是一個薄膜厚度的矩形，排除在求解區域之外，邊界是 MA 上表面、MS 下表面與 MA 側壁。SA 條帶邊屬於群組 `SA::D0_SUBSTRATE|VACUUM_REGION__interface::band=k`。
+
+切線是一個 `CutLine`：在規劃座標系中沿 x 或 y 的直線段，單位微米：
+
+```python
+from scgsim.geometry.models.section import CutLine
+
+cut = CutLine(start_um=(0.0, -91.0), end_um=(0.0, 91.0))
+```
+
+`scgsim.geometry.sgb.section.build_section_model(model, cut)` 由已驗證的三維模型建立截面，並以 `SectionModel` 保存在記憶體中。截面的每一部分都是三維模型某一部分的切痕：
+
+| 二維模型 | 切痕來源 | 群組 |
+|---|---|---|
+| 高度 `z` 的水平邊 | 該高度的水平面，在它涵蓋的切線範圍內 | 該面的群組，含條帶索引 |
+| `u` 處的垂直邊 | 切線在該處穿過的壁 | 該壁的群組（側壁沒有條帶） |
+| 面 | 某個體積截面的一個連通部分；切線穿過兩次的體積給出兩個面 | 該體積的群組，即擁有它的 Entity |
+| 兩端、頂部與底部的邊 | 模型的邊界壁與邊界面 | `EXT::<domain>__<face kind>` |
+
+三維模型一律是整個版圖，所以每條[建構規則](../supported-scope.qmd#layout-rules)都適用於整個版圖，離切線很遠的地方也一樣。
+
+### 切線規則 {#cut-rules}
+
+二維模型代表一條只有單一截面的傳輸線，所以切線必須從模型一側到另一側，穿過傳輸線筆直而均勻的一段。其他切線會被 SGB 以 `InputError` 拒絕，訊息指出切線碰到什麼、高度、以微米表示的位置與修正方式。
+
+| 規則 | 被拒絕的切線 | 修正 |
+|---|---|---|
+| 端點在格點上 | 端點不在模型格點上 | 讓兩端都在格點上 |
+| 完整截面 | 端點超出模型的平面範圍（含真空區域）、端點在模型內而區域延伸過它，或有一段在模型外 | 從範圍的一側切到另一側 |
+| 直角 | 以其他角度穿過：斜截面會使間隙變寬，給出看似合理卻錯誤的 L 與 C | 在傳輸線兩邊與切線垂直的地方切 |
+| 不沿著邊 | 切線沿著一條邊走 | 把切線移離那條邊 |
+| 不經過轉角 | 切線穿過版圖或條帶接縫的頂點 | 沿傳輸線移到均勻的一段 |
+| 不經過圓弧 | 切線穿過圓弧，或距圓弧不到半個格點：彎道、圓角，或繞過轉角的條帶接縫 | 移到筆直的一段，與轉角的距離大於最大邊距 |
+| 不只在一點接觸 | 截面中導體彼此、或導體與模型邊緣只在一點接觸 | 讓導體沿一條邊重疊或彼此分開，或移動切線 |
+
+## 準備工作程序 {#preparation-resources}
+
+準備與網格產生依序執行。要讓來源準備使用一組工作程序，把呼叫包在 `preparation_resources` 中：
+
+```python
+from scgsim.preparation import preparation_resources
+
+with preparation_resources(max_workers=30):
+    snapshot = plan.prepare()
+    sim.set_plan(snapshot)
+    sim.mesh()
+```
+
+`max_workers` 限制 SCGSim 自己的準備工作程序數；在叢集上，也要向排程器要求相應的 CPU。網格產生在單一 Gmsh 執行緒上進行，求解則由 Palace 自己的 MPI 與 OpenMP 設定控制。`scgsim.diagnostics.preparation_diagnostics(output_dir, profile=False)` 可記錄各階段的耗時。
+
+## 輸入摘要 {#pre-solve-input-summary}
+
+`sim.input_summary()` 在寫出任何檔案之前，顯示模型將會是什麼樣子：來源、Entity、出現實例、Net、材料、高度、真空、埠、EPR 要求與求解設定，以筆記本卡片呈現，獨立的資料在 `.data`。在 Palace 上，它顯示 `mesh()` 將建立的輸入，已套用規劃的真空、集總元件與路徑；`.data["backend"]["lumped_elements"]` 說明模擬把每個元件做成什麼。未知的值保持未知，絕不當成零。`scgsim.geometry.summarize_geometry_input(build_input, *, prepared_stack)` 對正規化輸入給出同樣的摘要。
+
+[]{#internal-semantic-projection}[]{#identity-requirements}[]{#shared-source-facts-for-aedt}[]{#accepted-q3d-source-normalization}SGB 如何投影來源、交接保留哪些身分、AEDT 從快照讀取的事實，以及 Q3D 空橋記錄，見 [GeometryPlan 內部實作](../../contribute/internals/geometry-plan.qmd)。

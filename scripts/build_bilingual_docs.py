@@ -4,21 +4,62 @@ The root project owns English; zh-TW owns its translated prose. Shared theme
 and scientific assets are copied for rendering, following Askr's child-project
 pattern. Neither a solver nor a notebook is executed.
 """
-from pathlib import Path
+
 import json
 import os
 import shutil
 import subprocess
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CHINESE = ROOT / "zh-TW"
+# Old pages whose sections went to different pages (#271): old fragment -> its page and anchor now, relative
+# to the old page; "" is the page itself. The same in both editions; a Chinese heading had a Chinese id.
+SPLIT_PAGES = {
+    "docs/knowledge-guide.html": {
+        "": "start/install.html",
+        "keep-source-revisions-paired": "start/install.html#pair-with-the-pdk",
+        "配對來源版本": "start/install.html#pair-with-the-pdk",
+        "find-the-right-reference": "reference/index.html#find-the-right-reference",
+        "尋找合適的參考資料": "reference/index.html#find-the-right-reference",
+        "native-and-offline-epr-steps": "reference/index.html#native-and-offline-epr-steps",
+        "原生與離線-epr-步驟": "reference/index.html#native-and-offline-epr-steps",
+        "junction-capacitance-reference": "reference/index.html#junction-capacitance-reference",
+        "接面電容參考": "reference/index.html#junction-capacitance-reference",
+    },
+    "docs/documentation-map.html": {
+        "": "contribute/documentation-map.html",
+        "pdk-notebooks-by-goal": "start/choose-a-simulation.html#pdk-notebooks-by-goal",
+    },
+}
+
+
+def main():
+    """Stage translations, render Chinese pages and verify both editions."""
+    if os.environ.get("QUARTO_PROJECT_RENDER_ALL") != "1":
+        return
+    stage_assets()
+    _render_chinese_project()
+    _write_english_geometry_redirect()
+    write_split_page_redirects(ROOT / "_site")
+    _write_bilingual_manifest()
 
 
 def stage_assets():
+    """Copy shared render inputs and translate the Chinese diagrams."""
+    _copy_shared_assets()
+    _translate_workflow()
+    _translate_source_diagrams()
+
+
+def _copy_shared_assets():
     for relative in ("_extensions", "docs/assets", "docs/images"):
         source, destination = ROOT / relative, CHINESE / relative
         if source.is_dir():
             shutil.copytree(source, destination, dirs_exist_ok=True)
+
+
+def _translate_workflow():
     labels = {
         "Source layout": "來源版圖",
         "Materials and electrical Nets": "材料與電氣網路",
@@ -39,20 +80,18 @@ def stage_assets():
         text = text.replace(">" + original + "<", ">" + translated + "<")
     workflow.write_text(text)
 
+
+def _translate_source_diagrams():
     diagram_labels = {
         "cpw-source.svg": {
-            "Declared finite-ground CPW source geometry": "公開有限接地 CPW 來源幾何",
-            "A 500 micrometre long substrate rectangle carries a 10 micrometre center signal with 6 micrometre gaps and two 80 micrometre grounds. Modal integration lines are shown at the negative and positive X end faces. Geometry only, no solver results.": "長 500 微米的基板矩形上有寬 10 微米的中央訊號線，與兩條寬 80 微米的接地相隔 6 微米。圖中於負 X 與正 X 端面標出 Modal 積分線。此圖僅呈現幾何，不含求解器結果。",
+            "Declared finite-ground CPW source geometry": "有限接地 CPW 的版圖幾何",
+            "A 500 micrometre long substrate rectangle carries a 10 micrometre center signal with 6 micrometre gaps and two 80 micrometre grounds. Geometry only, no solver results.": "長 500 微米的基板矩形上有寬 10 微米的中央訊號線，與兩條寬 80 微米的接地相隔 6 微米。此圖僅呈現幾何，不含求解器結果。",
             "Finite-ground CPW source · dimensions in µm": "有限接地 CPW 來源 · 尺寸單位：µm",
             "Si substrate · 500 × 182": "Si 基板 · 500 × 182",
             "Ground · 80": "接地 · 80",
             "6 µm gap": "6 µm 間隙",
             "Signal · 10": "訊號線 · 10",
-            "Port 1 · −X": "埠 1 · −X",
-            "Port 2 · +X": "埠 2 · +X",
             "500 µm · source length": "500 µm · 來源長度",
-            "Modal integration-line": "Modal 積分線",
-            "endpoints are declared": "端點已明確宣告",
         },
         "q2d-cross-section.svg": {
             "Explicit Q2D CPW cross-section": "明確的 Q2D CPW 橫截面",
@@ -77,22 +116,48 @@ def stage_assets():
         diagram.write_text(content)
 
 
-def main():
-    if os.environ.get("QUARTO_PROJECT_RENDER_ALL") != "1":
-        return
-    stage_assets()
+def _render_chinese_project():
     child_render = ["quarto", "render", str(CHINESE)]
     if (CHINESE / "_quarto-pages.yml").is_file():
         child_render.extend(["--profile", "pages"])
     child_render.append("--no-execute")
     subprocess.run(child_render, cwd=ROOT, check=True)
+
+
+def _write_english_geometry_redirect():
     # Retain the earlier Preview's English SGB URL as a compatibility redirect.
     alias = ROOT / "_site/docs/concepts/geometry-en.html"
-    alias.write_text('<!doctype html><html lang="en"><head><meta charset="utf-8">'
-                     '<meta http-equiv="refresh" content="0;url=geometry.html">'
-                     '<title>SGB documentation</title></head><body>'
-                     '<a href="geometry.html">Read the English SGB documentation</a>'
-                     '</body></html>\n')
+    alias.write_text(
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta http-equiv="refresh" content="0;url=geometry.html">'
+        "<title>SGB documentation</title></head><body>"
+        '<a href="geometry.html">Read the English SGB documentation</a>'
+        "</body></html>\n"
+    )
+
+
+def write_split_page_redirects(site: Path) -> None:
+    """Send each section of a page whose sections went to other pages to where it is now, in both editions.
+
+    A Quarto alias sends every fragment of an old URL to one page, so an old section link would land on a
+    page without that section. This redirect looks the fragment up first; an unlisted one, and the page
+    itself, go to the page that replaced it with the fragment kept.
+    """
+    for page, sections in SPLIT_PAGES.items():
+        routes = json.dumps(sections, ensure_ascii=False).replace("<", "\\u003c")
+        for edition in (site, site / "zh-TW"):
+            (edition / page).write_text(
+                '<!doctype html><html><head><meta charset="utf-8">'
+                f'<meta http-equiv="refresh" content="0;url={sections[""]}">'
+                f"<title>Redirect</title><script>var redirects = {routes};\n"
+                "var target = redirects[decodeURIComponent(location.hash.slice(1))];\n"
+                'location.replace(target || redirects[""] + location.search + location.hash);'
+                f'</script></head><body><a href="{sections[""]}">Continue</a></body></html>\n',
+                encoding="utf-8",
+            )
+
+
+def _write_bilingual_manifest():
     source = ROOT / "_site"
     documents = ["index.html"] + sorted(
         str(path.relative_to(ROOT).with_suffix(".html"))
@@ -107,7 +172,9 @@ def main():
         "english": {"root": "/", "pages": documents},
         "zh-TW": {"root": "/zh-TW/", "pages": documents},
     }
-    (source / "bilingual-pages.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
+    (source / "bilingual-pages.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
+    )
 
 
 if __name__ == "__main__":

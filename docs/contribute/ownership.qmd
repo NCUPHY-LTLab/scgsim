@@ -1,0 +1,69 @@
+---
+title: "Ownership by area"
+description: "What each area of src/scgsim must not take over from another, the state boundaries a change keeps, and what stays outside SCGSim."
+scgsim-kind: "project"
+scgsim-status: "ACCEPTED"
+scgsim-id: "docs/ownership"
+aliases:
+  - ../ownership.html
+---
+
+Each area of `src/scgsim` owns one part of the work from a layout to a report,
+and a change keeps that part where it is. This page says, for each area, what
+it must not take over and which area owns that instead. What each folder does,
+and the order the work flows through them, is in the
+[code map](code-map.qmd#stage-tables); this page does not repeat it.
+
+## What each area must not take over {#scgsim-2.0-ownership}
+
+| Area | Must not take over | Owned instead by |
+|---|---|---|
+| `scgsim.geometry` (`source`, `interpretation`, `junctions`, `surface_epr`) | Building the 3D model; Palace or AEDT physics; execution state | `geometry/sgb`; the backends |
+| `scgsim.geometry.models`, `geometry.exact`, `geometry.grid` | A second definition of a record the stages share | Nothing else: each record has one definition here |
+| `scgsim.geometry.sgb` | Meshing; solver state; the layout and component source | `meshing`; the backends; the PDK and the `GeometryPlan` |
+| `scgsim.meshing` | Palace attributes; solver state; a judgment of physical convergence | `palace/mesh`; the convergence declaration of a run |
+| `scgsim.semantics` | Mutable backend objects; a solver tag read as source truth | The backends, which keep tags as observations |
+| `scgsim.contracts` | Any other code of `scgsim`, and the numeric, layout, plotting, meshing and solver libraries | Nothing: the files between stages are defined here alone |
+| `scgsim.palace.simulation` | Submitting a solve; one merged state for both problems | Whoever runs the handoff `palace/run` writes |
+| `palace/source`, `palace/mesh`, `palace/config` | Each other's step: the geometry request, the mesh, `config.json` | The stage named for that step |
+| `palace/run` | Submitting the solver; reading results | The person who runs it; `palace/results` |
+| `palace/results`, `palace/reports` | Running the solver; a physical quantity common to every solver | Palace itself; each backend's own reports |
+| `scgsim.aedt.specs`, `aedt.preparation` | Desktop or runtime state; the state of `EigenmodeSim`; solve results | `aedt/runtime`; `aedt/eigenmode.py`; `aedt/results` |
+| `scgsim.aedt.runtime` | Building geometry; physics that crosses solver families | `geometry/sgb` builds the model AEDT imports |
+| `aedt/batch.py`, `aedt/batch_stages.py` | Building the model or a Desktop; scheduler submission; one project for several models | `aedt/runtime`; the caller |
+| `scgsim.aedt.epr` | Building, solving and exporting a plain Eigenmode design; the Desktop's lifetime; result custody | The HFSS family of `aedt/runtime`; `aedt/results` |
+| `aedt/results`, `aedt/presentation` | Running a solver (results); native calculations and validation (presentation) | `aedt/runtime`; `aedt/results` |
+| `scgsim.visualization` | Solver state, run status or physical acceptance | The backends and their results |
+| `scgsim.presentation` | Domain projections or scientific calculations | Each backend's reports |
+
+The import contracts of the [order CI checks](code-map.qmd#checked-order)
+enforce the rows that are about imports; the other rows are kept by review.
+
+## State boundaries {#state-boundaries}
+
+- Palace Electrostatic and Eigenmode keep separate mutable state and fall back
+  separately when a setting changes, on one shared core
+  (`palace/simulation`, [lifecycle](architecture.qmd#palace-preparation-lifecycle)).
+- Gmsh runs in fresh worker processes: the meshing round
+  (`meshing/driver.py`) and Palace's group lowering (`palace/mesh/process.py`).
+- AEDT `EigenmodeSim` keeps mutable configuration; one transaction
+  (`aedt/runtime/transaction.py`) owns every receipt change and the Desktop's
+  lifetime ([AEDT lifecycle](architecture.qmd#aedt-execution-lifecycle)).
+- A geometry snapshot is detached from the objects it was made from, and a
+  backend tag is an observation, never the source of an identity.
+
+A change that moves code keeps these boundaries and the failure order they
+define.
+
+## Outside SCGSim {#outside-scgsim}
+
+[OrcaPen SC PDK](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk) owns the
+component geometry, the material and stack facts, and the public
+component-simulation notebooks; SCGSim keeps no copy of a notebook
+([notebook contract](notebook-contract.qmd)). Native Palace and AEDT are
+installed by their user; SCGSim never installs them and never runs a handoff
+on its own. A Python script
+or notebook calls SCGSim directly, with no parent workspace.
+
+[]{#implementation-and-project-references}The other contributor pages, in
+reading order, are on [Contribute to SCGSim](index.qmd#reading-order).

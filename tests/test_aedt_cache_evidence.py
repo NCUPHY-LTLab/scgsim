@@ -9,14 +9,20 @@ from dataclasses import FrozenInstanceError
 import pytest
 
 from scgsim.aedt.epr.evidence import PreparedEprEvidence, SavedCacheEvidence
-from scgsim.aedt.epr.fields import compile_named_expression, _parse_native_expression_readback
+from scgsim.aedt.epr.expression_codec import (
+    compile_named_expression,
+    parse_native_expression_readback,
+)
 
 
 def _prepared(tmp_path):
     expression, definitions, _ = compile_named_expression(
-        purpose="file_evidence", operations=["Scalar_Constant(1)"],
-        solution="Setup1 : LastAdaptive", phase_degrees=0,
-        dependencies={}, selection={},
+        purpose="file_evidence",
+        operations=["Scalar_Constant(1)"],
+        solution="Setup1 : LastAdaptive",
+        phase_degrees=0,
+        dependencies={},
+        selection={},
     )
     payload = "".join(block for _, block in definitions).encode()
     (tmp_path / "saved.clc").write_bytes(payload)
@@ -25,12 +31,17 @@ def _prepared(tmp_path):
         "status": "native_clc_saved_and_field_selection_read_back",
         "api": "FieldsReporter.SaveNamedExpressions",
         "path": "metadata/epr_expressions/saved.clc",
-        "sha256": hashlib.sha256(payload).hexdigest(), "bytes": len(payload),
+        "sha256": hashlib.sha256(payload).hexdigest(),
+        "bytes": len(payload),
         "expression_definition_names": [name for name, _ in definitions],
-        "definitions": _parse_native_expression_readback(payload),
+        "definitions": parse_native_expression_readback(payload),
     }
-    item = {"title": "Required", "expression": expression["name"],
-            "intrinsics": "Phase='0deg'", "is_convergence": False}
+    item = {
+        "title": "Required",
+        "expression": expression["name"],
+        "intrinsics": "Phase='0deg'",
+        "is_convergence": False,
+    }
     observation = {
         "saved_configuration_source": {"project_sha256": "readback-time-hash"},
         "use_cache_for": ["Pass"],
@@ -46,23 +57,36 @@ def _prepared(tmp_path):
 
 
 def test_prepared_roundtrip_preserves_existing_three_wire_fields(tmp_path):
+    """Round-trip the required prepared fields without adding optional observations."""
     receipt = _prepared(tmp_path)
     evidence = PreparedEprEvidence.from_payload(receipt, evidence_root=tmp_path)
-    assert evidence.to_payload() == {key: receipt[key] for key in ("setup", "cache", "expressions")}
+    assert evidence.to_payload() == {
+        key: receipt[key] for key in ("setup", "cache", "expressions")
+    }
     assert set(evidence.required_definitions) == {receipt["expressions"][0]["name"]}
-    assert evidence.required_definitions_payload() == receipt["expressions"][0]["native_readback"]["definitions"]
+    assert (
+        evidence.required_definitions_payload()
+        == receipt["expressions"][0]["native_readback"]["definitions"]
+    )
 
 
 def test_missing_optional_observations_stay_missing(tmp_path):
+    """Keep absent optional observations absent after decoding and encoding."""
     receipt = _prepared(tmp_path)
-    saved = PreparedEprEvidence.from_payload(receipt, evidence_root=tmp_path).saved_cache.to_payload()
+    saved = PreparedEprEvidence.from_payload(
+        receipt, evidence_root=tmp_path
+    ).saved_cache.to_payload()
     assert "frequency_control" not in saved
     assert "convergence_targets" not in saved
     assert "convergence_fields" not in saved
-    assert saved["saved_configuration_source"]["project_sha256"] != receipt["save"]["project_sha256"]
+    assert (
+        saved["saved_configuration_source"]["project_sha256"]
+        != receipt["save"]["project_sha256"]
+    )
 
 
 def test_requested_and_observed_controls_remain_distinct_raw_data(tmp_path):
+    """Retain requested and observed controls as separate unmodified records."""
     receipt = _prepared(tmp_path)
     saved = receipt["cache"]["serialized_readback"]
     saved["frequency_control"] = {
@@ -70,11 +94,13 @@ def test_requested_and_observed_controls_remain_distinct_raw_data(tmp_path):
         "observed_fields": {"MaxDeltaFreq": "2"},
         "unavailable": ["MaximumPasses"],
     }
-    saved["convergence_targets"] = [{
-        "requested_native_fields": {"IsConvergence": True},
-        "observed_fields": {"values": {}, "unavailable": ["IsConvergence"]},
-        "raw_representation_differences": [],
-    }]
+    saved["convergence_targets"] = [
+        {
+            "requested_native_fields": {"IsConvergence": True},
+            "observed_fields": {"values": {}, "unavailable": ["IsConvergence"]},
+            "raw_representation_differences": [],
+        }
+    ]
     saved["other_observation"] = {"missing": None, "raw": [True, 0, "unknown"]}
     evidence = PreparedEprEvidence.from_payload(receipt, evidence_root=tmp_path)
     assert evidence.saved_cache.to_payload() == saved
@@ -82,6 +108,7 @@ def test_requested_and_observed_controls_remain_distinct_raw_data(tmp_path):
 
 
 def test_frozen_codec_has_no_mutable_input_or_output_alias(tmp_path):
+    """Detach nested codec inputs and outputs from the frozen evidence record."""
     receipt = _prepared(tmp_path)
     expected = copy.deepcopy(receipt)
     evidence = PreparedEprEvidence.from_payload(receipt, evidence_root=tmp_path)
@@ -99,14 +126,26 @@ def test_frozen_codec_has_no_mutable_input_or_output_alias(tmp_path):
 
 @pytest.mark.parametrize("missing", ["setup", "cache", "expressions"])
 def test_required_preparation_fields_remain_required(tmp_path, missing):
+    """Reject a prepared record when any required evidence field is absent."""
     receipt = _prepared(tmp_path)
     del receipt[missing]
     with pytest.raises(RuntimeError):
         PreparedEprEvidence.from_payload(receipt, evidence_root=tmp_path)
 
 
-@pytest.mark.parametrize("damage", ["empty_items", "source", "serialized", "use_cache_for", "persisted", "required_clc"])
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "empty_items",
+        "source",
+        "serialized",
+        "use_cache_for",
+        "persisted",
+        "required_clc",
+    ],
+)
 def test_shared_consumer_rejects_existing_evidence_failures(tmp_path, damage):
+    """Preserve shared consumer rejection of incomplete or inconsistent evidence."""
     receipt = _prepared(tmp_path)
     cache = receipt["cache"]
     if damage == "empty_items":
@@ -126,9 +165,12 @@ def test_shared_consumer_rejects_existing_evidence_failures(tmp_path, damage):
 
 
 def test_saved_cache_codec_is_the_same_producer_consumer_interpretation(tmp_path):
+    """Use the same saved-cache interpretation for producer and consumer records."""
     receipt = _prepared(tmp_path)
     cache = receipt["cache"]
-    output = SavedCacheEvidence.from_payload(cache["items"], cache["serialized_readback"]).to_payload()
+    output = SavedCacheEvidence.from_payload(
+        cache["items"], cache["serialized_readback"]
+    ).to_payload()
     cache["serialized_readback"] = output
     consumer = PreparedEprEvidence.from_payload(receipt, evidence_root=tmp_path)
     assert consumer.saved_cache.to_payload() == output

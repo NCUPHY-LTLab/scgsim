@@ -1,0 +1,41 @@
+---
+title: "Circular Pad：研究設定"
+description: "Circular Pad Uniform-port 研究所記錄的固定來源與原生求解器設定。"
+scgsim-kind: "history"
+scgsim-status: "HISTORICAL"
+scgsim-id: "docs/history/curved-source-installation"
+aliases:
+  - ../../history/curved-source-installation.html
+---
+
+::: {.callout-important title="此設定已不再適用"}
+本頁描述的是已移除的設定：SCGSim `1.1.0rc1` 加上一個 Palace 分支。現在的 SCGSim 3 使用原版 Palace 0.18.1，不需要任何分支；要用它計算模態，請先依[安裝 SCGSim](../../start/install.qmd)，再照 [Palace 模態](../../guides/modes-palace.qmd)操作。本頁只說明較早的結果是如何產生的。
+:::
+
+Circular Pad Uniform-port 研究，是對一個以曲線定義邊界的圓形 pad 做 Palace Eigenmode 計算。它使用 SCGSim `1.1.0rc1`、作為模型產生器的某個 OrcaPen SC PDK 版本，以及一個 Palace 分支。只能在它自己的專案中重現。
+
+## 選擇來源與 PDK 版本 {#select-the-source-and-pdk-revisions}
+
+| 用途 | 修訂版本 |
+|---|---|
+| 產生這次執行的 PDK | [`c79b91ef882079d937fce20129f3cbd477e8438d`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/c79b91ef882079d937fce20129f3cbd477e8438d) |
+| 這次執行的 SCGSim（`1.1.0rc1`，含 `1.0.2` 沒有的曲線來源 API） | [`2eed1eb4a9bcc7b1b020feb4953d5ed27e7d7b71`](https://github.com/NCUPHY-LTLab/scgsim/tree/2eed1eb4a9bcc7b1b020feb4953d5ed27e7d7b71) |
+| 較晚的 PDK 版本，含教學 Notebook 與證據 | [`ecc90623b62e55f95afaa5a1f1048a71f81cae52`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/ecc90623b62e55f95afaa5a1f1048a71f81cae52) |
+
+教學 Notebook [`palace_eigenmode.qmd`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/src/ComponentSimulation/CircularPad/palace_eigenmode.qmd)與它的[衍生 Notebook](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/palace_eigenmode.ipynb)屬於較晚的版本，並沒有產生這次執行；它的[證據 README](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/evidence/README.md)寫明了產生器。請以這次執行的產生器與執行版本建立獨立專案：
+
+```bash
+uv init --python 3.12 curved-source-study
+cd curved-source-study
+uv add 'scgsim[palace,visualization] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@2eed1eb4a9bcc7b1b020feb4953d5ed27e7d7b71' \
+  'orpen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@c79b91ef882079d937fce20129f3cbd477e8438d' \
+  ipykernel
+```
+
+檢查：`uv run python -c "from importlib.metadata import version; print(version('scgsim'))"` 會顯示 `1.1.0rc1`。
+
+## 此曲線 Uniform 埠研究所用的原生 Palace {#native-palace-for-this-curved-uniform-port}
+
+此研究使用修訂版本 [`4e9e1b7232b4c8ca8b964be7e70f1848f578de37`](https://github.com/arfiligol/palace/tree/4e9e1b7232b4c8ca8b964be7e70f1848f578de37) 的 Palace 分支，或含有其[曲線埠範圍修正](https://github.com/arfiligol/palace/blob/4e9e1b7232b4c8ca8b964be7e70f1848f578de37/palace/utils/geodata_impl.cpp)的後續版本。Python 套件不會安裝 Palace；請把該版本的 MPI 包裝程式設為可執行檔。
+
+已發布的執行紀錄顯示，模態 1 在四次細化、五份求解與估計快照之後為 `5.573354161115 GHz`。它最終的原生指標是 `0.1186681863426`，設定值為 `0.02`；原生紀錄中也有 PCG 警告。

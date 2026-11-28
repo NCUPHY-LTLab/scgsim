@@ -1,0 +1,101 @@
+---
+title: "S-parameters with HFSS"
+description: "Prepare a two-port HFSS Driven Terminal run with lumped ports on port sheets drawn in the layout, and what the layout needs for it."
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/aedt-driven-terminal"
+aliases:
+  - ../course/aedt-driven-terminal.html
+  - ../course/aedt-driven-modal.html
+---
+
+HFSS Driven Terminal, in Ansys AEDT, returns the two-port S-parameters of a
+model over a frequency sweep, with a Touchstone file. SCGSim builds the 3D
+model from the plan, the same model Palace meshes, and puts one lumped port
+on each of two port sheets drawn in the layout. This repository holds no
+recorded result of a Driven Terminal run.
+
+[]{#ports-that-wait-for-issue-135}Lumped ports on port sheets are the only
+ports in this version: wave ports on the Region's faces and the whole HFSS
+Driven Modal solution type are not available. A request that declares one is
+refused before AEDT starts; [issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135)
+tracks them.
+
+## What the layout needs {#what-the-layout-needs}
+
+A port sheet is a small rectangle in the layout, on a port layer, that touches
+the port's signal metal at one end and its reference metal (usually ground)
+at the other. The component declares it among the ports of its
+`component_semantics`, with the metal layer it sits on. The orange sheet on
+the east edge of the pad in [First simulation's layout](../start/first-simulation.qmd#the-layout)
+is one: `square_pad_capacitor` declares it as `o_junction_lumped`, and it
+joins the pad to the ground across the 20 µm gap.
+
+A two-port network needs two such sheets. No layout of the OrcaPen SC PDK at
+the revision these guides use has two; add them to your own component. A
+port names its sheet by the name the component declares it with, qualified
+by the placed part: `chip/o_junction_lumped` for the sheet of First
+simulation's plan.
+
+## Prepare the run {#prepare-the-run}
+
+The block below is the form of a two-port request. The sheets `chip/port_1`
+and `chip/port_2` and the Net `ground` stand for your layout's; a Net is a
+named piece of metal that acts as one conductor. `plan` is your plan, made as
+in [Prepare a coplanar waveguide for AEDT](aedt-cpw-inputs.qmd).
+
+```python
+from pathlib import Path
+from scgsim.aedt import (
+    FrequencySweepSpec, HfssRunControl, prepare_hfss_driven_from_geometry,
+)
+from scgsim.geometry import LumpedPort
+
+AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
+plan.set_lumped_elements([
+    LumpedPort("chip/port_1", reference_net="ground", impedance_ohm=50.0),
+    LumpedPort("chip/port_2", reference_net="ground", impedance_ohm=50.0),
+])
+handoff = prepare_hfss_driven_from_geometry(
+    plan.prepare(),
+    aedt_version=AEDT_VERSION,
+    modeling="solid",  # or "thin_film"
+    project_name="two_port",
+    design_name="DrivenTerminal",
+    run_control=HfssRunControl(
+        "Setup1", "Sweep1", FrequencySweepSpec(4.0, 8.0, points=201)
+    ),
+    output_dir=Path(".artifacts/driven-handoff"),
+)
+print(handoff.spec_path, handoff.archive_path)
+```
+
+What the inputs mean:
+
+- Each `LumpedPort` on the plan is one port: the sheet it sits on, the Net of
+  its reference conductor (the other conductor the sheet joins is its signal)
+  and its impedance in ohms. Port 1 is the first you give, port 2 the second;
+  the two ports share one reference. The ports are the plan's, so a Palace or
+  HFSS Eigenmode study of the same plan sees them too, as loads.
+- `plan.prepare()` refuses a sheet the layout does not draw, a sheet that does
+  not join two conductors, and a `reference_net` that is neither conductor's
+  Net, naming the sheet's layer and place.
+  `prepare_hfss_driven_from_geometry` builds the model from the plan and
+  refuses a plan with other than two ports, or with a lumped element that is
+  not a port.
+- `HfssRunControl` sets the solution setup and the sweep: here 201 points from
+  4 GHz to 8 GHz. Choose the bounds and the number of points for the response
+  you need ([sweep reference](../reference/specs/aedt-runtime.qmd#hfss-driven-sweep-count)).
+- A Driven model carries no junctions, lumped RLC loads or Surface EPR; those
+  belong to [HFSS Eigenmode](modes-hfss.qmd).
+
+In AEDT the run imports the model into an empty Driven Terminal design and
+puts a lumped port on each sheet, with its terminal on the edge where the
+sheet meets the signal metal
+([reference](../reference/specs/aedt-runtime.qmd#hfss-driven-terminal-sgb)).
+Run the folder on a computer with AEDT
+([Run a prepared model](run-elsewhere.qmd#aedt-execute-the-prepared-package-locally)),
+then read it ([Convergence and reports](convergence-and-reports.qmd#aedt-read-the-sealed-family-evidence)):
+reading checks that each port was read back from the saved design on the
+sheet it was given, and returns the S-parameters in port order with the
+Touchstone file.

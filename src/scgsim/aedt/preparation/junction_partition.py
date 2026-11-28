@@ -1,20 +1,18 @@
-"""AEDT compatibility names over the shared source-domain rectangle algorithm."""
+"""Partition AEDT junctions with the shared rectangle algorithm and record them in the AEDT partition format."""
 
 from dataclasses import replace
 
-from scgsim.geometry.models.junctions import JunctionGeometry
-from scgsim.geometry.planning.junction_partition import (
-    JunctionPartitionFormat,
-    _closed_contact as _closed_contact,
-    _cross as _cross,
-    _inside_ring as _inside_ring,
-    _section as _section,
-    _plain,
-    junction_terminal_line,
-    _junction_contact_inventory as _shared_contact_inventory,
-    _junction_source_binding as _junction_source_binding,
+from scgsim.aedt.specs.epr import PlanarJunction
+from scgsim.geometry.junctions.contact import JunctionContactRequest
+from scgsim.geometry.junctions.contact import (
+    junction_contact_inventory as _shared_contact_inventory,
+)
+from scgsim.geometry.junctions.core import JunctionPartitionFormat, plain_record
+from scgsim.geometry.junctions.partition import (
     partition_junctions as _partition_junctions,
 )
+from scgsim.geometry.junctions.terminal import junction_terminal_line
+from scgsim.geometry.models.junctions import JunctionGeometry
 
 METHOD = "scgsim.aedt.junction-partition.v1"
 _FORMAT = JunctionPartitionFormat(
@@ -27,20 +25,37 @@ _FORMAT = JunctionPartitionFormat(
 )
 
 
-def _junction_contact_inventory(
+def junction_contact_inventory(
     build_input, source_polygon_id, terminal_a_net, terminal_b_net, stored_binding=None
 ):
+    """Read source contacts using the AEDT support-plane schema."""
     return _shared_contact_inventory(
         build_input,
-        source_polygon_id,
-        terminal_a_net,
-        terminal_b_net,
-        stored_binding,
-        support_schema=_FORMAT.support_schema,
+        JunctionContactRequest(
+            source_polygon_id,
+            terminal_a_net,
+            terminal_b_net,
+            stored_binding,
+            support_schema=_FORMAT.support_schema,
+        ),
+    )
+
+
+def junction_geometry(junction: PlanarJunction) -> JunctionGeometry:
+    """Pass source geometry fields without solver inductance or capacitance."""
+    return JunctionGeometry(
+        junction_id=junction.junction_id,
+        source_polygon_id=junction.source_polygon_id,
+        terminal_a_net=junction.terminal_a_net,
+        terminal_b_net=junction.terminal_b_net,
+        direction_xy=junction.direction_xy,
+        width_um=junction.width_um,
+        metadata=junction.metadata,
     )
 
 
 def partition_junctions(build_input, junctions, step):
+    """Partition junctions under the AEDT record format, reusing the common model when it already holds them."""
     if not junctions:
         return build_input
     shared = build_input.metadata.get("junction_partitions")
@@ -58,7 +73,7 @@ def partition_junctions(build_input, junctions, step):
                 raise ValueError(
                     "AEDT junction source/terminal binding differs from common model"
                 )
-            _junction_contact_inventory(
+            junction_contact_inventory(
                 build_input,
                 item.source_polygon_id,
                 item.terminal_a_net,
@@ -75,7 +90,7 @@ def partition_junctions(build_input, junctions, step):
                 item,
                 record["z_um"],
             )
-            adapted = _plain(record)
+            adapted = plain_record(record)
             adapted["shared_geometry_method"] = record["method"]
             adapted["method"] = METHOD
             adapted["support_plane"]["schema_version"] = _FORMAT.support_schema

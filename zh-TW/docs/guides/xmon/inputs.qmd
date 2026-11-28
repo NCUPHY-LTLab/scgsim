@@ -1,0 +1,105 @@
+---
+lang: zh-TW
+title: "覆晶 Xmon：共用的計畫"
+description: "由 PDK 建立覆晶 Xmon 量子位元的計畫，包含 Net 與真空區域，作為之後 Palace 與 AEDT 兩頁的唯一輸入。"
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/tutorial-xmon-input"
+execute:
+  enabled: false
+aliases:
+  - ../../tutorial-xmon-input.html
+---
+
+這個完整範例讓同一顆覆晶 Xmon 量子位元分別經過兩個求解器。本頁建立它的計畫，並準備成 `snapshot`；[Palace 頁](palace.qmd)與 [AEDT 頁](aedt.qmd)在同一個 Python 工作階段中從這裡接著做。計畫中的模型如下：
+
+![計畫準備好的覆晶 Xmon。左：上方晶片（D1）朝向下方晶片的那一面，依比例繪製：十字形 Xmon 焊墊，端到端 309.5 µm、臂寬 24.65 µm；四個耦合電極離它的末端 20 µm；周圍的接地平面；以及連接兩片晶片接地平面的八個銦凸塊。紅色標記是焊墊與接地平面之間的接面薄片。右：層疊，未依比例；兩片晶片隔著 8.2 µm 的真空間隙相對。](../../assets/xmon-flip-chip-zh.png){#fig-xmon-flip-chip}
+
+兩片各厚 500 µm 的矽晶片面對面。下方晶片（D0）的上表面有一層接地平面；上方晶片（D1）朝下的那一面有 Xmon。八個各 20 µm 見方的銦凸塊跨過 8.2 µm 的間隙，連接兩層接地平面。模型為 1060 µm 見方。接面以它的薄片表示，這片小薄片連接焊墊與 D1 接地平面：計畫在這裡放一個 11.78 nH 的電感，這是 PDK 公開 Notebook 為這顆量子位元使用的值，兩個後端頁面都從計畫讀取它。
+
+Palace 頁需要含 `palace` extra 的 SCGSim，AEDT 頁需要含 `aedt-epr` extra 的 SCGSim，兩者都需要 OrcaPen SC PDK（[安裝 SCGSim](../../start/install.qmd)）。
+
+## 畫出試片 {#build-the-component-and-named-coupon-occurrences}
+
+```python
+import gdsfactory as gf
+import orcapen_sc_pdk
+from orcapen_sc_pdk import LAYER_STACK, get_material_records
+from orcapen_sc_pdk.helpers.assembly import place_flip_chip_ground_short_bumps
+from orcapen_sc_pdk.tech import OUTER_VACUUM_THICKNESS_UM
+from scgsim.geometry import GeometryPlan, LumpedElement
+
+orcapen_sc_pdk.activate()
+gf.clear_cache()
+device = gf.get_component(
+    "kosen2024_flip_chip_xmon_qubit",
+    bump_ring_count_per_side=0,
+    qubit_pad_length=309.5,
+    qubit_pad_width=24.65,
+    qubit_gap=20.0,
+)
+coupon = place_flip_chip_ground_short_bumps(
+    device,
+    coupon_padding_um=75.0,
+    clearance_um=30.0,
+    placement_mode="corner_anchors",
+)
+component = coupon.component
+```
+
+`kosen2024_flip_chip_xmon_qubit` 畫出 Xmon、四個耦合電極與接面薄片；`bump_ring_count_per_side=0` 不放元件本身的凸塊環。`place_flip_chip_ground_short_bumps` 把它放進一個試片，也就是晶片上被模擬的那一小塊：它加上兩層接地平面，以及八個短路凸塊，每個角落兩個。試片會為放入的每個部分命名：Xmon 是 `device`，凸塊是 `short_000` 到 `short_007`。
+
+## 建立計畫 {#assign-the-final-net-map-and-prepare-one-snapshot}
+
+```python
+plan = GeometryPlan(
+    component=component,
+    root_id="chip",
+    layer_stack=LAYER_STACK,
+    material_records=get_material_records(),
+    coupon_padding_um=coupon.stack_coupon_padding_um,
+)
+for name, reference in coupon.named_instances.items():
+    plan.register_instance(f"chip/{name}", reference)
+
+plan.set_nets({
+    "xmon_pad": ("chip/device/D1_XMON_PAD",),
+    "Ground": (
+        "chip/D0_TOP_GROUND_PLANE",
+        "chip/D1_BOTTOM_GROUND_PLANE",
+        *(f"chip/device/D1_COUPLER_{index}" for index in range(1, 5)),
+        *(
+            f"chip/{name}/D0_D1_INDIUM_BUMP"
+            for name in coupon.named_instances
+            if name.startswith("short_")
+        ),
+    ),
+})
+plan.set_vacuum_region(
+    padding=(0.0, 0.0, float(OUTER_VACUUM_THICKNESS_UM))
+)
+port_name = "chip/device/o_junction_lumped"
+plan.set_lumped_elements([LumpedElement(port_name, inductance_h=11.78e-9)])
+snapshot = plan.prepare()
+```
+
+每一步決定的事：
+
+- `LAYER_STACK` 是 PDK 的雙晶片層疊（見上圖），`coupon.stack_coupon_padding_um` 是試片工具在版圖周圍選定的基板邊緣寬度。
+- `register_instance` 在計畫中為每個放入的部分命名，讓它的圖形能以 `chip/device/...` 與 `chip/short_000/...` 找到。每個具名圖形是一個 Entity。
+- `set_nets` 把 Entity 分成 Net，每個 Net 是一塊具名、作為同一個導體的金屬：
+
+  | Net | Entity |
+  |---|---|
+  | `xmon_pad` | Xmon 焊墊，`chip/device/D1_XMON_PAD` |
+  | `Ground` | 兩層接地平面、四個耦合電極與八個凸塊 |
+
+  這裡把耦合電極接地，是因為這個範例沒有讀取線或驅動線；在有這些線的元件中，它們會各自是一個 Net。
+- `set_vacuum_region` 在兩片晶片的上方與下方各加 1000 µm 的真空（`OUTER_VACUUM_THICKNESS_UM`），側面則不加。晶片之間 8.2 µm 的間隙屬於層疊，不屬於這個真空區域。
+- `set_lumped_elements` 在計畫上宣告接面一次：接面薄片 `port_name` 上、Xmon 焊墊與 D1 接地平面之間的 11.78 nH 電感，本身不帶電容，這是建模選擇。兩個後端頁面都從計畫讀取它，並在 EPR 要求中以 `port_name` 指名這個接面（[集總元件](../../reference/specs/geometry-plan.qmd#lumped-elements)）。
+
+## 接下來 {#observe-the-prepared-source-and-continue}
+
+在同一個工作階段中，接著閱讀[以 Palace 計算覆晶 Xmon](palace.qmd)或[以 AEDT 計算覆晶 Xmon](aedt.qmd)。若想在模擬前看看計畫的內容，見[檢視並保留來源輸入](../inspect-the-source.qmd)；放入的部分、Entity 與 Net 的規則見 [GeometryPlan 參考](../../reference/specs/geometry-plan.qmd#component-to-backend-geometry-contract)。
+
+這個 Xmon 元件是 OrcaPen 依 Kosen 等人 [PRX Quantum 5, 030350 (2024)](https://doi.org/10.1103/PRXQuantum.5.030350) 的量子位元自行做的參數化改編，以 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) 授權；它不是作者的光罩，尺寸是範例輸入，不是量測到的元件資料。各項設定的來源是 [PDK 為這顆量子位元準備的 Notebook](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/ComponentSimulation/Kosen2024_Xmon)。

@@ -1,0 +1,89 @@
+---
+title: "讀取一次計算：三個視圖"
+lang: zh-TW
+description: "Palace 或 AEDT 結果的執行、物理量與成本三個視圖各顯示什麼、收斂表如何排列，以及未知損耗或缺少的值如何呈現。"
+scgsim-kind: "contract"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/report-model"
+aliases:
+  - ../../report-model.html
+---
+
+計算結束後，`show_all_results()` 依你查看一次計算的順序顯示三個視圖：**可不可信**（是哪一次計算、是否收斂）、**得到什麼物理量**、**花了多少成本**。本頁是各視圖內容的參考。實際操作見[收斂與報告](../../guides/convergence-and-reports.qmd)：它宣告收斂、執行計算，並讀取一份真實報告。
+
+## 三個視圖 {#common-envelope}
+
+已解析的 Palace 計算（`ResolvedPalaceResult`）每個視圖有一個呼叫：
+
+| 呼叫 | 顯示 |
+|---|---|
+| `show_run_trustworthiness()` | 是哪一次計算、是否收斂：即[下方](#declared-convergence)的可信度報告 |
+| `show_physics_quantities()` | 電容矩陣或模態頻率，以及 Surface EPR |
+| `show_simulation_benchmark()` | 每個回合（pass）的時間與規模 |
+| `show_all_results()` | 依序顯示以上三者 |
+
+已解析的 AEDT 計算（`ResolvedRun`）有 `show_all_results()`，順序是身分（專案、設定、要求的模態、最後一個回合及是否完成）、數值依據、效能、物理量與細節；另有單獨的 `show_simulation_benchmark()` （[AEDT 的時間與記憶體](aedt-runtime.qmd#native-simulation-benchmark)）。
+
+每個視圖都接受 `theme="light"`（預設）或 `theme="dark"` 設定圖形配色，`show_all_results(theme=...)` 會把它傳下去。`show_details=True` 會另外展開完整的執行紀錄（收據、成品雜湊與長表格），不改變任何選取。接受它的是 Palace 計算的 `show_all_results`、`show_run_trustworthiness` 與 `show_simulation_benchmark`，以及 AEDT 計算的 `show_all_results` 與 `show_simulation_benchmark`；`show_physics_quantities` 與 `inspect_run_trustworthiness` 不接受。要看一次計算的完整細節，請呼叫 `show_all_results(show_details=True)`。沒有 Plotly 時仍顯示表格，並標出每張缺少的圖。
+
+`resolve_palace_result(run_dir, expected_handoff_id=...)` 只讀取已完成、且檔案與交接及收據相符的計算。失敗或只回傳一部分的計算，請用 `inspect_run_trustworthiness(run_dir)`：它顯示資料夾中有什麼，並保留計算所記錄的狀態，所以不完整的計算絕不會顯示成完成。
+
+## 可信度報告 {#declared-convergence}
+
+這是你用來定位一次 Palace 計算、判斷其收斂的視圖。它依序顯示：
+
+1. **Run Identity**：問題、路徑、近似方式、記錄的回合數，以及 MPI 與 OpenMP 數量。未完成的計算會在此註明；失敗的計算另附一則通知，說明失敗類別。
+2. **Convergence**，當模擬[宣告了](palace-electrostatic-sgb.qmd#convergence-declaration)收斂條件時：一張排列方式與 AEDT 收斂表相同的表。每一列是一個回合及其求解元素數。每一欄是一個條件，欄首是它的名稱與門檻（`C diagonal`、`≤ 0.5 %`），所以每個數字都對照上方的門檻來讀；格子裡是該條件在那個回合的數字及是否成立（第 1 回合的變化量沒有比較對象，顯示 `N/A`）。同一邊距的 Surface-EPR 條件並列在該邊距名稱之下，例如 `Surface EPR, inset 0.5 um` 之下的 `MA`、`MS` 與 `SA`：即距離間隙邊 0.5 µm 以上的那部分表面。最後一欄計算所有條件連續成立了幾個回合。
+3. **每個物理量對回合的變化**，接著是它所宣告的變化量，以對數軸呈現，門檻是虛線。變化量使用 AEDT 的名稱：電容為 `Delta %`，模態頻率為 `Max Delta Freq. %`，參與比為 `Max Percent Delta`。誤差指標圖標出宣告的 `ErrorIndicator` 門檻；沒有宣告時，標出 Palace 的 `Tol`。
+4. **Surface EPR Convergence**：每個模態或激發，每種介面類型一張圖（它們的參與比相差好幾個數量級），整個表面一條線，每個邊距各一條線；接著是宣告的變化量。
+
+一個回合是 Palace 的一次求解：第 1 回合求解輸入網格。只有前後相鄰、都讀得到的兩個回合之間才計算變化量。結果讀取如何判定 `results/palace` 中哪個資料夾是哪一個回合，見[內部實作](../../contribute/internals/report-records.qmd#pass-folders)。
+
+以 `show_run_trustworthiness(show_details=True)` 或 `show_all_results(show_details=True)` 顯示時，報告會在表格上方以一句話說明判定結果。對一次[收斂時停止](palace-electrostatic-sgb.qmd#convergence-stop)的計算，句子例如：
+
+> Converged at pass 4, of the 4 passes read (passes 1 to 4): every criterion
+> held at passes 3 to 4, 2 in a row. Last to hold: C diagonal, from pass 3. No
+> pass was read after it. SCGSim stopped Palace after pass 4: 2 of the 6 passes
+> its limit allows were not run.
+
+（這是報告原文：在第 4 回合收斂，所有條件在第 3、4 回合連續成立，最後成立的是 C diagonal；SCGSim 在第 4 回合後停止 Palace，上限允許的 6 次中有 2 次沒有執行。）
+
+沒有收斂的計算，會說明在最後讀到的回合中哪個條件不成立、它最差的數字、門檻，以及是門檻的幾倍，並以「Palace ended by itself at its limit of 6 passes.」作結。收斂時停止的計算沒有自己的最終求解：它的結果、效能與成本都是最後那個回合的。沒有完成的停止屬於失敗的計算，失敗類別為 `convergence_stop`。`ResolvedPalaceResult.convergence` 為程式提供同樣的判定。
+
+只回傳一部分的計算，`inspect_run_trustworthiness()` 對資料夾中有的回合顯示同一張表，判定會計算讀到的回合，例如「3 passes read (passes 1, 4 and 5)」。
+
+## 物理量 {#physics-quantities}
+
+每個物理量都屬於它的求解器，保有自己的單位、導體或埠的順序與失敗意義：靜電電容矩陣、模態頻率、驅動網路響應、場能參與比、Q3D 矩陣與 Q2D 的單位長度值不能互換。
+
+### Surface EPR {#eigenmode-epr-presentation}
+
+`show_epr(result, mode=...)` 為既有結果的一個模態回傳一張 Plotly 圖；它不讀檔，也不啟動求解器。對 AEDT 的自適應歷史結果（`ResolvedRun.epr_result()`），`native_pass=` 另外選擇回合；`analyze_epr` 的儲存場結果每個模態只有一次評估，所以 `mode=` 是它唯一的選擇。它把表面與體積參與比分開顯示。AEDT 把接面的電感與電容參與比一起畫在接面軸上；Palace 則顯示它帶正負號的原生埠參與比，這個值取決於相位慣例，不是 AEDT 的那一對值。每根表面長條標出擁有者、介面，以及它是整個表面還是某個邊距；滑鼠提示保留來源成員、場的取用側與損耗假設。每種介面的顏色固定：MA、MS 與 SA。
+
+在整合的 AEDT 報告中，每個要求的模態在最後一個回合都有表面擁有者排序、分開的體積與接面圖，以及一張含擁有者、介面、邊距、參與比、損耗與 inverse-Q 的表面表格。
+
+[]{#palace-margin-rows}**邊距列是彼此替代的，不是分塊。** 邊距列涵蓋超過該邊距的表面部分，所以它與整個表面那一列，以及同一表面的其他邊距列互相重疊。每一列都單獨讀，絕不相加。`show_physics_quantities()` 對每個模態或激發與每種介面，畫出最新的邊距參與比對邊距的變化。參與比為零，表示原生貢獻為零；單憑這點，不能證明某個區域被排除在幾何之外。
+
+inverse-Q 小計只計入已知的整個表面項。未知損耗計為未知，邊距列不加入。這些視圖呈現依據，不宣稱元件的總 Q 或壽命。
+
+當 Palace 回報某個模態的 Q 為無限大（`eig.csv` 中的 `+inf`）時，報告標示為 **native-reported infinite Q**（原生回報的無限大 Q），不給它有限的 Q；該模態的頻率與能量照常顯示（[Eigenmode 參考](palace-eigenmode.qmd#native-eigenmode-q)）。
+
+### 未知損耗不是零損耗 {#honesty-rule}
+
+你沒有給損耗正切時，Palace 的設定仍需要一個數字，因此寫入 `LossTan=0.0`；但 SCGSim 把損耗正切記為未知，並把那一項 inverse-Q 貢獻顯示為不可取得。你給的損耗正切若是 `0`，就是已知的零，貢獻為零。例如沒有 `loss_tangent` 的 MA 薄膜，會顯示它的參與比而沒有 inverse-Q；同一薄膜給 `loss_tangent=0`，則顯示 inverse-Q 為 0。損耗假設見 [Surface EPR](../../concepts/surface-epr.qmd)，要在完成的結果上改變它們，見[不重新求解，改變損耗假設](../../guides/offline-loss.qmd)。
+
+## 報告中的網格 {#palace-mesh-context}
+
+Palace 報告顯示計算的網格摘要（`mesh_summary()`）：尺寸配方及其設定、品質門檻與最低元素品質（minSICN，在線性網格上量測）、節點、元素與區域數量、交付網格的階數，以及邊長。Eigenmode 的自由度數字是估計值，不是 Palace 的計數；這些數字的意義見[四面體網格品質](mesh-quality.qmd)。
+
+::: {#palace-run-schemas .callout-important title="不讀取較舊格式的 Palace 執行資料夾"}
+結果讀取只讀網格清單 `schema_version` 2、Palace 索引對照 `schema_version` 3，以及獨立 EPR 結果 `scgsim.palace.epr-result.v3`。較舊格式的執行資料夾或獨立結果會被拒絕，錯誤訊息會指出它的版本。要再次讀取這類計算，請以目前的套件重新準備並重新執行。
+:::
+
+## 視圖不評判什麼 {#research-interpretation-and-retained-observations}
+
+視圖報告求解器的狀態與你的條件。結果是否回答了你的研究問題，由你判斷；請把你的條件及其任何變更與計算一起保存。如何為一項研究解讀它們，見[收斂與報告](../../guides/convergence-and-reports.qmd)。
+
+## 尚未提供 {#current-palace-scope}
+
+Palace Driven 與 Magnetostatic 的報告、Palace `domain-E.csv` 體積能量的圖，以及報告的匯出格式。

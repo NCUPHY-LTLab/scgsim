@@ -1,0 +1,62 @@
+---
+lang: zh-TW
+title: "從 AEDT 已存的場計算 EPR"
+description: "從 HFSS 本徵模態計算已儲存的場，不重新求解，再算一次模態的能量參與率。"
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/aedt-saved-fields"
+aliases:
+  - ../course/aedt-saved-fields.html
+---
+
+當你想從一次附帶 EPR 的 HFSS 本徵模態計算已儲存的場，再算一次模態的能量參與率（EPR），而不重新求解時，就用本頁：例如要取得最終場的參與率，而不是各自適應回合（pass）的參與率，或要選擇表面的場在哪裡讀取。AEDT 會開啟取回專案的副本、讀取已存的場、計算 EPR 運算式，並寫出 `results/epr/epr-result.json`，之後交給[不重新求解，改變損耗假設](offline-loss.qmd)。這個儲存庫沒有它的結果紀錄。
+
+你需要：
+
+- 一次要求了 EPR 的 HFSS 本徵模態計算的完整取回執行資料夾，例如[以 AEDT 計算覆晶 Xmon](xmon/aedt.qmd)，並已依[收斂與報告](convergence-and-reports.qmd#aedt-read-the-sealed-family-evidence)讀取過一次；只有 `.aedt` 專案檔是不夠的；
+- 執行分析的電腦上要有 AEDT 2023.2 或 2024.2、PyAEDT 1.3.0 與授權。
+
+## 取回準備時的模型 {#recover-the-exact-prepared-model}
+
+從取回的執行資料夾本身讀出模型與請求，而不是重新建立版圖：之後改過的 PDK 會建出不同的模型。
+
+```python
+import json
+from pathlib import Path
+from scgsim.aedt import parse_aedt_spec, resolve_saved_solution
+
+returned_run_dir = Path(".artifacts/returned-aedt-epr")
+spec = parse_aedt_spec(
+    json.loads((returned_run_dir / "aedt_spec.json").read_text(encoding="utf-8")),
+    base_dir=returned_run_dir,  # the request's SGB model is in its model/ folder
+)
+saved = resolve_saved_solution(returned_run_dir / "saved-solution-manifest.json")
+```
+
+請使用計算取回的那個資料夾。`parse_aedt_spec` 讀回請求：它的模型、執行設定與 EPR 請求。`resolve_saved_solution` 會在 AEDT 開啟前，確認執行清單中列出的每個已存檔案都在、而且沒有被改動；少了或改了任何一個檔案都會停下。只有要求了 EPR 的計算才會儲存這些場：一般的本徵模態計算沒有可分析的場。
+
+## 在新的分析資料夾中計算 {#evaluate-in-a-new-analysis-directory}
+
+```python
+from scgsim.aedt import analyze_epr
+
+AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
+final_epr = analyze_epr(
+    aedt_version=AEDT_VERSION,
+    saved_solution=saved,
+    model=spec.model,
+    project_name=spec.project_name,
+    design_name=spec.design_name,
+    run_control=spec.run_control,
+    epr_request=spec.epr_request,
+    output_dir=Path(".artifacts/public-xmon-saved-field-analysis"),
+)
+```
+
+`analyze_epr` 把已存的專案複製到新的 `output_dir`、開啟副本、確認它是同一個模型、設計、求解設定與回合，再從已存的場計算所要求的參與率；它既不求解，也不匯出場。取回的執行資料夾保持原狀。若場或 EPR 運算式不存在，它會失敗，而不是改用自適應歷程。`final_epr` 就是 `.artifacts/public-xmon-saved-field-analysis/results/epr/epr-result.json` 中的結果。
+
+AEDT 版本是你在這裡選的版本。若取回的計算沒有記錄是哪個版本儲存了這些場，這件事就維持未知；分析會用你選的版本執行。
+
+表面的場可以在薄膜所在的薄片上讀，也可以在薄片旁邊讀：`surface_field_selectors={group: "surface"}`（預設）或 `{group: "adjacent"}`，鍵是請求中的表面 EPR 群組。請求沒有選的群組，或其他值，都是錯誤。這個選擇不改變幾何，也不會開始求解；[執行參考](../reference/specs/aedt-runtime.qmd)說明兩種讀法，[`analyze_epr` 參考](../reference/api/analyze-epr.qmd)列出所有參數。
+
+最終場的參與率與自適應回合的參與率是不同的結果：在這裡計算的邊距只屬於這個結果，不屬於歷程。接著到[不重新求解，改變損耗假設](offline-loss.qmd#aedt-final-fields-and-adaptive-history-stay-separate)，把其他損耗正切套用到 `final_epr`。

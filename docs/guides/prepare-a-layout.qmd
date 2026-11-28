@@ -1,0 +1,215 @@
+---
+title: "Prepare a layout"
+description: "Draw the cell, then build the GeometryPlan every simulation takes: its Nets, vacuum region, junctions and Surface EPR, with one complete example."
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/working-model"
+aliases:
+  - ../course/working-model.html
+---
+
+SCGSim builds a 3D model from two things you give it: the cell you draw with
+GDSFactory, and a `GeometryPlan` that says which drawn shapes are one
+conductor and how much empty space around the chip the solver includes. This
+page builds the plan of the square pad from
+[First simulation](../start/first-simulation.qmd), one step at a time. The same
+plan goes to the [layout check](check-a-layout.qmd) and to every simulation.
+What a layout of your own must guarantee is listed on
+[Supported scope](../reference/supported-scope.qmd#layout-rules).
+
+## The example {#example}
+
+A 200 µm square pad sits in a 20 µm gap, inside the ground metal of a 1000 µm
+chip. The script draws it with the OrcaPen SC PDK and builds its plan:
+
+```python
+import gdsfactory as gf
+import orcapen_sc_pdk
+from orcapen_sc_pdk import get_material_records
+from orcapen_sc_pdk.tech import get_single_die_layer_stack
+from scgsim.geometry import GeometryPlan
+
+# 1. The cell: a 200 µm pad in a 20 µm gap, on a 1000 µm die.
+orcapen_sc_pdk.activate()
+component = gf.get_component(
+    "square_pad_capacitor", pad_side_um=200.0, gap_um=20.0, die_side_um=1000.0
+)
+
+# 2. The plan: the cell, its layer stack and its materials.
+plan = GeometryPlan(
+    component=component,
+    root_id="chip",
+    layer_stack=get_single_die_layer_stack(),
+    material_records=get_material_records(),
+    coupon_padding_um=0.0,
+)
+print(tuple(entity.semantic_id for entity in plan.entities))
+
+# 3. The Nets: which shapes act as one conductor.
+plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
+
+# 4. The vacuum region: the empty space around the chip that the solver includes.
+plan.set_vacuum_region(padding=(0.0, 0.0, 1000.0))
+
+# 5. The snapshot a simulation is given.
+snapshot = plan.prepare()
+```
+
+It prints the two shapes the plan found:
+
+```text
+('chip/PAD', 'chip/GROUND')
+```
+
+The sections below explain each step, then add a junction and Surface EPR to
+the same plan.
+
+## Draw the cell {#draw-the-cell}
+
+The cell is an ordinary GDSFactory component. SCGSim reads more from it than
+its polygons:
+
+- **Entities.** Each piece of metal is declared as an Entity, a named shape the
+  cell lists in its component semantics: here `PAD` and `GROUND`. SCGSim never
+  guesses conductors from the drawing. The PDK's cells declare their Entities;
+  a cell of your own declares them the same way
+  ([declarations](../reference/supported-scope.qmd#rules-declarations)).
+- **Layers.** Every polygon sits on a layer of the layer stack, which gives its
+  height, thickness and material.
+- **Port sheets.** A lumped port or a junction is a sheet drawn across a gap,
+  like the orange sheet on the pad's east edge in
+  [First simulation's layout](../start/first-simulation.qmd#the-layout).
+- []{#carry-a-curved-source-into-the-palace-plan}<span id="fig-circular-pad-source-layout"></span>**Curves.**
+  An arc meant to be round is declared as an arc, not only drawn as a polygon;
+  SCGSim builds lines and circular arcs, not splines
+  ([curves](../reference/supported-scope.qmd#rules-curves),
+  [source curves](../reference/specs/geometry-plan.qmd#source-curves)).
+- **The grid.** Every point lies on the layout's grid, here 1 nm. SCGSim keeps
+  a slit or edge of a few grid steps as you drew it, and the
+  [layout check](check-a-layout.qmd) refuses it.
+
+## Build the plan {#build-the-plan}
+
+[]{#change-the-source-geometry}`GeometryPlan` takes the cell and the process
+data that SCGSim does not have of its own:
+
+- `root_id="chip"` names the cell. Every Entity gets an ID under it:
+  `chip/PAD`, `chip/GROUND`.
+- `layer_stack` and `material_records` come from the PDK: each layer's
+  thickness and material, and each material's properties.
+- `coupon_padding_um` is substrate added beyond the cell's edge; `0.0` ends the
+  model at the die edge.
+
+`plan.entities` lists the Entities with these IDs. Print them before you
+assign Nets, and use them exactly as printed.
+
+### Nets {#nets}
+
+A Net is a named piece of metal that acts as one conductor. `set_nets` maps
+each Net name to the Entity IDs it holds; here each Net holds one Entity.
+Several Entities can be one Net: in a flip-chip layout, both ground planes and
+every indium bump that joins them are one `Ground` Net. Metal of two different
+Nets must not touch: SCGSim reports it as a short, and never merges conductors
+because they touch. A simulation's terminals and grounds name these Nets.
+
+If the cell places other cells, register each placement before `set_nets`,
+a parent before its children: `plan.register_instance("chip/device",
+reference)`. Their Entities then have IDs such as `chip/device/PAD`. The
+[Xmon inputs](xmon/inputs.qmd) build such an assembly.
+
+### Vacuum region {#vacuum-region}
+
+The vacuum region is the box of empty space around the chip that the solver
+includes. `padding=(0.0, 0.0, 1000.0)` µm adds nothing in x and y, so the box
+ends at the die edge, and reaches 1000 µm above and below the chip. A plan
+without one, from this call or from a `VACUUM_REGION` layer of the stack, is
+refused by the check and by every simulation. Because the box ends at the
+layout's extent, draw what sets that extent, such as the die outline or a
+ground plane; a conductor that reaches it at a single point is refused
+([why](../reference/known-geometry-problems.qmd#boundary-point-pinch)).
+
+### Junctions and other lumped elements {#junctions}
+
+A lumped element is a part of the device the model does not draw as metal: a
+Josephson junction as its inductance, a resistor, a capacitor, or the port a
+measurement drives. It sits on a port sheet the component draws, here the
+square pad's `chip/o_junction_lumped`, between the pad and the ground. A
+capacitance run does not need one; a resonator study with a junction does.
+Declare it on the plan by its sheet's name:
+
+```python
+from scgsim.geometry import LumpedElement
+
+plan.set_lumped_elements([LumpedElement("chip/o_junction_lumped", inductance_h=10e-9)])
+```
+
+`prepare()` finds the two conductors the sheet lands on and their Nets, and
+refuses a sheet that does not land on two conductors of two Nets, naming its
+layer and place. Every simulation of the plan reads the element:
+[Lumped elements](../reference/specs/geometry-plan.qmd#lumped-elements)
+describes the records, and [Palace: resonant modes](modes-palace.qmd) runs a
+study with this junction.
+
+### Surface EPR {#surface-epr}
+
+Surface EPR (surface energy participation ratio) is the share of the electric
+energy that sits in a thin lossy film on a surface: metal–air (`MA`),
+metal–substrate (`MS`) or substrate–air (`SA`). It can be evaluated on the
+whole surface and on the part of it at least a given distance, the inset
+margin, from the gap edges. SCGSim cuts those margins into the model as bands,
+so Surface EPR is set on the plan, before `prepare()`. This request uses the
+PDK's film presets and two margins:
+
+```python
+from orcapen_sc_pdk import (
+    get_interface_preset_records,
+    validate_interface_preset_records,
+)
+
+presets = validate_interface_preset_records(get_interface_preset_records())
+plan.set_surface_epr(
+    {
+        kind: {
+            "thickness": presets[f"LiteratureCentral_{kind}"]["thickness"],
+            "permittivity": presets[f"LiteratureCentral_{kind}"]["permittivity"],
+            "loss_tangent": presets[f"LiteratureCentral_{kind}"]["loss_tangent"],
+            "inset_margins_um": (0.5, 1.0),
+        }
+        for kind in ("MA", "MS", "SA")
+    }
+)
+snapshot = plan.prepare()
+```
+
+`(0.5, 1.0)` asks for rows of each surface from 0.5 µm and from 1.0 µm away
+from the gap edges, besides the whole surface. Each band must be at least 10
+grid steps wide, 0.01 µm on this grid. [Surface EPR](../concepts/surface-epr.qmd)
+explains the margins; the
+[Eigenmode contract](../reference/specs/palace-eigenmode.qmd#surface-epr-margins)
+lists every key.
+
+`prepare()` returns a snapshot, a frozen copy of the plan. A simulation given a
+snapshot does not see later changes to the plan: change the plan, then call
+`prepare()` again.
+
+## Check the plan {#check-the-plan}
+
+Before you set up a simulation, run the [layout check](check-a-layout.qmd) on
+the plan. It builds the model each simulation would build and refuses what the
+mesher cannot use, quickly and without meshing.
+
+## When you change something {#decide-whether-a-rerun-is-needed}
+
+[]{#change-the-physical-model}[]{#change-a-solver-request}What you redo
+depends on what you change:
+
+| You change | Then |
+|---|---|
+| A shape, a layer, Net membership, the vacuum region, a junction or Surface EPR | Change the plan, call `prepare()`, check it, and give the simulation the new snapshot; then mesh and solve again |
+| A terminal, ground or port of the simulation, or the quantity you compute | Prepare the simulation again from `mesh()` on, and solve |
+| Mesh controls, solver settings or the [convergence declaration](convergence-and-reports.qmd#declare-convergence) | Prepare again from the step the setting belongs to, and solve |
+| The loss assumptions of a finished Eigenmode EPR result | No new solve: [change the loss assumptions](offline-loss.qmd) |
+| The margins evaluated on fields an AEDT run saved | No new solve: [analyze the saved fields](saved-fields.qmd), if the run saved them |
+
+Keep each result with the settings it came from, so that a later comparison can
+say what changed.

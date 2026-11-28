@@ -1,0 +1,144 @@
+---
+title: "能量參與率與 Surface EPR"
+description: "模態能量有多少比例落在各材料、介面與接面；MA、MS、SA；Surface EPR 列與邊距條帶，附 SimplePad 的數字；以及參與率乘以損耗正切得到的 Q 貢獻。"
+lang: zh-TW
+scgsim-kind: "concept"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/eigenmode-epr"
+aliases:
+  - ../eigenmode-epr.html
+resources:
+- ../images/sgb-concept/*.html
+- ../images/sgb-concept/plotly.min.js
+---
+
+能量參與率（EPR）告訴你：一個共振模態的電能，有多少比例落在每種材料、表面與接面。把某個比例乘上那裡的損耗正切，就得到這個通道對模態損耗 $1/Q$ 的貢獻。
+
+舉例來說，[第一個模擬](../start/first-simulation.qmd)的焊墊加上 10 nH 接面，有一次 Palace 執行紀錄（[執行紀錄](https://github.com/NCUPHY-LTLab/scgsim/issues/84#issuecomment-6789403273)；Route B，最多兩次細化，不是收斂結果）。200 µm 焊墊下方的金屬－基板介面，占了 5.135702 GHz 模態 1 能量的 $p = 7.741675\times10^{-5}$。用 PDK 為這種介面提供的文獻中位損耗正切 $\tan\delta = 4.698936\times10^{-4}$，得到 $1/Q = 3.637764\times10^{-8}$：光是這一面，就把 $Q$ 限制在約 $2.749\times10^{7}$。本頁逐一說明這句話的每個部分。
+
+[Minev 等人的能量參與方法](https://arxiv.org/abs/2010.00620)以線性化 Josephson 電路的模態作為量子化的輸入。SCGSim 計算電磁參與率與損耗貢獻；它不計算非線性 Hamiltonian、Kerr 係數或量子位元壽命。
+
+## 模態的三種檢視 {#workflow-and-state-contract}
+
+| 檢視 | 能量算在哪裡 | 告訴你什麼 | SimplePad，模態 1 |
+|---|---|---|---|
+| 體積 | 模型中的一塊介電質體積 | 電能有多少在這種材料裡 | Si 0.9213201881，真空 0.0786798119 |
+| 表面 | 假設在介面上的一層有損耗薄膜 | 場對這個介面的取樣有多強 | 19 列，介於 $10^{-9}$ 與 $10^{-4}$ 之間（[見下文](#rows)） |
+| 接面 | 宣告的線性化電路元件（埠上的電感） | 這個元件如何參與模態 | −0.9938724458（Palace 的正負號慣例） |
+
+體積與表面不是同一份能量預算的兩半：表面值是用介面上的場，估算一層沒有畫進模型的薄膜的能量。
+
+## 物理量與正規化 {#quantities-and-normalization}
+
+參與率是一份能量除以參考能量，沒有單位：
+
+$$
+p_i = \frac{U_i}{U_{\mathrm{norm}}}.
+$$
+
+分子與分母要一起看。AEDT 的分母是模型各物理區域的電能，加上宣告的接面電容能量；Palace 用它自己的電能表與電容能量表。表面薄膜的能量只當分子，從不加回這些分母。各項物理量的定義見[表面與接面公式](../reference/specs/aedt-runtime.qmd#surface-estimates-and-junction-normalization)。
+
+兩個求解器的接面數字性質不同。Palace 回報有正負號的埠參與率，正負號隨模態相位而定；AEDT 的電感 $p_L$ 與電容 $p_C$ 是非負的能量比。不要把它們當成可互換的數字比較。晶片周圍的外框也是模型的一部分，見[網格與數值](model-and-numerics.qmd#define-the-physical-model)。
+
+## MA、MS 與 SA {#interfaces}
+
+Surface EPR 在三種介面上假設一層有損耗的薄膜，每種介面依它分隔的兩種材料命名：
+
+- **MA，金屬－空氣**：金屬接觸真空的地方。Route A 薄片的 MA，是它面向真空的那一側。
+- **MS，金屬－基板**：金屬接觸基板的地方。Route A 薄片的 MS，是它面向基板的那一側。
+- **SA，基板－空氣**：裸露的基板接觸真空的地方，主要在導體之間的間隙中。
+
+在 @fig-surface-epr-bands 上圖的單一晶粒焊墊上，MA 是金屬的頂面與側壁，MS 在金屬下方。哪一側是哪種介面，取決於相鄰的材料，而不是高度：覆晶的上方晶粒上，金屬掛在基板下方，所以 MS 在金屬上方，MA 在金屬下方。兩側都是真空的薄片（位在基板的孔洞上方）兩側都是 MA。
+
+薄膜不畫進幾何。你在 `plan.prepare()` 之前用 `plan.set_surface_epr(specs)`，為每種介面給定薄膜的厚度、介電常數與損耗正切；SCGSim 再用介面上的場估算薄膜的能量。PDK 為這三種介面提供文獻中位預設值；它們是由已發表的萃取結果整理出的合成模型值，不是量測值：
+
+| 預設值 | 厚度 | 相對介電常數 | 損耗正切 |
+|---|---|---|---|
+| `LiteratureCentral_MA` | 0.002 µm | 10.0 | 0.0033 |
+| `LiteratureCentral_MS` | 0.002 µm | 11.4 | 4.698936 × 10⁻⁴ |
+| `LiteratureCentral_SA` | 0.002 µm | 6.635 | 0.0017 |
+
+## Surface EPR 列 {#rows}
+
+一個**列**，是某個表面在每個模態下的一個參與率：某一種介面、某個 Entity 的某一類面（頂面、底面、側壁、薄片或介面）。列名說明它是哪一面，例如 `MS::chip/PAD__bottom` 是焊墊下方的金屬－基板介面。以下是上述執行中，焊墊與基板表面的整面列：
+
+| 列 | 位置 | 參與率 | 用預設值算出的 $1/Q$ |
+|---|---|---|---|
+| `MA::chip/PAD__top` | 焊墊頂面 | 5.884456 × 10⁻⁷ | 1.941871 × 10⁻⁹ |
+| `MA::chip/PAD__sidewall` | 焊墊側壁 | 1.645220 × 10⁻⁷ | 5.429225 × 10⁻¹⁰ |
+| `MS::chip/PAD__bottom` | 焊墊下方 | 7.741675 × 10⁻⁵ | 3.637764 × 10⁻⁸ |
+| `SA::…__interface` | z = 0 的裸露基板，即焊墊周圍 20 µm 的間隙 | 8.013336 × 10⁻⁵ | 1.362267 × 10⁻⁷ |
+
+SA 列的完整名稱是 `SA::D0_SUBSTRATE|VACUUM_REGION__interface`：Entity `D0_SUBSTRATE` 與 `VACUUM_REGION` 之間的介面。接地金屬有自己的列；Route A 則以 `__sheet` 列取代頂面與底面。Palace 與 AEDT 都會評估你要求的每種介面的所有列，側壁也包含在內；規格中的 `face_kinds` 可以把一種介面限制在某些類型的面。
+
+## 邊距條帶與邊距列 {#surface-distance-band-correction}
+
+模態的場在間隙邊緣最強，緊貼邊緣的那條表面，占了這個表面參與率的一大部分。在上述執行中，焊墊邊緣 0.5 µm 寬的那一圈，只占焊墊下方面積的 1 %，卻占了它 MS 參與率的 29 %。這條帶也是數字最受網格影響的地方：同一塊焊墊的一次細化研究紀錄中，整面 MS 參與率每次細化都在增加，而增加都來自距間隙邊 1 µm 內的那一圈（[數字](model-and-numerics.qmd#refinement)）。**邊距**（inset margin）讓你在不含這一圈的情況下讀取表面。
+
+**間隙邊**是導體面向裸露基板的邊。邊距 $m$ 選取表面上距最近間隙邊至少 $m$ µm 的部分。SCGSim 的幾何建構器 SGB 依你給的邊距，把表面切成**條帶**，求解器因此只需對一般的面積分。邊距 0.5 與 1 µm 時，焊墊頂面會分成三個條帶（@fig-surface-epr-bands 下圖）：
+
+![SimplePad 間隙處的三種介面（上圖），以及邊距 0.5 與 1 µm 時焊墊頂面的條帶與列（下圖）。](../assets/concepts/surface-epr-bands.zh-TW.svg){#fig-surface-epr-bands}
+
+| 條帶 | 距間隙邊 | 焊墊頂面上的面積 |
+|---|---|---|
+| 0 | 0 到 0.5 µm | 399 µm² |
+| 1 | 0.5 到 1 µm | 397 µm² |
+| 2 | 大於 1 µm | 39,204 µm² |
+
+每個邊距會在整面列旁多一個**邊距列**。這些列互相重疊：每一列涵蓋從它的邊距往內的所有條帶。
+
+| `MS::chip/PAD__bottom` 的列 | 條帶 | 面積 | 上述執行中的參與率 |
+|---|---|---|---|
+| 整面 | 0、1、2 | 40,000 µm² | 7.741675 × 10⁻⁵ |
+| 邊距 0.5 µm | 1、2 | 39,601 µm² | 5.497995 × 10⁻⁵ |
+| 邊距 1 µm | 2 | 39,204 µm² | 4.616724 × 10⁻⁵ |
+
+**同一個表面的列不可相加。** 它們是同一個表面的三種讀法，不是三個部分：相加會把條帶 2 算三次。兩列相減，得到兩個邊距之間的部分，這裡是 7.741675 × 10⁻⁵ − 5.497995 × 10⁻⁵ = 2.24368 × 10⁻⁵，也就是條帶 0。不同表面的列（例如焊墊的頂面與底面）不會重疊。
+
+距離只從間隙邊起算：晶粒邊緣、兩個導體相接的邊，以及旁邊只有真空的邊，都不是間隙邊。沒有間隙邊的面，例如基板底面，不切條帶，只有整面列。側壁從不切條帶。
+
+在更小的例子上規則也一樣：[版圖如何變成模型](geometry.qmd)中的左側金屬及其孔洞，邊距 0.125 與 0.25 µm。孔洞露出基板，所以孔洞的邊也是間隙邊，孔洞周圍同樣形成條帶。
+
+::: {#fig-surface-epr-planned-bands .askr-wide-figure}
+```{=html}
+<iframe src="../images/sgb-concept/planned-bands.html" title="左側金屬距間隙邊 0.125 與 0.25 µm 的條帶，外緣與孔洞周圍都有" width="100%" height="640" style="border:0;" loading="lazy"></iframe>
+```
+
+SGB 為左側金屬規劃的條帶：距間隙邊 0.125 µm 以內、0.125 到 0.25 µm，以及 0.25 µm 以外。三者面積加起來是金屬的 9 µm²。
+:::
+
+::: {#fig-surface-epr-native-bands .askr-wide-figure}
+```{=html}
+<iframe src="../images/sgb-concept/native-bands-3d.html" title="建出的 3D 模型中的條帶邊界曲線" width="100%" height="640" style="border:0;" loading="lazy"></iframe>
+```
+
+同一組條帶在建出的 3D 模型中：條帶邊界是模型的曲線，網格會沿著它們建立。
+:::
+
+要求邊距的方法是在規格中加入 `inset_margins_um`，見 [Palace 模態指南](../guides/modes-palace.qmd#surface-epr-margin-rows)。鍵、限制與列名見[邊距參考](../reference/specs/palace-eigenmode.qmd#surface-epr-margins)；版圖要切條帶必須遵守的規則見[支援範圍](../reference/supported-scope.qmd#rules-margins)。
+
+## 從參與率到損耗 {#surface-identity-masks-and-loss-assumptions}
+
+損耗正切已知的介電質，對模態損耗的貢獻是
+
+$$
+Q_i^{-1} = p_i\tan\delta_i.
+$$
+
+SimplePad 的模態 1 搭配 PDK 的文獻中位預設值：
+
+| 列 | $p$ | $\tan\delta$ | $1/Q = p\tan\delta$ | 只看這一面的 $Q$ |
+|---|---|---|---|---|
+| `MA::chip/PAD__top` | 5.884456 × 10⁻⁷ | 0.0033 | 1.941871 × 10⁻⁹ | 5.150 × 10⁸ |
+| `MS::chip/PAD__bottom` | 7.741675 × 10⁻⁵ | 4.698936 × 10⁻⁴ | 3.637764 × 10⁻⁸ | 2.749 × 10⁷ |
+| `SA::…__interface` | 8.013336 × 10⁻⁵ | 0.0017 | 1.362267 × 10⁻⁷ | 7.341 × 10⁶ |
+
+兩個因子都重要。這裡基板－空氣列的參與率和焊墊下方的金屬－基板列差不多，但損耗正切大 3.6 倍，所以貢獻的 $1/Q$ 多 3.7 倍。薄膜的厚度、介電常數與損耗正切是你的假設，不是由版圖決定的事實。
+
+不同表面的貢獻可以相加，得到已知損耗小計。這個小計只涵蓋你評估過、且損耗正切已知的表面；它不是元件的總 $Q$ 或 $T_1$，也不包含你沒有模擬的任何機制。損耗正切恰好為零，是已知的零貢獻。你沒有給的損耗正切是未知數，所以即使參與率已知，那個表面的 $1/Q$ 仍然無法取得；同樣地，沒有計算的能量不等於零能量。
+
+求解器自己的 $Q$ 回答的是另一個問題：它反映求解器本身模擬的損耗，而 $p\tan\delta$ 是把損耗歸給你選的薄膜模型。Palace 可能回報無限大的原生 $Q$，但這不代表元件沒有損耗；見[原生 Q 參考](../reference/specs/palace-eigenmode.qmd#native-eigenmode-q)。
+
+## 探索結果 {#explore-a-result}
+
+先從[選擇模擬目標](../start/choose-a-simulation.qmd#getting-started)跑一個共振與 EPR 筆記本，再用[離線損耗分析](../guides/offline-loss.qmd)修改已記錄結果的損耗假設，不必重新求解。[報告參考](../reference/specs/report-model.qmd#eigenmode-epr-presentation)說明結果如何呈現整面值、邊距值與無法取得的值。

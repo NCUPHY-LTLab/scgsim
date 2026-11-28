@@ -1,0 +1,29 @@
+---
+title: "範圍與來源"
+description: "SCGSim 計算什麼、把什麼留給別人，以及它的程式碼從哪裡來。"
+lang: zh-TW
+scgsim-kind: "project"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/goals-and-upstream"
+aliases:
+  - ../goals-and-upstream.html
+---
+
+SCGSim 為超導晶片版圖準備 Palace 與 Ansys AEDT 模擬，並讀回它們的結果。它最初從 [gsim](https://github.com/gdsfactory/gsim) 衍生而來，現在維護自己的幾何建構器、求解器介接與結果讀取器。
+
+## 範圍 {#scope}
+
+SCGSim 以 Palace 的 Electrostatic 與 Eigenmode，以及 AEDT 的 HFSS Eigenmode、HFSS Driven Terminal、Q3D 與 Q2D 進行計算；每種計算的輸入與回傳的量列在[支援的計算](../reference/supported-calculations.qmd)。Palace 的 Driven、Magnetostatic 與 Transient 尚未實作，Meep 不在範圍內。公開的元件 Notebook 屬於 OrcaPen SC PDK。
+
+SCGSim 不會安裝原生求解器，不會自行執行準備好的交接，也不會因為計算完成就把結果當成準確的：物理假設由研究的作者選擇，物理量也由作者解讀。
+
+## SCGSim 從哪裡來 {#starting-source-identities}
+
+| 來源 | 版本 | 修訂版本 |
+|---|---|---|
+| gsim 的下游發行版 | `0.2.0+scq.1` | `8f5dc6c05255d003a9c6d8959537bcf8068379d3` |
+| 歷史上的語意幾何建構器（SGB） | | `e74a343154c6b19b6ba32d6fb297e700cfe08ff2` |
+
+這些識別資訊只記錄程式碼是從哪裡衍生的。SCGSim 不匯入它們、不退回使用它們，也不承諾與它們的 API 相容：幾何由樹內的 `scgsim.geometry.sgb` 建立。
+
+[]{#v1-acceptance-and-delivery}其他貢獻者頁面依閱讀順序列在[為 SCGSim 貢獻](index.qmd#reading-order)。

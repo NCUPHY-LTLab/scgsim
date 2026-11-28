@@ -1,0 +1,31 @@
+---
+title: "Research"
+description: "Model-specific numerical studies, comparisons, and reproducibility notes."
+sidebar: contribute
+scgsim-kind: "research"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/research/index"
+aliases:
+  - ../../research/index.html
+---
+
+One study is here: [Geometry build performance](geometry-build/index.qmd). It
+shows that SGB, SCGSim's geometry builder, derives and validates the model of
+a chip with 20,000 features in 61.6 s as one serial process, that its time
+grows almost linearly with the number of features, and that writing the model
+directly is about 80 times faster than building it through the Gmsh API at
+2,000 features. Each case ran once, on one machine.
+
+[]{#research-and-tool-documentation}A research page gives one model's question, settings, results and
+interpretation, conclusion first. What SCGSim supports in general is in
+[Reference](../../reference/index.qmd), not here.
+
+## Studies
+
+| Study | Question | Scope |
+|---|---|---|
+| [Geometry build performance](geometry-build/index.qmd) | How do SGB's build time and memory grow with chip size, what does writing the model directly save over the Gmsh API, and what do the checks cost? | Random polygon layouts of up to 20,000 features, one machine, each case run once |
+
+The setup of an older Palace Eigenmode study of a circular pad is kept under
+History: [Circular Pad: study setup](../history/curved-source-installation.qmd).
+It no longer applies to SCGSim 3.

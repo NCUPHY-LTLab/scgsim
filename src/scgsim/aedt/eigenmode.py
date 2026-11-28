@@ -1,80 +1,78 @@
-"""One mutable Eigenmode preparation facade over the AEDT owners."""
+"""``EigenmodeSim``: configure an Eigenmode or EPR run on a geometry plan and prepare its handoff.
+
+The source is a ``GeometryPlan`` snapshot only (``set_plan``): it carries the layout, the stack with its vacuum
+region, the plan's Surface-EPR specs and its lumped elements.  ``prepare_handoff`` builds the plan's SGB model
+for AEDT (:func:`prepare_sgb_model`), with each lumped element as HFSS Eigenmode realizes it
+(:func:`~scgsim.aedt.preparation.lumped_elements.hfss_eigenmode_inputs`), and writes the HFSS Eigenmode handoff
+that carries it (issue #67); ``prepared_model`` is then the model in that handoff.
+"""
 
 from __future__ import annotations
 
-import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
-from scgsim.geometry import (
-    GeometryBuildInput,
-    GeometryPlanSnapshot,
-    InputSummary,
-    build_gds_stack_geometry_input,
-    summarize_geometry_input,
+from scgsim.aedt.epr.models import (
+    EprResult,
 )
-from scgsim.semantics.epr import film_assumptions
-
-from .epr.analysis import reanalyze_epr
-from .preparation.planar import prepare_planar_geometry_input, validate_geometry_workers
 from scgsim.aedt.specs.epr import (
     EprAnalysisRequest,
     ExpressionCacheConvergence,
     ExpressionCacheConvergenceSet,
-    PlanarJunction,
-    SurfaceEprSpec,
 )
-from scgsim.aedt.epr.models import (
-    EprResult,
+from scgsim.geometry import (
+    GeometryPlanSnapshot,
+    InputSummary,
+    summarize_geometry_input,
 )
-from scgsim.aedt.specs.common import (
-    LumpedRlc,
+from scgsim.geometry.source.plan import GeometryPlan, simulation_plan
+
+from .drc import (
+    SimulationDrcReport,
+    check_eigenmode_model,
+    run_geometry_stage,
 )
-from scgsim.aedt.specs.geometry import (
-    PreparedPlanarGeometry,
-)
-from .preparation.handoff import HandoffPlan
+from .epr.reanalysis import reanalyze_epr
 from .preparation.geometry import prepare_hfss_eigenmode_from_geometry
+from .preparation.handoff import HandoffPlan
+from .preparation.lumped_elements import HfssLumpedInputs, hfss_eigenmode_inputs
+from .preparation.sgb_handoff import SGB_MODEL_DIR
+from .preparation.sgb_model import PreparedSgbModel, prepare_sgb_model
 from .presentation.epr import show_epr
 from .results.resolve import ResolvedRun, resolve_results
 from .specs.common import AedtResources
-from .specs.modeling import Modeling, _modeling
 from .specs.hfss import EigenmodeRunControl
+from .specs.modeling import Modeling, modeling_from_value
 from .versions import normalize_aedt_version
 
 
 @dataclass
 class EigenmodeSim:
-    """Configure ordinary and EPR Eigenmode on one body-first HFSS source."""
+    """Configure ordinary and EPR Eigenmode on one ``GeometryPlan`` snapshot, given by ``set_plan``."""
 
     modeling: Modeling
     aedt_version: str = field(kw_only=True)
-    component: Any | None = None
-    build_input: GeometryBuildInput | None = None
-    stack: Mapping[str, Any] | None = None
     output_dir: Path | None = None
     project_name: str | None = None
     design_name: str | None = None
     run_control: EigenmodeRunControl | None = None
     resources: AedtResources | None = None
-    geometry_workers: int | None = None
-    surface_contributions: tuple[SurfaceEprSpec, ...] = ()
-    surface_defaults: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
-    junctions: tuple[PlanarJunction, ...] = ()
-    lumped_rlcs: tuple[LumpedRlc, ...] = ()
     epr_request: EprAnalysisRequest | None = None
-    expression_convergence: ExpressionCacheConvergence | ExpressionCacheConvergenceSet | None = None
-    prepared_geometry: PreparedPlanarGeometry | None = field(default=None, init=False)
+    expression_convergence: (
+        ExpressionCacheConvergence | ExpressionCacheConvergenceSet | None
+    ) = None
+    prepared_model: PreparedSgbModel | None = field(default=None, init=False)
     handoff_plan: HandoffPlan | None = field(default=None, init=False)
     _plan_snapshot: GeometryPlanSnapshot | None = field(
         default=None, init=False, repr=False
     )
 
     def __post_init__(self) -> None:
-        _modeling(self.modeling)
+        """Normalize the public modeling selector at construction time."""
+        modeling_from_value(self.modeling)
 
     def __setattr__(self, name: str, value: Any) -> None:
         if name == "aedt_version":
@@ -84,94 +82,33 @@ class EigenmodeSim:
         object.__setattr__(self, name, value)
 
     def _invalidate_model(self) -> None:
-        self.prepared_geometry = None
+        self.prepared_model = None
         self.handoff_plan = None
 
-    def set_geometry(self, component: Any | GeometryBuildInput) -> None:
-        if self._plan_snapshot is not None:
-            raise ValueError(
-                "GeometryPlan owns the paired source; use set_plan(new_snapshot) or a new Sim"
-            )
-        if isinstance(component, GeometryBuildInput):
-            self.build_input, self.component = component, None
-        elif callable(getattr(component, "write_gds", None)):
-            self.component, self.build_input = component, None
-        else:
-            raise TypeError(
-                "geometry must be a Component with write_gds or GeometryBuildInput"
-            )
-        self._plan_snapshot = None
-        self._invalidate_model()
-
     def set_plan(self, snapshot: GeometryPlanSnapshot) -> None:
-        """Consume one immutable normalized source and its paired stack."""
+        """Bind the prepared ``GeometryPlan`` snapshot the model is built from, and discard the prepared model.
+
+        The snapshot brings the plan's vacuum region (AEDT's Region), Surface-EPR specs and lumped elements
+        (``GeometryPlan.set_vacuum_region``, ``set_surface_epr``, ``set_lumped_elements``).
+        """
         if not isinstance(snapshot, GeometryPlanSnapshot):
             raise TypeError("set_plan requires a GeometryPlanSnapshot")
-        trial = EigenmodeSim(modeling=self.modeling, aedt_version=self.aedt_version)
-        trial.set_stack(snapshot.stack)
-        build_input = snapshot.geometry_input
-        self.component = None
-        self.build_input = build_input
-        self.stack = trial.stack
         self._plan_snapshot = snapshot
         self._invalidate_model()
 
-    def set_stack(self, stack: Mapping[str, Any] | str | Path) -> None:
-        if self._plan_snapshot is not None:
-            raise ValueError(
-                "GeometryPlan owns the paired source; use set_plan(new_snapshot) or a new Sim"
-            )
-        if isinstance(stack, Mapping):
-            payload = dict(stack)
-        elif isinstance(stack, (str, Path)):
-            source = Path(stack)
-            if not source.is_file():
-                raise FileNotFoundError(source)
-            payload = json.loads(source.read_text(encoding="utf-8"))
-        else:
-            raise TypeError("stack must be a mapping or JSON path")
-        if not isinstance(payload, Mapping):
-            raise TypeError("stack JSON root must be a mapping")
-        for key in ("materials", "solution_regions", "layers", "metadata"):
-            if key not in payload:
-                raise ValueError(f"stack lacks {key!r}")
-        materials = payload["materials"]
-        regions = payload["solution_regions"]
-        layers = payload["layers"]
-        metadata = payload["metadata"]
-        if (
-            not isinstance(materials, Mapping)
-            or not isinstance(regions, Mapping)
-            or not isinstance(layers, Sequence)
-            or isinstance(layers, (str, bytes))
-            or not isinstance(metadata, Mapping)
-        ):
-            raise TypeError(
-                "stack materials, solution_regions, and metadata must be mappings; layers must be a sequence"
-            )
-        if any(not isinstance(item, Mapping) for item in materials.values()):
-            raise TypeError("stack materials must contain mappings")
-        if any(not isinstance(item, Mapping) for item in regions.values()):
-            raise TypeError("stack solution_regions must contain mappings")
-        if any(not isinstance(item, Mapping) for item in layers):
-            raise TypeError("stack layers must contain mappings")
-        if any(
-            record.get("material_id", semantic_id) not in materials
-            for semantic_id, record in regions.items()
-        ):
-            raise ValueError("stack solution region references an unknown material")
-        if any(
-            record.get("material_id") not in materials
-            for record in layers
-            if "material_id" in record
-        ):
-            raise ValueError("stack layer references an unknown material")
-        detached = json.loads(json.dumps(payload, allow_nan=False))
-        self.stack = detached
-        self._plan_snapshot = None
-        self._invalidate_model()
+    @property
+    def surface_epr_specs(self) -> dict[str, dict[str, Any]] | None:
+        """The normalized Surface-EPR specs of the bound plan, None when it has none or none is bound.
+
+        With specs, their inset margins become bands of the SGB model and each spec's rows are selected in
+        AEDT; without them, neither.
+        """
+        if self._plan_snapshot is None:
+            return None
+        return self._plan_snapshot.surface_epr_specs
 
     def set_output_dir(self, path: str | Path) -> None:
+        """Set the resolved output directory and invalidate any prepared handoff."""
         if not isinstance(path, (str, Path)):
             raise TypeError("output_dir must be a path string or Path")
         resolved = Path(path).expanduser().resolve()
@@ -185,9 +122,8 @@ class EigenmodeSim:
         design_name: str,
         run_control: EigenmodeRunControl | None = None,
         resources: AedtResources | None = None,
-        geometry_workers: int | None = None,
     ) -> None:
-        """Declare the native model identity and optional complete solve setup."""
+        """Declare native model identity and an optional complete solve setup."""
         if (
             not isinstance(project_name, str)
             or not project_name.strip()
@@ -199,74 +135,19 @@ class EigenmodeSim:
             raise ValueError("design_name must be non-empty text")
         if run_control is not None and not isinstance(run_control, EigenmodeRunControl):
             raise TypeError("run_control must be EigenmodeRunControl or None")
-        _modeling(self.modeling)
+        modeling_from_value(self.modeling)
         if resources is not None and not isinstance(resources, AedtResources):
             raise TypeError("resources must be AedtResources or None")
-        validate_geometry_workers(geometry_workers)
         self.project_name, self.design_name, self.run_control = (
             project_name,
             design_name,
             run_control,
         )
-        self.resources, self.geometry_workers = resources, geometry_workers
+        self.resources = resources
         self.handoff_plan = None
 
-    def set_surface_epr(
-        self,
-        *,
-        contributions: Sequence[SurfaceEprSpec] = (),
-        defaults: Mapping[str, Mapping[str, Any]] | None = None,
-    ) -> None:
-        if isinstance(contributions, (str, bytes)):
-            raise TypeError("contributions must be SurfaceEprSpec records")
-        selected = tuple(contributions)
-        if any(not isinstance(item, SurfaceEprSpec) for item in selected):
-            raise TypeError("contributions must be SurfaceEprSpec records")
-        if len({item.contribution_id for item in selected}) != len(selected):
-            raise ValueError("surface contribution IDs must be unique")
-        if defaults is None:
-            normalized: dict[str, dict[str, Any]] = {}
-        elif not isinstance(defaults, Mapping) or set(defaults) - {"MA", "MS", "SA"}:
-            raise ValueError("surface defaults must be keyed by MA, MS, or SA")
-        else:
-            normalized = {
-                kind: film_assumptions(update, partial=True)
-                for kind, update in defaults.items()
-            }
-        resolved = tuple(
-            replace(
-                item,
-                **{
-                    name: value
-                    for name, value in normalized.get(item.interface_kind, {}).items()
-                    if name in {"loss_tangent", "source", "preset"}
-                    and getattr(item, name) is None
-                },
-                _legacy_payload=False,
-            )
-            for item in selected
-        )
-        self.surface_contributions, self.surface_defaults = resolved, normalized
-        self._invalidate_model()
-
-    def add_lumped_rlc(self, treatment: LumpedRlc) -> None:
-        """Apply an electrical treatment to an explicitly declared neutral support."""
-        if not isinstance(treatment, LumpedRlc):
-            raise TypeError("treatment must be LumpedRlc")
-        if treatment.support_id in {item.support_id for item in self.lumped_rlcs}:
-            raise ValueError("support already has an RLC treatment")
-        self.lumped_rlcs = (*self.lumped_rlcs, treatment)
-        self._invalidate_model()
-
-    def add_junction(self, junction: PlanarJunction) -> None:
-        if not isinstance(junction, PlanarJunction):
-            raise TypeError("junction must be PlanarJunction")
-        if junction.junction_id in {item.junction_id for item in self.junctions}:
-            raise ValueError("junction ID is already configured")
-        self.junctions = (*self.junctions, junction)
-        self._invalidate_model()
-
     def set_epr_request(self, request: EprAnalysisRequest | None) -> None:
+        """Set the optional EPR request and discard a stale handoff plan."""
         if request is not None and not isinstance(request, EprAnalysisRequest):
             raise TypeError("request must be EprAnalysisRequest or None")
         self.epr_request = request
@@ -275,54 +156,24 @@ class EigenmodeSim:
     def set_expression_cache_convergence(
         self, control: ExpressionCacheConvergence | ExpressionCacheConvergenceSet | None
     ) -> None:
-        if control is not None and not isinstance(control, (ExpressionCacheConvergence, ExpressionCacheConvergenceSet)):
-            raise TypeError("control must be a unit expression control, collection, or None")
+        """Set the optional expression-cache convergence control."""
+        if control is not None and not isinstance(
+            control, (ExpressionCacheConvergence, ExpressionCacheConvergenceSet)
+        ):
+            raise TypeError(
+                "control must be a unit expression control, collection, or None"
+            )
         self.expression_convergence = control
         self.handoff_plan = None
 
-    def _source_input(self) -> GeometryBuildInput:
-        if self._plan_snapshot is not None:
-            return self._plan_snapshot.geometry_input
-        if self.build_input is not None:
-            return self.build_input
-        if self.component is None or self.stack is None:
-            raise ValueError("set_geometry() and set_stack() are required")
-        with TemporaryDirectory() as source_dir:
-            directory = Path(source_dir)
-            gds_path = directory / "design.gds"
-            stack_path = directory / "design.stack.json"
-            try:
-                self.component.write_gds(gds_path)
-            except TypeError:
-                self.component.write_gds(str(gds_path))
-            stack_path.write_text(
-                json.dumps(dict(self.stack), sort_keys=True), encoding="utf-8"
-            )
-            prepared = build_gds_stack_geometry_input(
-                gds_file=gds_path, stack_file=stack_path
-            )
-        metadata = dict(prepared.metadata)
-        metadata.pop("gds_file", None)
-        metadata.pop("stack_file", None)
-        return replace(prepared, metadata=metadata)
-
     def input_summary(self) -> InputSummary:
-        """Show configured normalized inputs without writing GDS or preparing HFSS."""
-
-        if self._plan_snapshot is not None:
-            source, stack = (
-                self._plan_snapshot.geometry_input,
-                self._plan_snapshot.stack,
-            )
-        elif self.build_input is not None and self.stack is not None:
-            source, stack = self.build_input, self.stack
-        else:
-            raise ValueError(
-                "input_summary requires a GeometryPlan snapshot or an already-"
-                "normalized GeometryBuildInput with stack; normalize a raw "
-                "Component explicitly first"
-            )
-        data = summarize_geometry_input(source, prepared_stack=stack).data
+        """Show the bound plan's normalized input and the AEDT settings without writing GDS or preparing HFSS."""
+        if self._plan_snapshot is None:
+            raise ValueError("input_summary() requires set_plan(plan.prepare()) first")
+        data = summarize_geometry_input(
+            self._plan_snapshot.geometry_input,
+            prepared_stack=self._plan_snapshot.stack,
+        ).data
         data["backend"] = {
             "name": "aedt",
             "aedt_version": self.aedt_version,
@@ -335,13 +186,8 @@ class EigenmodeSim:
             "resources": None
             if self.resources is None
             else self.resources.to_payload(),
-            "geometry_workers": self.geometry_workers,
-            "surface_contributions": [
-                item.to_payload() for item in self.surface_contributions
-            ],
-            "surface_defaults": self.surface_defaults,
-            "junctions": [item.to_payload() for item in self.junctions],
-            "lumped_rlcs": [item.to_payload() for item in self.lumped_rlcs],
+            "surface_epr_specs": self.surface_epr_specs,
+            "lumped_elements": _summarized_elements(self._plan_snapshot),
             "epr_request": (
                 None if self.epr_request is None else self.epr_request.to_payload()
             ),
@@ -354,46 +200,93 @@ class EigenmodeSim:
         return InputSummary(data)
 
     def prepare_handoff(self) -> HandoffPlan:
-        source_stack = (
-            self._plan_snapshot.stack if self._plan_snapshot is not None else self.stack
-        )
+        """Build the plan's SGB model for AEDT, then write the HFSS Eigenmode handoff that carries it."""
+        snapshot = self._plan_snapshot
         if (
-            source_stack is None
+            snapshot is None
             or self.output_dir is None
             or self.project_name is None
             or self.design_name is None
         ):
             raise ValueError(
-                "geometry, stack, output_dir, project_name, and design_name are required"
+                "set_plan(), output_dir, project_name, and design_name are required"
             )
-        geometry = self.prepared_geometry
-        if geometry is None:
-            source = self._source_input()
-            geometry = prepare_planar_geometry_input(
-                source,
-                prepared_stack=source_stack,
-                modeling=self.modeling,
-                junctions=self.junctions,
-                lumped_rlcs=self.lumped_rlcs,
-                contributions=self.surface_contributions,
+        with TemporaryDirectory(prefix="scgsim-aedt-model-") as build_dir:
+            model = self.prepared_model
+            if model is None:
+                model = _eigenmode_model(
+                    snapshot,
+                    hfss_eigenmode_inputs(snapshot),
+                    self.modeling,
+                    Path(build_dir),
+                )
+            plan = prepare_hfss_eigenmode_from_geometry(
+                aedt_version=self.aedt_version,
+                model=model,
+                project_name=self.project_name,
+                design_name=self.design_name,
+                run_control=self.run_control,
+                output_dir=self.output_dir,
+                epr_request=self.epr_request,
+                expression_convergence=self.expression_convergence,
+                resources=self.resources,
             )
-        plan = prepare_hfss_eigenmode_from_geometry(
-            aedt_version=self.aedt_version,
-            modeling=self.modeling,
-            geometry=geometry,
-            project_name=self.project_name,
-            design_name=self.design_name,
-            run_control=self.run_control,
-            output_dir=self.output_dir,
-            epr_request=self.epr_request,
-            expression_convergence=self.expression_convergence,
-            geometry_workers=self.geometry_workers,
-            resources=self.resources,
-        )
-        self.prepared_geometry, self.handoff_plan = geometry, plan
+        # The build folder is gone; the model now lives in the handoff, which travels with it.
+        self.prepared_model = replace(model, model_dir=plan.run_dir / SGB_MODEL_DIR)
+        self.handoff_plan = plan
         return plan
 
+    @classmethod
+    def simulation_drc(
+        cls,
+        plan: GeometryPlan,
+        *,
+        modeling: Modeling,
+    ) -> SimulationDrcReport:
+        """Check that this simulation can build its AEDT model of ``plan``, without AEDT, and return the report.
+
+        ``plan`` is the ``GeometryPlan`` the simulation will be given, unprepared: the check prepares it, as
+        ``set_plan(plan.prepare())`` is given it, and leaves the caller's plan as it was.  Its Nets,
+        instances, coupon padding, vacuum region, Surface-EPR specs, port sheets and lumped elements are used
+        as the simulation uses them; the check adds none of its own.  A plan without ``set_vacuum_region`` is
+        refused with the error ``prepare_handoff()`` raises, since AEDT's Region is the plan's vacuum box.
+
+        The check runs the geometry half of ``prepare_handoff()`` and of the HFSS import, everything before
+        AEDT is started (:mod:`scgsim.aedt.drc`): the plan's SGB model on the route ``modeling`` realizes
+        (``"thin_film"`` Route A, ``"solid"`` Route C) with its STEP and import guard, the boundaries the
+        import plans on the guarded faces, and the selection of every Surface-EPR row.  A step that refuses
+        raises the error that step raises in the simulation, unchanged.  Each lumped element of the plan is
+        realized as ``prepare_handoff()`` realizes it, its sheet cut to its central rectangle; an authored sheet
+        that carries none is left out.  The bands of the plan's Surface-EPR specs are cut as
+        ``prepare_handoff()`` cuts them; a plan without specs gets no bands.  The report's ``lumped_elements``
+        says, one line each, what HFSS makes of each element.
+
+        AEDT meshes the model itself, so the report has a geometry stage only.  The model is built in a
+        temporary folder that is removed.  A pass means that model can be built and imported with these
+        lumped elements; it does not promise the other ``modeling``, nor that AEDT meshes or solves it.
+
+        Args:
+            plan: The ``GeometryPlan`` the simulation will be given, before ``prepare()``.
+            modeling: ``"solid"`` or ``"thin_film"``, as ``EigenmodeSim`` takes it; there is no default.
+
+        Raises:
+            TypeError: ``plan`` is not a ``GeometryPlan``.
+            ValueError: ``modeling`` is not ``"solid"`` or ``"thin_film"``, or a step of the pipeline
+                refuses the plan.
+        """
+        plan = simulation_plan(plan, f"{cls.__name__}.simulation_drc")
+        # The modeling is checked before the plan is prepared, so a refused one costs no preparation.
+        modeling = modeling_from_value(modeling)
+        snapshot = plan.prepare()
+        lumped = hfss_eigenmode_inputs(snapshot)
+        report = run_geometry_stage(
+            lambda folder: _eigenmode_model(snapshot, lumped, modeling, folder),
+            check_eigenmode_model,
+        )
+        return replace(report, lumped_elements=lumped.report)
+
     def resolve_results(self, run_dir: str | Path | None = None) -> ResolvedRun:
+        """Resolve completed result evidence from the plan or explicit run path."""
         if run_dir is None:
             if self.handoff_plan is None:
                 raise ValueError("prepare_handoff() or an explicit run_dir is required")
@@ -407,6 +300,7 @@ class EigenmodeSim:
         surface_defaults: Mapping[str, Mapping[str, Any]] | None = None,
         group_overrides: Mapping[str, Mapping[str, Any]] | None = None,
     ) -> EprResult:
+        """Reanalyze a detached EPR result with presentation-only overrides."""
         return reanalyze_epr(
             result, surface_defaults=surface_defaults, group_overrides=group_overrides
         )
@@ -419,4 +313,32 @@ class EigenmodeSim:
         native_pass: int | None = None,
         theme: str = "light",
     ) -> Any:
+        """Display one detached EPR result without running the solver."""
         return show_epr(result, mode=mode, native_pass=native_pass, theme=theme)
+
+
+def _eigenmode_model(
+    snapshot: GeometryPlanSnapshot,
+    lumped: HfssLumpedInputs,
+    modeling: Modeling,
+    folder: Path,
+) -> PreparedSgbModel:
+    """The plan's SGB model for HFSS Eigenmode in ``folder``: its lumped elements ``lumped`` and its Surface-EPR bands."""
+    return prepare_sgb_model(
+        lumped.build_input,
+        prepared_stack=snapshot.stack,
+        modeling=modeling,
+        output_dir=folder,
+        junctions=lumped.junctions,
+        lumped_rlcs=lumped.lumped_rlcs,
+        surface_epr_specs=snapshot.surface_epr_specs,
+    )
+
+
+def _summarized_elements(snapshot: GeometryPlanSnapshot) -> list[dict[str, Any]]:
+    """The plan's lumped elements as ``input_summary()`` shows them, each with what HFSS Eigenmode makes of it."""
+    realizations = hfss_eigenmode_inputs(snapshot).realizations
+    return [
+        {**record.to_payload(), "realization": realizations[record.name]}
+        for record in snapshot.lumped_elements
+    ]

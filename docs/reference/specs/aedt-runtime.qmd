@@ -1,0 +1,421 @@
+---
+title: "AEDT: what runs and what comes back"
+description: "The AEDT versions SCGSim drives, the choice between solid and thin_film, what each HFSS, Q3D and Q2D calculation needs and returns, and the controls for stopping a Q3D run and for running HFSS EPR on another host."
+scgsim-kind: "contract"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/specs/aedt-runtime"
+aliases:
+  - ../../specs/aedt-runtime.html
+---
+
+SCGSim prepares an AEDT study on your machine, Ansys AEDT solves it, and
+SCGSim reads back what it returned. This page says which AEDT versions it
+drives, the one modeling choice you make (`solid` or `thin_film`), what each
+calculation needs and returns, and how to stop a Q3D run or solve HFSS EPR on
+another host. The guides walk through each calculation:
+[capacitance with Q3D](../../guides/capacitance-q3d.qmd),
+[modes with HFSS](../../guides/modes-hfss.qmd),
+[S-parameters with HFSS](../../guides/s-parameters-hfss.qmd) and
+[line parameters with Q2D](../../guides/line-parameters-q2d.qmd).
+How the runtime works inside (record formats, readback, the junction cut) is
+on [AEDT runtime internals](../../contribute/internals/aedt-runtime.qmd).
+
+## How a run goes {#one-shared-lifecycle}
+
+1. **Prepare.** A preparation call writes a *handoff*: a folder with the
+   model, the request (`aedt_spec.json`) and a run script. Nothing is solved
+   and AEDT is not started. The calls are `EigenmodeSim.prepare_handoff()`
+   for HFSS Eigenmode, `prepare_hfss_driven_from_geometry(...)` for Driven
+   Terminal, `prepare_q3d_from_geometry(...)` for Q3D and
+   `prepare_handoff(spec=...)` for Q2D.
+2. **Run.** On a host with AEDT and its license:
+
+   ```sh
+   python -m scgsim.aedt.run --handoff <run-dir>/metadata/aedt_handoff_metadata.json --execute
+   ```
+
+   The run opens its own AEDT Desktop, builds the model, solves, exports the
+   results, saves the project and closes the Desktop. It writes a *receipt*,
+   the record of what ran and what came out.
+3. **Read.** `resolve_results(run_dir)` checks the returned folder against its
+   receipt and returns a `ResolvedRun`; `show_all_results()` shows it.
+
+A run that is missing a native result or a file the receipt names is a failed
+run; SCGSim does not fill the gap. [Run a prepared model](../../guides/run-elsewhere.qmd)
+covers copying a handoff to another host and back.
+
+### AEDT version {#aedt-version-selection}
+
+Every AEDT request and handoff takes `aedt_version="2023.2"` or
+`aedt_version="2024.2"`. There is no default, and SCGSim never falls back from
+one release to the other. Both use PyAEDT 1.3.0, with Python 3.12 or 3.13, and
+the AEDT Desktop runs on the same host as SCGSim. The receipt records the
+version AEDT reports, next to the one you asked for.
+
+Superconductors of the PDK become perfect conductors: a solid uses AEDT's
+`pec` material with Solve Inside off; a sheet is a Perfect E boundary in HFSS
+and a `ThinConductor` of the film's thickness in Q3D. Every
+other material uses its exact AEDT library name from the PDK; SCGSim invents no
+material properties.
+
+### Build the model without solving {#aedt-model-only-preparation}
+
+To look at the AEDT model before you pay for a solve, prepare with
+`run_control=None` and run with `--prepare-only`:
+
+```sh
+python -m scgsim.aedt.run --handoff <run-dir>/metadata/aedt_handoff_metadata.json --execute --prepare-only
+```
+
+AEDT builds the model and its assignments, reads them back, saves the project
+and closes; it does not mesh or solve. Read the result with
+`resolve_prepared_model(run_dir)`, which returns a `PreparedModel`. It is a
+prepared model, not a result: `resolve_results()` refuses it. A later solve
+needs a new handoff. This works for Q3D, HFSS Eigenmode (EPR included) and
+HFSS Driven Terminal.
+
+## Solid or thin_film {#aedt-solid-thin-film}
+
+Every HFSS and Q3D request names `modeling="solid"` or `modeling="thin_film"`;
+there is no default. The choice decides how the metal films enter the model.
+
+- **`solid`** keeps every film as a volume of its real thickness. Use it when
+  the film thickness matters to the field, or to compare with a Route B Palace
+  model. (In SCGSim's geometry builder this is Route C: the conductor volumes
+  stay in the model.)
+- **`thin_film`** replaces each film of the layer stack by a zero-thickness
+  sheet at the face it sits on, and removes the film's thickness from the
+  stack, so everything above it moves down by that thickness. Bumps and posts
+  stay solids. Use it to match a Route A Palace model, or when the films are
+  thin next to the gaps. A thin Q3D sheet still carries the film's thickness
+  as a `ThinConductor`.
+
+For example, take a flip-chip stack with two 0.1 µm aluminium films and a
+bump between them, heights in µm:
+
+| Part | `solid` | `thin_film` |
+|---|---|---|
+| Bottom substrate | −500 to 0 | −500 to 0 |
+| Bottom film | 0 to 0.1, a volume | a sheet at z = 0 |
+| Bump | 0.1 to 10.1 | 0 to 10.0 |
+| Top film | 10.1 to 10.2, a volume | a sheet at z = 10.0 |
+| Top substrate | 10.2 to 510.2 | 10.0 to 510.0 |
+
+Under `thin_film` the metal-to-metal gap stays 10.0 µm, and the two substrates
+come 0.2 µm closer. The outlines, holes, materials and Net names are the same
+in both. The film thickness of the model is separate from the thickness of a
+Surface-EPR film (`film_thickness_m` in `plan.set_surface_epr`), which is a
+loss assumption of its own. [Physical representation](physical-representation.qmd)
+gives the profiles behind these two choices, and
+[Route A and Route B](../../concepts/routes.qmd) explains the routes.
+
+## What each calculation needs and returns {#solver-specific-contracts}
+
+Every 3D calculation solves the SGB model of a `GeometryPlan` snapshot: SCGSim
+builds the model Palace would mesh, writes it as a STEP file, and AEDT imports
+it. Q2D takes a cross-section you describe instead.
+
+| Calculation | You give | You get back |
+|---|---|---|
+| HFSS Eigenmode | The plan, `modeling`, and an `EigenmodeRunControl` with the number of modes and the lowest frequency; optionally junctions, RLCs and an EPR request | Mode frequencies, native Q and convergence; with EPR, participation per mode and pass |
+| HFSS Driven Terminal | The plan, `modeling`, two lumped Terminal ports on port sheets of the plan, and an `HfssRunControl` with its frequency sweep | Terminal S-parameters as CSV and Touchstone |
+| Q3D | The plan, `modeling`, the Q3D type of every Net, and a `MatrixRunControl` | The capacitance and conductance matrix (`results/q3d/c_matrix.csv`) |
+| Q2D | Rectangles of the cross-section and their conductor groups, and a `MatrixRunControl` | Per-unit-length C, G, L and R in one file |
+
+### Run controls {#aedt-family-setup-controls}
+
+The run controls are typed records; their fields are the AEDT setup values.
+
+| Record | Fields (defaults) | Unit |
+|---|---|---|
+| `EigenmodeRunControl` | `setup_name`, `minimum_frequency_ghz`, `num_modes`, `maximum_passes`, `maximum_delta_frequency_percent`, `minimum_passes` (1), `minimum_converged_passes` (1), `percent_refinement` (30) | GHz; percent |
+| `HfssRunControl` | `setup_name`, `sweep_name`, `sweep` (a `FrequencySweepSpec`), `maximum_passes` (99), `minimum_passes` (1), `minimum_converged_passes` (1), `percent_refinement` (30), `maximum_delta_s` (0.02) | delta-S is a ratio |
+| `FrequencySweepSpec` | `start_ghz`, `stop_ghz`, `points` (20000) | GHz |
+| `MatrixRunControl` | `setup_name`, `frequency_ghz`, `maximum_passes`, `convergence_percent` (1.0), `minimum_passes` (1), `minimum_converged_passes` (1), `percent_refinement` (30) | GHz; percent |
+| `AedtResources` | `cores`, `ram_limit_percent` (1 to 100) | |
+
+[]{#hfss-driven-sweep-count}`points` is the number of sweep samples you
+choose. It takes a whole number, such as `20000` or `20000.0`; `20000.5` is
+refused, not rounded. SCGSim reads back exactly that many points.
+
+### Port sheets, junctions and RLCs {#hfss-shared-lumped-support}
+
+What sits on a port sheet is the plan's: each lumped element of
+`plan.set_lumped_elements` ([Lumped elements](geometry-plan.qmd#lumped-elements)),
+on the sheet it names. HFSS makes of each one:
+
+| On the plan | HFSS Eigenmode | HFSS Driven Terminal |
+|---|---|---|
+| `LumpedElement` with an inductance and no resistance | a junction: a Lumped RLC of its L and C (C = 0 when none is given), with junction participation; its EPR id is its sheet's name | refused, naming the element |
+| any other `LumpedElement` | a parallel Lumped RLC of its R, L and C, a linear circuit element with no junction participation | refused, naming the element |
+| `LumpedPort` | a parallel Lumped RLC of its impedance, a load | a lumped Terminal port, in the plan's order |
+
+Each sheet is cut to the rectangle between its two conductors, as Palace cuts
+it ([How a junction is cut](#aedt-automatic-junction-partition)). A sheet the
+plan declares nothing on is not in the model.
+
+AEDT keeps only the letters, digits and `_` of a name, so a Net named
+`chip/A` becomes `chip_A` in AEDT. Two Nets whose names become the same, such
+as `chip/A` and `chip_A`, are refused before AEDT starts, with both names; so
+are two junctions or two RLCs whose names collide. Nothing is renamed.
+
+### HFSS Driven Terminal {#hfss-driven-terminal-sgb}
+
+Declare two `LumpedPort`s on the plan, with one shared reference Net, and
+prepare the run with `prepare_hfss_driven_from_geometry(plan.prepare(), modeling=..., ...)`.
+Port 1 is the first `LumpedPort`; each port's AEDT name is its sheet's name
+with every character other than letters, digits and `_` made `_`. Each port
+sheet joins two conductors: the one in its `reference_net` is the reference,
+the other the signal, where the Terminal goes. A Driven model carries no
+junctions, RLCs or Surface-EPR specs: a `LumpedElement` on the plan is
+refused, and the plan's Surface-EPR specs are not read. The run returns the S-parameters of the declared sweep in
+port order, as CSV and as Touchstone.
+
+Driven Modal and wave ports are not available; see [Not supported](#current-exclusions).
+
+### HFSS Eigenmode and EPR {#eigenmode-saved-fields-and-surface-epr-direction}
+
+`EigenmodeSim(modeling=..., aedt_version=...)` takes the plan with `set_plan`,
+the setup with `set_eigenmode`, and optionally `set_epr_request`; the
+junctions and lumped RLCs are the plan's lumped elements. Surface EPR is the plan's
+(`plan.set_surface_epr(specs)` before `prepare()`): its inset margins are cut
+into the model as bands. Every Surface-EPR row of the declared types is
+integrated over all its faces, side walls included, unless the spec's
+`face_kinds` leaves them out. The [HFSS modes guide](../../guides/modes-hfss.qmd) runs
+the calls in order.
+
+`EprAnalysisRequest` chooses what is reported: `surface_epr_groups` (every
+group when `None`), `junction_ids` and `bulk_domain_ids`. Every domain and
+junction stays in the normalization, whatever is reported.
+
+To compute EPR again from fields AEDT saved, without solving again, use
+[`analyze_epr`](../api/analyze-epr.qmd). It opens AEDT, so it needs a license.
+[]{#public-epr-candidate-surface}All of these take the one `PreparedSgbModel`
+of the plan (`EigenmodeSim.prepared_model`).
+
+#### Converge on an EPR quantity {#epr-expression-cache-convergence}
+
+By default HFSS stops refining when the mode frequencies settle
+(`maximum_delta_frequency_percent`). `set_expression_cache_convergence` adds a
+participation as a further criterion: AEDT then stops only when the frequency
+and every selected participation change by less than their criteria. This
+example asks for the MA and MS participation of mode 1 beyond the 0.5 µm
+margin, each within 5 % from pass to pass:
+
+```python
+from scgsim.aedt import (
+    ExpressionCacheConvergence,
+    ExpressionCacheConvergenceSet,
+    NormalizedSurfaceEprTotal,
+)
+
+sim.set_expression_cache_convergence(
+    ExpressionCacheConvergenceSet(
+        controls=(
+            ExpressionCacheConvergence(
+                mode=1,
+                target=NormalizedSurfaceEprTotal("MA", "requested_margin", 0.5),
+                criterion=5.0,
+                use_relative_convergence=True,
+            ),
+            ExpressionCacheConvergence(
+                mode=1,
+                target=NormalizedSurfaceEprTotal("MS", "requested_margin", 0.5),
+                criterion=5.0,
+                use_relative_convergence=True,
+            ),
+        )
+    )
+)
+```
+
+[]{#independent-expression-cache-convergence-targets}The EPR request must
+report that mode and that margin. Each target is its own criterion; they are
+never summed. With `use_relative_convergence=True` the criterion is AEDT's
+**Max Percent Delta** in percent (`5.0` is 5 %); with `False` it is **Max
+Delta** in the quantity's own units. Pass one `ExpressionCacheConvergence` for
+a single target, or `None` for none. A `NativeExpressionDefinition` target
+takes your own Fields Calculator steps instead of a participation. AEDT
+documents the rule in its
+[expression convergence reference](https://ansyshelp.ansys.com/public/Views/Secured/Electronics/v242/en/Subsystems/HFSS/Content/HFSS/SpecifyingExpressionsforAdaptiveConvergence.htm).
+
+#### How a junction is cut {#aedt-automatic-junction-partition}
+
+AEDT puts a junction's inductance on a rectangle, and every other lumped
+element on the same kind of rectangle. SCGSim cuts the drawn sheet into two
+conductor ends, each joined to its terminal, and one
+full-width central rectangle that carries the whole inductance and
+capacitance. The sheet must have a clear full-width corridor between its two
+terminals, touching no other metal; otherwise preparation stops and names the
+junction. The cut rule and its checks are in
+[the internals](../../contribute/internals/aedt-runtime.qmd#aedt-automatic-junction-partition).
+
+![The drawn sheet and the prepared pieces: the existing A and B terminals (pale), the added conductor ends (darker) and the central RLC rectangle.](../../assets/junction-partition-generic.svg){fig-alt="Generic authored sheet with pale existing terminal metal, darker added conductor ends, and the central RLC rectangle." width="95%"}
+
+### Q3D {#q3d-sgb-model}
+
+[]{#q3d-extraction-and-region-ground-candidate}`prepare_q3d_from_geometry(snapshot, ...)`
+takes the snapshot, `modeling`, the Q3D type of every Net (`net_types`, keyed
+by Net ID: `"Signal"` or `"Ground"`) and the Nets that are physically ground
+(`physical_ground_nets`); the [Q3D guide](../../guides/capacitance-q3d.qmd)
+shows the call. The plan needs a vacuum region: Q3D's Region is the plan's
+vacuum box. Q3D extracts C and G only.
+
+`Q3dSpec.grounded_region_net` chooses the outer boundary; it is a field of a
+`Q3dSpec` you build and pass to `prepare_handoff`, and
+`prepare_q3d_from_geometry` leaves it `None`. `None` leaves the Region open.
+A name makes SCGSim cover the six faces of the Region with
+perfect-conductor sheets assigned to a new ground Net of that name, which must
+not be the name of a Net of the model.
+
+### Q2D {#q2d-native-combined-matrix-export}
+
+A Q2D run returns one file, `results/q2d/rlgc_matrix.csv`, with the
+per-unit-length capacitance (C), conductance (G), inductance (L) and
+resistance (R) matrices; `result.physics_results()` gives its rows.
+
+## Convergence is recorded, not judged {#hfss-convergence-observations}
+
+[]{#q2d-q3d-convergence-observations}SCGSim records what AEDT reports for
+every adaptive run: whether it converged, the target, the last change and the
+passes. It does not fail a run because the last change is above your target,
+or because it ended at a pass count other than your maximum. A real failure
+stays a failure: a crash, a solve that ran out of memory or time, a failed
+save, a missing or damaged file. Whether the result is good enough for your
+study is your judgement; [Convergence and reports](../../guides/convergence-and-reports.qmd)
+shows how to read it.
+
+## Stop or abort a Q3D run {#q3d-user-requested-stopabort-and-save}
+
+A long Q3D solve can be ended early and saved, from another process on the
+same Linux host:
+
+- `scgsim.aedt.request_q3d_stop_and_save(handoff)` asks AEDT for a clean stop:
+  the current pass finishes;
+- `scgsim.aedt.request_q3d_abort_and_save(handoff)` aborts the current work.
+
+From the command line:
+
+```sh
+python -m scgsim.aedt.run --handoff <run-dir>/metadata/aedt_handoff_metadata.json --stop-and-save
+python -m scgsim.aedt.run --handoff <run-dir>/metadata/aedt_handoff_metadata.json --abort-and-save
+```
+
+Run one of them while the run started with `--execute` is solving; the two
+cannot be combined. When AEDT has
+stopped and the project is saved, the receipt status is `normal_stop_saved` or
+`abort_saved`. That is a saved project, not a finished solve:
+`resolve_results()` does not read it as a result. If SCGSim cannot confirm
+that AEDT stopped, or the save fails, the run fails and the Desktop is left
+open for you.
+
+[]{#q3d-native-build-only-execution}A Q3D handoff can also be built without
+solving, as in [Build the model without solving](#aedt-model-only-preparation).
+
+## Solve HFSS EPR on another host {#prepared-native-hfss-epr-batch}
+
+An HFSS EPR study can be solved by AEDT's batch solver on a host without a
+Desktop session, for example a compute node. It has three steps on two kinds
+of host:
+
+| Step | Host | What it needs |
+|---|---|---|
+| Package | Your workstation with SCGSim and AEDT | A prepare-only EPR run folder |
+| Solve | The solver host | The same AEDT release, its command-line solver and a license; no SCGSim, no PyAEDT |
+| Collect | Your workstation | The returned package and attempt, complete |
+
+```sh
+# 1. Package one prepared model (workstation).
+python -m scgsim.aedt.batch package \
+  --prepared-run "$PREPARED_RUN" --output "$PACKAGE_DIR" \
+  --solver-executable "$AEDT_SOLVER" --cores "$AEDT_CORES" \
+  --ram-limit-percent "$AEDT_RAM_LIMIT_PERCENT"
+
+# 2. Solve (solver host; the package's own script needs only Python).
+python "$PACKAGE_DIR/run_batch.py" solve \
+  --package "$PACKAGE_DIR" --output "$ATTEMPT_DIR"
+
+# 3. Collect the full adaptive history and saved-field EPR (workstation).
+python -m scgsim.aedt.batch collect \
+  --package "$PACKAGE_DIR" --attempt "$ATTEMPT_DIR" \
+  --output "$COLLECTED_RUN_DIR"
+```
+
+`--cores` is a positive whole number and `--ram-limit-percent` a whole number
+from 1 to 99; `--dependency` may be repeated. The same steps are Python calls:
+`prepare_native_batch`, `run_native_batch` and `collect_native_batch`. Bring
+back the whole package and attempt, with the `.aedt` project and its
+`.aedtresults` folder; a frequency export alone cannot be collected. One
+package holds one model; [AEDT: parameter sweep on HPC](../../guides/hpc-sweep.qmd)
+runs many.
+
+## Time and memory of a run {#native-simulation-benchmark}
+
+Every completed AEDT solve records the times, memory and mesh sizes AEDT
+reports for each stage and pass. `ResolvedRun.show_simulation_benchmark(theme="light")`
+shows them as cards, a table and, where AEDT reports adaptive values, curves;
+`theme="dark"` suits a dark notebook. A value AEDT does not report stays
+missing, never zero. AEDT reports memory per task, so a peak is the largest
+task's, not the whole host's.
+
+## How EPR is normalized {#surface-estimates-and-junction-normalization}
+
+The energy participation of a part of the model is its energy divided by one
+normalization energy $U_{norm}$: the electric energy in every solution domain,
+$U_E=\epsilon_0/2\sum_D\int_D\epsilon_r|E|^2dV$, plus the capacitive energy of
+every junction, $U_{norm}=U_E+\sum_j U_{C,j}$. The thin-film surface energies
+are estimated from the field at the surface and are not added to
+$U_{norm}$. With peak phasors, film thickness $t$, film relative permittivity
+$\epsilon_f$ and substrate relative permittivity $\epsilon_s$:
+
+$$
+U_{MA}=\frac{\epsilon_0 t}{2\epsilon_f}\int |E_{n,air}|^2\,dA,
+\quad
+U_{MS}=\frac{\epsilon_0 t\epsilon_s^2}{2\epsilon_f}
+\int |E_{n,substrate}|^2\,dA,
+$$
+
+$$
+U_{SA}=\frac{\epsilon_0 t}{2}\int
+\left(\epsilon_f|E_{t,air}|^2+\frac{|E_{n,air}|^2}{\epsilon_f}\right)dA.
+$$
+
+A junction's voltage is the field along its direction, averaged over the
+width $w$ of its sheet, with $\hat{\ell}$ the unit vector from terminal A to B:
+
+$$
+V=\frac{1}{w}\int_{sheet}E\!\cdot\!\hat{\ell}\,dA.
+$$
+
+With the convention $e^{+i\omega t}$ and $\omega=2\pi\operatorname{Re}(f)$,
+$I_L=V/(i\omega L)$, $U_L=L|I_L|^2/2$ and $U_C=C|V|^2/2$; the participations
+$p_L=U_L/U_{norm}$ and $p_C=U_C/U_{norm}$ are not negative. For $V\neq0$ the
+effective modal capacitance is $C_{mode}=2U_{norm}/|V|^2$, the branch
+capacitance $C_j=2U_{C,j}/|V|^2$, and $p_{C,j}=C_j/C_{mode}$; at $V=0$ the ratio
+is undefined. [Surface EPR](../../concepts/surface-epr.qmd) explains how to
+read these numbers.
+
+## Results of an earlier SCGSim {#current-formats}
+
+SCGSim reads only the formats it writes. A handoff, receipt or result written
+by an earlier SCGSim is refused with a message saying so; read it with the
+SCGSim version that wrote it, or prepare and run the study again. Run folders
+of the AEDT builder that SCGSim had before it imported the SGB model are
+refused the same way. []{#runtime-source}Each receipt names the SCGSim files
+that ran and their hashes; the formats are listed in
+[the internals](../../contribute/internals/aedt-runtime.qmd#current-formats).
+
+## Not supported {#current-exclusions}
+
+- HFSS Driven Modal and Driven Terminal wave ports: a request with one is
+  refused. They are tracked in [issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135).
+- Q3D AC/RL: Q3D extracts C and G only. Tracked in
+  [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265).
+- S-parameter circuit models, automatic choice of the solver, and AEDT
+  material definitions of your own.
+
+[]{#hfss-eigenmode-native-frequency-export}[]{#mode-binding-and-pass-cache}How
+HFSS mode frequencies are read and how modes are bound in field evaluation are
+on [the internals page](../../contribute/internals/aedt-runtime.qmd#hfss-eigenmode-native-frequency-export).
+[Preview the geometry](../../guides/preview-the-geometry.qmd) shows the AEDT
+model before you run it.

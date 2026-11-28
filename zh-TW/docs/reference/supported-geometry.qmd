@@ -1,0 +1,187 @@
+---
+title: "支援的幾何：測試過的版圖圖形"
+description: "SCGSim 能以 Surface-EPR 條帶建立的版圖圖形，各附圖與尺寸；它拒絕的幾何；集總埠片如何變成矩形；以及畫成多邊形的曲線規則。"
+scgsim-kind: "contract"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/supported-geometry"
+lang: zh-TW
+aliases:
+  - ../supported-geometry.html
+---
+
+如果你的版圖由本頁的圖形組成，且在下列範圍內，它就能以面積與精確幾何相符的 Surface-EPR 條帶建立。每個圖形都附有圖，以及使用它的 OrcaPen SC PDK 單元的尺寸。沒有列出的圖形未經驗證；SCGSim 拒絕的圖形見[SCGSim 不建模的幾何](#unsupported)，已知會失敗的案例見[已知的幾何問題](known-geometry-problems.qmd)，每個版圖都要遵守的規則見[支援範圍](supported-scope.qmd)。
+[]{#check-a-layout-before-you-simulate-it}[]{#模擬之前先檢查-layout}模擬之前，請先[檢查版圖](../guides/check-a-layout.qmd)。
+
+## 「支援」的意思 {#what-supported-means}
+
+下面每個單元都是 SCGSim 測試集中的一個樣本版圖，以 PDK 單元的尺寸畫在 1 nm 格點上。每個樣本都能在 Route B 下，以 0.5 與 1.0 µm 邊距的 MA、MS 與 SA 條帶建立；條帶從[間隙邊](specs/palace-eigenmode.qmd#surface-epr-margins)量起。每段條帶建出的面積，與同一組多邊形的精確侵蝕相符，誤差在格點的對齊界限內：每 100 µm 條帶邊至多 0.07 µm²。
+
+晶粒邊緣是切割線：它在導體的直邊處切過時，導體視為延伸過它，所以沿該邊的條帶以任意角度直通晶粒邊緣，沒有圓形末端。晶粒外框若在這段延伸的最大邊距內折回，例如缺口旁，會被拒絕；晶粒邊緣切過精確圓弧也一樣；見[SCGSim 不建模的幾何](#unsupported)。
+
+在 PDK 單元中量到、且由樣本涵蓋的尺寸如下：
+
+| 量 | 範圍 |
+| --- | --- |
+| 導體與走線寬度 | 2 至 150 µm |
+| 導體之間的間隙 | 3.3 至 85 µm |
+| 兩個間隙之間的接地肋條 | 3 µm |
+| 多邊形圓的半徑 | 1 至 350 µm |
+| 直邊 | 任意角度，轉折從 0.86° 起 |
+| 集總埠薄片 | 寬 0.27 至 150 µm |
+| 單一輪廓的頂點數 | 最多 604，在有十二個彎道的 CPW meander 中 |
+| Surface-EPR 邊距 | 0.5 與 1.0 µm |
+
+只量測了這兩個邊距。在窄的間隙或肋條中使用較大的邊距，會改變哪些條帶存在；這是合法的結果，但不在本頁涵蓋範圍內。
+
+## 支援的單元 {#unit-cells}
+
+圖由測試樣本畫成。灰色是接地，其他顏色是各自獨立的導體，米色是裸露的基板，黃色是集總埠薄片。深灰色表示立在平面金屬之上的金屬：bump、airbridge 的橋墩與橋面。尺寸的單位是 µm。
+
+### Disk Qubit 單元 {#disk-qubit-cells}
+
+這些是覆晶 Disk Qubit 所用的圖形。
+
+::: {layout-ncol=2}
+![**1 圓盤島。** 32 點多邊形，r 110.5，每個頂點 11.25°。](../assets/supported-geometry/cell-01.svg){fig-alt="裸露基板上的一個 32 點多邊形圓盤。"}
+
+![**2 接地淨空圓。** 兩個晶粒的接地上 r 350 的 32 點開孔。](../assets/supported-geometry/cell-02.svg){fig-alt="接地方塊中有一個 32 點的圓形開孔。"}
+
+![**3 爪形弧。** 45° 環扇形，r 170.5 至 230.5（寬 60），內弧為 4 段弦；四個爪形各有一個。](../assets/supported-geometry/cell-03.svg){fig-alt="爪形：環扇形漸縮成窄 CPW，位於接地開孔內。"}
+
+![**4 圓角內角。** 以 4 段弦畫的 r 5 圓角，位於爪形的八個內角。](../assets/supported-geometry/cell-04.svg){fig-alt="以四段弦修圓的爪形內角近照。"}
+
+![**5 爪形至 CPW 的漸縮。** 任意角度的直邊，32.3°，在 r 350 處收窄成 3 µm 頸部。](../assets/supported-geometry/cell-05.svg){fig-alt="從爪形收窄到 3 µm CPW 的直線漸縮邊。"}
+
+![**6 正交 CPW 直線段。** 寬 3、間隙 40，位於爪形線路上。](../assets/supported-geometry/cell-06.svg){fig-alt="水平 CPW：訊號線位於兩條接地帶之間。"}
+
+![**7 45° CPW 直線段。** 讀取線寬 7、間隙 6，驅動線寬 4、間隙 6，位於控制晶粒上。](../assets/supported-geometry/cell-07.svg){fig-alt="斜跨晶粒的 CPW。"}
+
+![**8 圓頭 CPW 末端。** 16 點圓頭：金屬 r 2 位於 r 8 的開孔內；讀取線末端為 r 3.5。](../assets/supported-geometry/cell-08.svg){fig-alt="CPW 以半圓頭結束，位於半圓形接地開孔內。"}
+
+![**9 放射狀漸縮扇形。** 接面引線由 2 µm 頸部展開到圓盤上 20° 的弧；張角 ±8.30°、29.24° 與 26.17°。](../assets/supported-geometry/cell-09.svg){fig-alt="圓盤引線以扇形展開接到圓盤，對面是接地舌片。"}
+
+![**10 接面區。** 兩條帶 r 1 圓頭的引線之間 0.27 × 5.66 的集總薄片。](../assets/supported-geometry/cell-10.svg){fig-alt="兩個帶圓頭的引線末端，以及其間的窄集總薄片。"}
+
+![**11 銦 bump 墊。** 20 與 40 的軸向方形，在 r 400 上 24 個位置，連接兩個晶粒的接地。](../assets/supported-geometry/cell-11.svg){fig-alt="淨空邊緣附近接地上的三個方形 bump。"}
+
+![**12 帶遮罩開孔的接地。** 1000 × 1000 的方形扣除遮罩開孔，兩個晶粒都有。](../assets/supported-geometry/cell-12.svg){fig-alt="qubit 晶粒：圓盤、四個爪形、接面引線與帶開孔的接地。"}
+:::
+
+在單元 10 中，模擬只看到集總薄片與兩條引線。PDK 在 layer 22/0 上畫的 5 × 0.09 µm 十字是製程用的接面，不在模擬的層堆疊中。
+
+在單元 12 的測試建構中，圓盤的接面引線畫成斜向的直線，寬 2 µm。放上格點後，它比 1.0 µm 邊距的兩倍寬 0.7 nm，因此留下 0.7 nm 寬的核心，在產生網格前被拒絕，如[支援範圍的規則 12](supported-scope.qmd#layout-rules)所述。
+
+### 傳輸線與彎道 {#lines-and-bends}
+
+這裡每條 CPW 的間隙都是 6 µm，每個彎道的半徑都是 100 µm。
+
+::: {layout-ncol=2}
+![**13 圓弧 CPW 彎道。** R 100，每 90° 8 段弦，邊半徑 90.5 至 109.5。](../assets/supported-geometry/cell-13.svg){fig-alt="以八段弦畫成的 90° CPW 彎道。"}
+
+![**14 Euler 90° 彎道。** p 0.5，最小半徑 70.61，14 段弦。](../assets/supported-geometry/cell-14.svg){fig-alt="90° 的 CPW Euler 彎道。"}
+
+![**15 Euler 180° U 形彎。** 最小半徑 90.86，30 段弦，兩腳相距 200。](../assets/supported-geometry/cell-15.svg){fig-alt="經由 180° Euler 彎道折返的 CPW。"}
+
+![**16 夾接地肋條的耦合線對。** 走線 7、間隙 6、肋條 3；走線以 Euler 彎道分開。](../assets/supported-geometry/cell-16.svg){fig-alt="兩條平行 CPW 走線，中間隔著窄接地肋條，以 Euler 彎道分開。"}
+
+![**17 T 形接頭與短路末端。** 寬 10，間隙 6。訊號線在末端接到接地、每個間隙都成為封閉槽的短路末端，有自己的樣本。](../assets/supported-geometry/cell-17.svg){fig-alt="具三塊接地的正交 CPW T 形接頭。"}
+
+![**18 平緩的線性漸縮。** 寬 10 至 7，邊的轉折 0.86° 與 1.72°。](../assets/supported-geometry/cell-18.svg){fig-alt="在 50 µm 內由寬 10 收窄到 7 的 CPW。"}
+:::
+
+### 焊墊、梳狀、條帶與三維零件 {#pads-and-parts}
+
+::: {layout-ncol=2}
+![**19 Launcher。** 150 × 150 焊墊，漸縮邊 25.0°（訊號）與 44.8°（開孔），85 × 150 的埠薄片緊貼焊墊與接地。](../assets/supported-geometry/cell-19.svg){fig-alt="方形 launcher 焊墊漸縮成 CPW，焊墊後方是埠薄片。"}
+
+![**20 指叉梳。** 20 指，寬 3.3、間距 3.3、長 100，由 21.6° 的漏斗饋入（開孔 42.7°）。](../assets/supported-geometry/cell-20.svg){fig-alt="兩組交錯的指狀梳，由漏斗形饋入，位於接地開孔內。"}
+
+![**21 重新取樣的 spline 條帶。** y 方向寬 10，重新取樣為每個頂點約轉 3°。](../assets/supported-geometry/cell-21.svg){fig-alt="周圍沒有接地的彎曲條帶。"}
+
+![**22 中空 TSV。** 兩個 24 點圓（r 29.8 與 30）之間 0.2 µm 的壁，高 500；兩面各有 r 29.8 至 100 的 Al 著陸墊，位於 r 120 的開孔內。](../assets/supported-geometry/cell-22.svg){fig-alt="接地開孔內、圍繞 TSV 孔的環形著陸墊。"}
+
+![**23 Airbridge。** 12 × 84 的橋面架在兩個 14 × 14 的橋墩上，跨越寬 10、間隙 6 的 CPW。](../assets/supported-geometry/cell-23.svg){fig-alt="架在兩個橋墩上、跨越 CPW 的橋面。"}
+
+![**24 跨越間隙的集總薄片。** 2 × 20 的薄片跨越 20 µm 的間隙，伸入焊墊與接地各 1 nm；方形焊墊 200。同樣的薄片若跨越 r 100 的 32 點多邊形焊墊，則不受支援：模型可以建立，但無法寫成建立網格時讀取的幾何檔。圓形焊墊試片不屬於這種情形，因為它把焊墊與開孔宣告為圓弧。](../assets/supported-geometry/cell-24.svg){fig-alt="跨越焊墊邊與接地之間間隙的窄埠薄片。"}
+:::
+
+PDK 以 258 點畫單元 21 的 spline 條帶。樣本將它們重新取樣；依原圖的條帶也能建出精確的條帶（見[以多邊形畫成的曲線輪廓](#curve-rule)）。
+
+單元 22 的壁厚 0.2 µm，比兩個邊距都薄。壁面是垂直的，所以上面沒有條帶，著陸墊的條帶只從 20 µm 的間隙量起。
+
+單元 14、15 與 18 有少數頂點的轉角小於 2.8125°；它們依原圖就能建出精確的條帶（見[以多邊形畫成的曲線輪廓](#curve-rule)）。
+
+## SCGSim 不建模的幾何 {#unsupported}
+
+SCGSim 會拒絕下列版圖，訊息會指出導體與位置，且不會從它們建出任何模型。每張圖都由測試集中的一個樣本畫成，條帶為 `inset_margins_um=(0.5, 1.0)`。白色是晶粒以外的區域，所以白色與米色的交界就是晶粒邊緣；深色細線是條帶的邊界，紅色標出問題所在。尺寸的單位是 µm。規則本身見 [Surface-EPR 邊距](supported-scope.qmd#rules-margins)。
+
+### 晶粒邊緣沿圓弧切斷的導體 {#unsupported-arc-die-cut}
+
+![一條彎曲的條帶夾在同一圓心、半徑 6.5 與 10 的兩段精確圓弧之間，在 x = 0 處碰到晶粒邊緣。在外弧的切點附近，每條條帶邊界都會以繞切點的半圓結束（紅色，右圖放大）。](../assets/supported-geometry/unsupported-arc-die-cut.svg){fig-alt="碰到晶粒邊緣的彎曲條帶與它的條帶邊界；在切點附近，邊界以繞切點的紅色虛線短弧結束。"}
+
+晶粒邊緣是切割線，所以 SCGSim 把被它切斷的導體視為越過晶粒邊緣繼續延伸，直線邊則沿自己的直線延伸。宣告為精確圓弧的邊沒有直線的延伸。若像導體末端那樣，在切點以半圓結束它的條帶，就等於把條帶當成在那裡終止來量，所以 SCGSim 不為它建模。
+
+建構時拋出 `InputError`，指出導體與切點：
+
+```text
+inset request 'ma::strip::top': the die edge cuts 'strip'
+at (0.0000, 2.5000) um, where its gap edge is an exact arc. …
+Let a straight edge of the conductor meet the die edge
+```
+
+以多邊形畫成的曲線會以一段直的弦碰到晶粒邊緣，這段弦會像其他直線邊一樣延伸。
+
+### 切點旁的晶粒外框 {#unsupported-notch-beside-cut}
+
+![一條寬 3 的條帶，被晶粒上緣一個 8 × 4 凹口的底部切斷。它的右側越過晶粒邊緣延伸（紅色虛線），直到凹口底部所在直線外兩個最大邊距處；延伸的末端距凹口側壁（紅色）0.1，在 1.0 的邊距之內。](../assets/supported-geometry/unsupported-notch-beside-cut.svg){fig-alt="斜向條帶終止於晶粒邊緣凹口的底部；它側邊的虛線延伸接近凹口的側壁。"}
+
+延伸旁的條帶會從沒有畫出的導體量起。同一條規則也會拒絕：從晶粒邊上一個頂點懸出晶粒的導體、兩個被切斷的導體的延伸在晶粒邊緣外相交，以及切點旁晶粒外框彎曲的情形。建構時拋出 `InputError`，指出導體與切點，例如 `the die outline comes back within the band margin (1 um) of the continuation of 'strip', cut by the die edge at (21.4000, 26.0000) um`。
+
+### 比最大邊距的兩倍稍寬的導體 {#unsupported-lead-core}
+
+![一條寬 2.004 的獨立引線，由左至右：晶粒上的引線、橫跨其寬度的視窗，以及引線中段 20 nm 的視窗。深色細線是 0.5 的條帶邊界；1.0 的邊界（紅色）留下 4 nm 寬的核心。](../assets/supported-geometry/unsupported-lead-core.svg){fig-alt="直線引線與它的條帶邊界；放大後，最內側的兩條邊界在引線中線相距 4 nm。"}
+
+核心（超出最大邊距的面）比網格產生器需要的 10 個格點間距還窄。寬度恰好是邊距兩倍的引線沒有核心，照常建模。`mesh()` 與 `simulation_drc()` 的網格階段以 `SimulationDrcError` 拒絕這個核心：類別 B 的窄面，負責方為 `erosion`，並附上位置與修改方式（改邊距或寬度），見[網格階段回報什麼](../guides/check-a-layout.qmd#what-the-meshing-stage-reports)。
+
+## 集總埠會切成矩形 {#lumped-port-rectangle}
+
+Palace 只接受矩形的集總埠或集總 RLC。所以 `EigenmodeSim` 設定的每個集總埠，都是畫出薄片的中央矩形，薄片的其餘部分成為它所落在導體的金屬：第一個切口之前的部分併入埠方向起點的導體，第二個切口之後的部分併入另一個導體。沒有 Net 的導體自成一個 Net。請把薄片畫成伸入兩個導體的矩形，沿 x、沿 y 或任意角度都可以。
+
+薄片落在宣告為精確圓弧的邊上時，端部是畫出薄片到切口為止的全部，所以在圓弧凸出畫出多邊形之處也會碰到圓弧。落在照畫出方式建立的邊上時，端部只是空出的部分；落在與薄片垂直的直邊上時，端部是空的。
+
+### 在格點上、任意角度的矩形 {#lumped-port-angle}
+
+薄片的四個角必須是沿埠方向某個矩形的格點，或各自位於這種矩形的角半個格點對角線之內（1 nm 格點上為 0.71 nm，即格點的對齊界限）。被出現實例轉動、角離開格點的薄片，會移到最近的這種矩形，移動不超過該界限，並記錄每個移動。格點在邊上加出、位於該邊對齊界限內的頂點會被捨去。其他薄片會被拒絕，訊息列出埠的名稱、圖層與四個畫出的角（µm）。
+
+### 切口在哪裡 {#lumped-port-cuts}
+
+每一端都在薄片離開其導體處橫切，切在切線兩端都是格點的第一個位置：沿 x 或 y 每個格點一處，45° 時每 1.414 個格點一處。接著切口一次一個位置地往間隙內移，直到它沿薄片每一側為導體加上的邊，長度為零或至少 10 個格點，即側壁的細微結構限制。容不下兩個切口的間隙會被拒絕，訊息指出間隙的位置、長度與切口間距。
+
+例如在[覆晶 Xmon](../guides/xmon/inputs.qmd)上，接面薄片以 45° 跨越接地開孔與 Xmon 焊墊之間的間隙，格點為 1 nm。它的角都是格點，所以沒有移動；切口落在距第一個角 1.0027 µm 與 4.6556 µm 處，埠長 3.6529 µm、寬 268.70 nm。
+
+[]{#lumped-port-xmon}[]{#lumped-port-record}這些切口的完整推導、圓形焊墊的第二個例子，以及 SCGSim 為每個埠保存的記錄，見 [GeometryPlan 內部實作](../contribute/internals/geometry-plan.qmd#lumped-port-lattice)。
+
+## 畫成多邊形的曲線輪廓 {#curve-rule}
+
+畫成多邊形的曲線，不論有多少點，都以其精確侵蝕的條帶建立。SGB 不設每個頂點的最小轉角，也不設每個圓的最大點數。圓弧也可以宣告為精確圓弧，SGB 會不經取樣地保留它。
+
+下列輪廓都在邊距 0.5 與 1.0 µm 下建立，並與精確侵蝕比對：
+
+| 輪廓 | 每個頂點的轉角 | 量測條件 | 結果 |
+| --- | --- | --- | --- |
+| 正多邊形圓，16、24、32、64 或 128 點 | 22.5° 至 2.8125° | 半徑 5、10、50 與 150 µm | 條帶精確 |
+| 128 點的圓，圓心不在格點上（(0.3337, 0.1234) µm）、旋轉 0.73°，或兩者同時成立（圓心 (12.0004, −7.7771) µm、旋轉 1.7°） | 2.8125° | 半徑 5、10、37.3、75 與 150 µm | 條帶精確 |
+| 正多邊形圓，256 點 | 1.41° | 半徑 5、10、50 與 150 µm | 條帶精確 |
+| PDK 依原圖畫出的 spline 條帶，258 點 | 最小 0.058°（插值）與 0.012°（B-spline） | 依原圖 | 條帶精確 |
+| 單元 14、15 與 18 的 Euler 彎與漸縮段 | 少數頂點 0.15° 至 2.7° | 依原圖 | 條帶精確 |
+| 半徑 50 µm 的 16 點圓，在一條邊上加一個頂點 | 凸 2.9°、2.7°、1.41°、0.3° 與 0.01°；凹 2.7° 與 0.01°；0° | 邊長 9.8 µm | 條帶精確 |
+
+這些是例子，不是限制；這類輪廓加上條帶時產生網格要多久，尚未量測。兩條相鄰偏移若仍然既不相接也不相交，建構會以下列訊息停止，而不是回傳錯誤的條帶：
+
+```text
+inset family '…': the inset curve at m = … um is not closed near (x, y) um: two
+offsets of the support boundary neither meet nor cross there, so the band regions
+cannot be told apart. This is an SCGSim defect, not a layout rule: report it to
+SCGSim with the layout …
+```
+

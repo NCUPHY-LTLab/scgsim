@@ -1,0 +1,17 @@
+[
+ {
+  "pythonhashseed": "0",
+  "pad_in_ground_B_bands": "model:ea7f893fddc6733c",
+  "random_layout_60_seed5_B": "model:c10a91b4661ff323"
+ },
+ {
+  "pythonhashseed": "1",
+  "pad_in_ground_B_bands": "model:ea7f893fddc6733c",
+  "random_layout_60_seed5_B": "model:c10a91b4661ff323"
+ },
+ {
+  "pythonhashseed": "12345",
+  "pad_in_ground_B_bands": "model:ea7f893fddc6733c",
+  "random_layout_60_seed5_B": "model:c10a91b4661ff323"
+ }
+]

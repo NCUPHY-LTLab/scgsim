@@ -1,0 +1,236 @@
+{
+ "machine": {
+  "cpu_count": 64,
+  "python": "3.12.14",
+  "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.35"
+ },
+ "route": "B",
+ "seed": 2,
+ "rows": [
+  {
+   "n_features": 1000,
+   "generate_s": 0.021,
+   "build_wall_s": 2.332,
+   "stage_s": {
+    "levels": 0.002,
+    "noding_driver": 0.101,
+    "dcel_faces": 0.112,
+    "dissolution": 0.217,
+    "arc_realisation": 0.016,
+    "linking": 0.042,
+    "contact_check": 0.012,
+    "manifold_check": 0.013,
+    "assembly_registry": 0.021,
+    "volume_connectivity": 0.006,
+    "wall_prep": 0.018,
+    "assembly_faces": 0.36,
+    "shell_prep": 0.013,
+    "routes": 0.05,
+    "validation_serial": 0.072,
+    "noding_kernels": 0.372,
+    "labelling": 0.149,
+    "atomic_ids": 0.274,
+    "wall_runs": 0.033,
+    "shells": 0.204,
+    "validation_shells": 0.136
+   },
+   "counts": {
+    "prisms": 1241,
+    "slabs": 3,
+    "levels": 4,
+    "slab_edges": 10569,
+    "slab_cells": 2325,
+    "level_edges": 21130,
+    "level_cells": 4648,
+    "hot_pixels": 31273,
+    "vertices": 20552,
+    "edges": 31410,
+    "faces": 14215,
+    "volumes": 1323,
+    "groups": 3691
+   },
+   "identity_digest": "model:9095ca2ad1603d63",
+   "validation_passed": true,
+   "peak_rss_mb": 135.0,
+   "emission": {
+    "file_bytes": {
+     "xao": 13102884,
+     "brep": 8758257,
+     "sidecar": 11156864,
+     "slivers": 12408,
+     "validation": 4896
+    },
+    "written_counts": {
+     "vertices": 20552,
+     "edges": 30829,
+     "faces": 13345,
+     "solids": 2,
+     "surfaces": 9703,
+     "cylinders": 0,
+     "arcs": 0
+    },
+    "gmsh_load_s": 1.559,
+    "verify_loaded_s": 0.795,
+    "verify_loaded_ok": true,
+    "direct": {
+     "plan": 0.253,
+     "write_brep": 0.216,
+     "write_xao": 0.023,
+     "reports": 2.052,
+     "sidecar": 0.804
+    }
+   },
+   "case_wall_s": 9.3
+  },
+  {
+   "n_features": 5000,
+   "generate_s": 0.097,
+   "build_wall_s": 14.459,
+   "stage_s": {
+    "levels": 0.01,
+    "noding_driver": 0.692,
+    "dcel_faces": 0.891,
+    "dissolution": 1.604,
+    "arc_realisation": 0.076,
+    "linking": 0.249,
+    "contact_check": 0.086,
+    "manifold_check": 0.072,
+    "assembly_registry": 0.147,
+    "volume_connectivity": 0.036,
+    "wall_prep": 0.103,
+    "assembly_faces": 2.122,
+    "shell_prep": 0.075,
+    "routes": 0.288,
+    "validation_serial": 0.447,
+    "noding_kernels": 2.266,
+    "labelling": 0.809,
+    "atomic_ids": 1.419,
+    "wall_runs": 0.188,
+    "shells": 1.314,
+    "validation_shells": 0.875
+   },
+   "counts": {
+    "prisms": 6296,
+    "slabs": 3,
+    "levels": 4,
+    "slab_edges": 53561,
+    "slab_cells": 11709,
+    "level_edges": 107114,
+    "level_cells": 23416,
+    "hot_pixels": 158575,
+    "vertices": 104098,
+    "edges": 159167,
+    "faces": 71969,
+    "volumes": 6701,
+    "groups": 18689
+   },
+   "identity_digest": "model:69a7ed793ef3730b",
+   "validation_passed": true,
+   "peak_rss_mb": 534.3,
+   "emission": {
+    "file_bytes": {
+     "xao": 68702562,
+     "brep": 46191455,
+     "sidecar": 57341957,
+     "slivers": 12459,
+     "validation": 4903
+    },
+    "written_counts": {
+     "vertices": 104098,
+     "edges": 155947,
+     "faces": 67241,
+     "solids": 2,
+     "surfaces": 48837,
+     "cylinders": 0,
+     "arcs": 0
+    },
+    "gmsh_load_s": 9.553,
+    "verify_loaded_s": 3.894,
+    "verify_loaded_ok": true,
+    "direct": {
+     "plan": 1.632,
+     "write_brep": 1.07,
+     "write_xao": 0.108,
+     "reports": 12.432,
+     "sidecar": 4.622
+    }
+   },
+   "case_wall_s": 53.81
+  },
+  {
+   "n_features": 20000,
+   "generate_s": 0.404,
+   "build_wall_s": 61.644,
+   "stage_s": {
+    "levels": 0.044,
+    "noding_driver": 3.041,
+    "dcel_faces": 3.85,
+    "dissolution": 6.973,
+    "arc_realisation": 0.299,
+    "linking": 0.968,
+    "contact_check": 0.36,
+    "manifold_check": 0.287,
+    "assembly_registry": 0.728,
+    "volume_connectivity": 0.149,
+    "wall_prep": 0.439,
+    "assembly_faces": 8.657,
+    "shell_prep": 0.486,
+    "routes": 1.442,
+    "validation_serial": 1.928,
+    "noding_kernels": 9.784,
+    "labelling": 3.132,
+    "atomic_ids": 5.602,
+    "wall_runs": 0.752,
+    "shells": 6.018,
+    "validation_shells": 3.896
+   },
+   "counts": {
+    "prisms": 25019,
+    "slabs": 3,
+    "levels": 4,
+    "slab_edges": 212847,
+    "slab_cells": 46530,
+    "level_edges": 425686,
+    "level_cells": 93058,
+    "hot_pixels": 630556,
+    "vertices": 414156,
+    "edges": 632768,
+    "faces": 285871,
+    "volumes": 26496,
+    "groups": 74293
+   },
+   "identity_digest": "model:f1c080e474d97bfc",
+   "validation_passed": true,
+   "peak_rss_mb": 2000.5,
+   "emission": {
+    "file_bytes": {
+     "xao": 281699498,
+     "brep": 190255797,
+     "sidecar": 232213465,
+     "slivers": 12556,
+     "validation": 4910
+    },
+    "written_counts": {
+     "vertices": 414156,
+     "edges": 620297,
+     "faces": 267635,
+     "solids": 2,
+     "surfaces": 194615,
+     "cylinders": 0,
+     "arcs": 0
+    },
+    "gmsh_load_s": 49.67,
+    "verify_loaded_s": 15.271,
+    "verify_loaded_ok": true,
+    "direct": {
+     "plan": 6.87,
+     "write_brep": 6.51,
+     "write_xao": 0.419,
+     "reports": 49.74,
+     "sidecar": 19.636
+    }
+   },
+   "case_wall_s": 236.45
+  }
+ ]
+}

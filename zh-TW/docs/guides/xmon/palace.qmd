@@ -1,0 +1,91 @@
+---
+lang: zh-TW
+title: "以 Palace 計算覆晶 Xmon"
+description: "準備覆晶 Xmon 的 Palace 本徵模態計算：表面薄膜、邊距、以電感表示的接面，並細化到量子位元頻率穩定為止。"
+scgsim-kind: "course"
+scgsim-status: "STABILIZED"
+scgsim-id: "docs/tutorial-xmon-palace"
+execute:
+  enabled: false
+aliases:
+  - ../../tutorial-xmon-palace.html
+---
+
+本頁為[共用的計畫](inputs.qmd)中的覆晶 Xmon 準備 Palace 本徵模態計算：2 GHz 以上的前兩個模態，接面以 11.78 nH 電感表示，並計算每個模態中各表面、基板與接面的參與率。網格會一直細化，直到模態 1 的頻率在回合（pass）之間的變化不超過 0.1 %，這與 [AEDT 頁](aedt.qmd)給 HFSS 的條件相同。
+
+這是一個大模型：第一個網格有 437,675 個四面體，二階時約 310 萬個未知數，光是建網格就在 16 個核心上花了兩分多鐘。這個儲存庫沒有這次計算的結果紀錄。同樣的步驟用在兩分鐘就能算完的模型上、並附結果的例子，見[以 Palace 計算共振模態](../modes-palace.qmd)。
+
+請先在同一個 Python 工作階段執行[共用的計畫](inputs.qmd)：它定義了 `plan`、`snapshot` 與 `port_name`。
+
+## 設定模擬 {#configure-eigenmode-and-epr-outputs}
+
+```python
+from pathlib import Path
+
+from orcapen_sc_pdk import validate_interface_preset_records
+from scgsim.palace import EigenmodeSim, ModeFrequency
+
+presets = validate_interface_preset_records()
+plan.set_surface_epr({
+    kind: {
+        "film_thickness_m": presets[f"LiteratureCentral_{kind}"]["thickness"] * 1e-6,
+        "permittivity": presets[f"LiteratureCentral_{kind}"]["permittivity"],
+        "loss_tangent": presets[f"LiteratureCentral_{kind}"]["loss_tangent"],
+        "source": presets[f"LiteratureCentral_{kind}"]["source"],
+        "preset": f"LiteratureCentral_{kind}",
+        "inset_margins_um": (0.5, 1.0),
+    }
+    for kind in ("MA", "MS", "SA")
+})
+snapshot = plan.prepare()
+
+sim = EigenmodeSim()
+sim.set_plan(snapshot)
+sim.set_output_dir(Path(".artifacts/xmon-palace"))
+sim.set_eigenmode(num_modes=2, target=2e9)
+sim.set_epr_request(
+    surface_interfaces=("MA", "MS", "SA"),
+    bulk_domain_ids=None,
+    port_names=(port_name,),
+)
+sim.set_numerical(
+    order=2,
+    max_iterations=2000,
+    amr_max_passes=20,
+    amr_nonconformal=False,
+    amr_update_fraction=0.15,
+)
+sim.set_convergence(ModeFrequency(modes=[1]).within(percent=0.1))
+```
+
+它設定了什麼：
+
+- **表面薄膜。** 每類表面一層薄膜：MA（金屬–空氣）、MS（金屬–基板）與 SA（基板–空氣），各厚 2 nm，介電常數與損耗正切取自 PDK 的 `LiteratureCentral` 預設值；這些是依文獻整理的建模假設，不是量測值。薄膜是幾何的一部分，所以設在計畫上，再重新準備計畫。
+- **邊距。** `"inset_margins_um": (0.5, 1.0)` 會在每個整面列旁邊，再加上各表面離間隙邊緣至少 0.5 µm 與至少 1.0 µm 的那部分的列；電場在間隙邊緣最強（[邊距](../../concepts/surface-epr.qmd#surface-distance-band-correction)）。邊距列是整面列的另一種算法，不能相加。
+- **接面。** 計畫上的接面，也就是薄片 `port_name` 上的 11.78 nH 電感（[共用的計畫](inputs.qmd)），成為 Palace 的集總埠；模擬本身不另外加任何東西。
+- **模態。** 2 GHz 以上的前兩個模態。
+- **回報的參與率。** 三類表面、所有塊體區域（`bulk_domain_ids=None`）與接面。這個選擇只篩選要回報的內容，不會改變求解。
+- **細化。** 二階元素、線性求解器最多 2000 次迭代、最多細化 20 次，每次細化占誤差估計 15 % 的元素，並使用保形細化（`amr_nonconformal=False`）。`set_convergence` 讓計算停在模態 1 的頻率與前一個回合相比變化不超過 0.1 % 的第一個回合（[收斂與報告](../convergence-and-reports.qmd#declare-convergence)）。
+- **網格。** 沒有呼叫 `set_mesh`：使用預設的第一個網格，如[網格與元素階數](../capacitance-palace.qmd#mesh-controls)所述。
+
+真空區域的外表面不給邊界條件，在 Palace 的本徵模態求解器中這等於理想磁導體；HFSS 在其 Region 表面設定的 Perfect H 是同一個條件。
+
+## 檢查輸入 {#review-normalized-inputs-before-meshing}
+
+```python
+from IPython.display import display
+
+display(sim.input_summary())
+```
+
+摘要列出 `mesh()` 將使用的輸入：含真空區域的計畫、接面埠與薄膜。它不建網格。若要在幾秒內確認版圖究竟能否建模與建網格，請執行 `EigenmodeSim.simulation_drc(plan)`（[檢查版圖](../check-a-layout.qmd)）。
+
+## 建網格、執行與讀取 {#build-inputs-execute-and-read-the-return}
+
+```python
+mesh_path = sim.mesh()
+config_path = sim.write_config()
+print(mesh_path, config_path)
+```
+
+接著依[執行已準備的模型](../run-elsewhere.qmd)準備並執行；這種規模的模型適合放在核心數多的工作站或叢集上。讀取取回的資料夾，做法如[以 Palace 計算共振模態](../modes-palace.qmd#read-the-result)：`result.tables["eig"]` 有頻率與 Q，`result.epr_result()` 有參與率，邊距列就在整面列旁邊。之後可用[不重新求解，改變損耗假設](../offline-loss.qmd)套用其他損耗正切。

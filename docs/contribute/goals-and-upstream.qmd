@@ -1,0 +1,42 @@
+---
+title: "Scope and origin"
+description: "What SCGSim computes and leaves to others, and where its code came from."
+scgsim-kind: "project"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/goals-and-upstream"
+aliases:
+  - ../goals-and-upstream.html
+---
+
+SCGSim prepares Palace and Ansys AEDT simulations of superconducting-chip
+layouts and reads their results back. It began as a downstream derivation of
+[gsim](https://github.com/gdsfactory/gsim) and now keeps its own geometry
+builder, solver adapters and result readers.
+
+## Scope {#scope}
+
+SCGSim computes with Palace Electrostatic and Eigenmode, and with AEDT HFSS
+Eigenmode, HFSS Driven Terminal, Q3D and Q2D;
+[Supported calculations](../reference/supported-calculations.qmd) lists the
+input and the returned quantity of each. Palace Driven, Magnetostatic and
+Transient are not implemented, and Meep is outside the scope. The public
+component notebooks belong to OrcaPen SC PDK.
+
+SCGSim does not install a native solver, does not run a prepared handoff on
+its own, and does not treat a result as accurate because the calculation
+completed: the study's author chooses the physical assumptions and interprets
+the quantities.
+
+## Where SCGSim came from {#starting-source-identities}
+
+| Origin | Version | Revision |
+|---|---|---|
+| gsim, downstream release | `0.2.0+scq.1` | `8f5dc6c05255d003a9c6d8959537bcf8068379d3` |
+| The historical semantic geometry builder (SGB) | | `e74a343154c6b19b6ba32d6fb297e700cfe08ff2` |
+
+These identities record where the code was derived from, nothing more. SCGSim
+imports neither, falls back to neither and promises no API compatibility with
+them: geometry is built by the in-tree `scgsim.geometry.sgb`.
+
+[]{#v1-acceptance-and-delivery}The other contributor pages, in reading order,
+are on [Contribute to SCGSim](index.qmd#reading-order).

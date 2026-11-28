@@ -1,0 +1,211 @@
+---
+title: "First simulation"
+description: "Compute the capacitance of a square pad with Palace: one script from layout to result."
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/start/first-simulation"
+---
+
+This page runs one Python script that computes the capacitance between a
+200 µm square metal pad and the ground metal around it, 20 µm away, on a
+1000 µm square chip. The open-source solver Palace does the computation, and
+the script ends by printing a capacitance matrix in femtofarads (fF):
+
+```text
+Capacitance matrix (fF): pad
+     pad     112.54
+```
+
+You need SCGSim `3.0.0` with its `palace` extra and the OrcaPen SC PDK, the
+component library that draws the layout, in a study project
+([Install SCGSim](install.qmd)), and Palace 0.18.1 installed on
+the same computer ([Palace installation](https://awslabs.github.io/palace/stable/install/)).
+No AEDT licence is needed.
+
+## The layout {#the-layout}
+
+![The pad (PAD) in its 20 µm gap, inside the ground metal (GROUND) that covers the rest of the chip. The orange sheet on the pad's east edge marks where a junction goes in a resonator study; a capacitance run does not use it.](../assets/simple-pad-layout.png)
+
+The pad and the ground are drawn on the chip's top face, on a silicon
+substrate. The PDK supplies the shapes, the layer thicknesses and the
+materials.
+
+## Tell SCGSim where Palace is {#palace-executable}
+
+The script reads the Palace command from the environment variable
+`SCGSIM_PALACE_EXECUTABLE`. Set it to the `palace` command that Palace
+installs, in the shell where you will run the script:
+
+```bash
+export SCGSIM_PALACE_EXECUTABLE="$(command -v palace)"
+```
+
+## The script {#the-script}
+
+Save this as `first_simulation.py` in your study project. Each numbered
+section does one step; the notes below the script explain them.
+
+```python
+import os
+import subprocess
+from pathlib import Path
+from uuid import uuid4
+
+import gdsfactory as gf
+import orcapen_sc_pdk
+from orcapen_sc_pdk import get_material_records
+from orcapen_sc_pdk.tech import get_single_die_layer_stack
+from scgsim.geometry import GeometryPlan
+from scgsim.palace import ElectrostaticSim, resolve_palace_result
+
+# 1. Draw the layout with the PDK: a 200 µm pad, a 20 µm gap, a 1000 µm die.
+orcapen_sc_pdk.activate()
+component = gf.get_component(
+    "square_pad_capacitor", pad_side_um=200.0, gap_um=20.0, die_side_um=1000.0
+)
+
+# 2. Make the plan: the layer stack, the materials, two Nets and a vacuum region.
+plan = GeometryPlan(
+    component=component,
+    root_id="chip",
+    layer_stack=get_single_die_layer_stack(),
+    material_records=get_material_records(),
+    coupon_padding_um=0.0,
+)
+plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
+plan.set_vacuum_region(padding=(0.0, 0.0, 1000.0))
+
+# 3. Check that Palace can model and mesh this layout, and print the report.
+print(ElectrostaticSim.simulation_drc(plan).render_text())
+
+# 4. Set up the capacitance problem: the pad is the terminal, the ground is at 0 V.
+sim = ElectrostaticSim()
+sim.set_plan(plan.prepare())
+sim.set_output_dir(Path(".artifacts/simplepad-palace") / uuid4().hex[:12])
+sim.add_terminal("pad", net_id="pad")
+sim.add_ground(net_id="ground")
+sim.set_electrostatic(unassigned_conductor_policy="error")
+
+# 5. Build the 3D model, mesh it, and write Palace's input file.
+sim.mesh()
+sim.write_config()
+
+# 6. Write the run script and run Palace on this computer with 4 MPI processes.
+handoff = sim.prepare_handoff(
+    profile="direct-local",
+    executable=os.environ["SCGSIM_PALACE_EXECUTABLE"],
+    resources={"command_style": "wrapper", "processes": 4, "threads": 1},
+)
+subprocess.run(["bash", "run_palace.sh"], cwd=handoff.run_dir, check=True)
+
+# 7. Read the result and print the capacitance matrix with its terminal names.
+result = resolve_palace_result(handoff.run_dir, expected_handoff_id=handoff.handoff_id)
+print("Status:", result.status)
+print("Convergence:", result.convergence.verdict.state)
+terminals = {
+    entry["index"]: entry["terminal_name"]
+    for entry in result.provenance.index_map["entries"]
+    if entry["role"] == "terminal"
+}
+print("Capacitance matrix (fF):", *terminals.values())
+for row in result.tables["terminal-C"].rows:
+    values = [row[f"C[i][{column}] (F)"] * 1e15 for column in terminals]
+    print(f"{terminals[int(row['i'])]:>8}", *(f"{value:10.2f}" for value in values))
+```
+
+What each section does:
+
+1. **Layout.** `activate()` makes the PDK's components available to
+   gdsfactory, and `get_component` draws the pad, the gap and the ground at
+   the sizes given.
+2. **Plan.** A `GeometryPlan` is the layout together with what SCGSim needs to
+   build a 3D model from it: the layer stack (each layer's thickness and
+   material) and the material properties. `root_id="chip"` names the layout,
+   so the PDK's pad and ground metal are `chip/PAD` and `chip/GROUND`;
+   `coupon_padding_um=0.0` adds no substrate beyond the chip's edge. A Net is
+   a named piece of metal that acts as one conductor: here `pad` and
+   `ground`. The vacuum region is the box of empty space around the chip
+   that the solver includes; this one ends at the chip's edges and reaches
+   1000 µm above and below it.
+3. **Check.** `simulation_drc` builds the 3D model the simulation will build
+   and looks for edges and faces too small to mesh, without meshing anything.
+   A layout that fails stops here with a message that says where the problem
+   is and how to fix it.
+4. **Capacitance problem.** A terminal is a conductor the solver sets to 1 V
+   to measure its capacitance; the ground Net is held at 0 V.
+   `unassigned_conductor_policy="error"` makes any metal that is in neither
+   Net an error, so nothing is grounded without your saying so. Each run gets
+   a new folder under `.artifacts/simplepad-palace/`.
+5. **Mesh and input.** `mesh()` builds the 3D model and splits it into small
+   tetrahedra, the mesh Palace computes on. `write_config()` writes Palace's
+   input file, `config.json`.
+6. **Run.** `prepare_handoff` writes the script `run_palace.sh` into the run
+   folder, with a `.tar.gz` copy of the folder beside it for running on
+   another computer. `direct-local` runs Palace on this computer;
+   `"wrapper"` says that the `palace` command starts MPI itself, here with 4
+   processes that share the work. The script first checks that Palace
+   accepts `config.json`, then solves and records how the run ended.
+7. **Result.** `resolve_palace_result` reads the finished run folder and
+   checks that it is the run this script prepared and that Palace completed.
+   `terminal-C` is Palace's capacitance table, in farads; the run's index map
+   names the terminal on each row.
+
+## Run it {#run-it}
+
+From the study project, in the shell where you set
+`SCGSIM_PALACE_EXECUTABLE`:
+
+```bash
+uv run first_simulation.py
+```
+
+The model is small, so the script finishes in seconds on a workstation. It
+prints the check report first, then the log of the Palace run (also saved in
+the run folder's `logs/`), then the result. Without that log, the output is:
+
+```text
+geometry stage: passed
+meshing stage: passed (0 refusing, 0 warning)
+
+Status: completed
+Convergence: not_declared
+Capacitance matrix (fF): pad
+     pad     112.54
+```
+
+Palace's log includes a warning that some outer boundaries have no boundary
+condition and that "ZeroCharge" is assumed there: the faces of the vacuum box
+are left without one on purpose, so no field crosses them.
+
+## Read the result {#read-the-result}
+
+Both check stages passed: the layout can be built into a 3D model, and it has
+nothing too small to mesh. `Status: completed` means Palace ran to its end and
+the run folder holds all its results.
+
+The matrix has one row and one column because the simulation has one terminal.
+Its entry, 112.54 fF, is the capacitance between the pad and everything held
+at 0 V, here the ground metal: the charge on the pad per volt between them.
+Palace reports a Maxwell capacitance matrix. With two or more terminals, each
+diagonal entry is one terminal's capacitance to everything else, and each
+off-diagonal entry C[a][b] is negative: minus the capacitance between
+terminals a and b.
+
+This number comes from one solve on the first mesh, without adaptive
+refinement (Palace refining the mesh where its error estimate is largest and
+solving again). `Convergence: not_declared` means the script did not state
+which numbers must stop changing between refinements, so nothing here shows
+that 112.54 fF has settled, and it has not: with second-order elements and
+refinement, the same pad settles at 95.21 fF after four passes.
+[Convergence and reports](../guides/convergence-and-reports.qmd#declare-convergence)
+shows that run and how to declare convergence; how small a change you accept
+depends on what you use the capacitance for.
+
+## Next {#next}
+
+- [Palace: resonant modes](../guides/modes-palace.qmd) computes the
+  frequencies and Q of a layout's resonant modes.
+- [Check a layout](../guides/check-a-layout.qmd) explains what the check
+  reports and how to fix what it finds.
+- [Supported Scope](../reference/supported-scope.qmd) says what a layout of your own
+  must guarantee before you simulate it.

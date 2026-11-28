@@ -1,0 +1,211 @@
+---
+title: "Architecture and data flow"
+description: "Who owns each step from a layout to a report, and how a Palace run and an AEDT run are prepared, run and read back."
+scgsim-kind: "implementation"
+scgsim-status: "ACCEPTED"
+scgsim-id: "docs/architecture"
+aliases:
+  - ../architecture.html
+---
+
+This page says who owns each step from a layout to a report, and how a Palace
+run and an AEDT run are prepared, run and read back. Which folder is which
+stage is on the [code map](code-map.qmd); what an area must not take over is
+on [Ownership by area](ownership.qmd). Exact formats and rules are on the
+contract pages this page links.
+
+## Entry packages and one model {#current-package-structure}
+
+SCGSim has four entry packages: `scgsim.geometry`, `scgsim.palace`,
+`scgsim.aedt` and `scgsim.visualization`. A name is public when one of them
+exports it or a contract page documents it; that a module can be imported
+does not make it public. The supported entry, and what a call below it must
+guarantee itself, is stated once, in
+[Supported scope](../reference/supported-scope.qmd#supported-entry); the
+geometry builder `scgsim.geometry.sgb` sits below it.
+`python -m scgsim.aedt.run` is a supported command, the entry of the AEDT
+transaction.
+
+Palace and AEDT solve models made by the same builder:
+
+1. `scgsim.geometry` turns a layout and a stack into a `GeometryPlan`, whose
+   snapshot is the prepared input (`geometry/source`), and interprets it into
+   the effective input (`geometry/interpretation`, with the junction
+   partition of `geometry/junctions`).
+2. `geometry/sgb` builds the 3D model from the effective input
+   (`build_sgb_geometry`), with the Surface-EPR bands that
+   `geometry/surface_epr` requests. Line and circular-arc boundaries stay exact;
+   a spline is refused.
+3. Palace meshes the model's XAO with `scgsim.meshing`, which reads it and its
+   sidecar through `contracts`, never through SGB or a backend.
+4. AEDT builds its model with the same builder, on Route A for
+   `modeling="thin_film"` and Route C for `"solid"`, exports it as a STEP with a
+   guard file (`aedt/preparation`: `prepare_sgb_model`, then `export_aedt_step`), carries
+   it in the handoff, and, inside AEDT, imports it and makes every assignment
+   from the sidecar (`aedt/runtime/families/sgb_import.py`). AEDT builds no
+   geometry of its own.
+
+## Who owns which fact {#contract-boundaries}
+
+| Fact | Owner |
+|---|---|
+| Materials, layers, fabrication, thicknesses and the 3D stack | The PDK |
+| Entities, their polygon and curve boundaries, ports and selectors | The component |
+| Named occurrences and the final `Net → Entity` map | The notebook's `GeometryPlan` |
+| The immutable prepared input | The plan's snapshot (`GeometryBuildInput`) |
+| Geometry names, topology and the Route A, B and C surfaces | `scgsim.geometry.sgb` |
+| The tetrahedral mesh, its sizing and its quality threshold | `scgsim.meshing` |
+| Run identity, handoff, execution profile and receipt | The run contract of each backend |
+| What a returned number means physically | The solver it came from; never one quantity flattened across solvers |
+| Public component-simulation notebooks | OrcaPen SC PDK |
+
+## Semantic facts {#internal-semantic-facts}
+
+`scgsim.semantics` holds facts that do not depend on a solver: the
+revision-bound snapshot, the Route A projection and the EPR records. It uses
+the standard library only and imports no SGB, Palace, AEDT or native code. A
+fact whose revision does not match is refused rather than rebound. A native
+tag a backend reports stays an observation; it never decides contact or
+identity.
+
+## Notebooks and mesh quality {#notebook-and-implementation-boundaries}
+
+Public notebooks call the entry packages directly; their rules are the
+[notebook contract](notebook-contract.qmd). Mesh quality is the
+`scgsim.meshing` audit `mesh()` runs: it holds the threshold and writes the
+quality report ([Mesh quality](../reference/specs/mesh-quality.qmd)). Whether
+a result has converged physically is a separate question, which the
+convergence declaration of a run answers.
+
+## Palace preparation lifecycle {#palace-preparation-lifecycle}
+
+`ElectrostaticSim` and `EigenmodeSim` own their mutable mesh, config,
+resolved-port and handoff state. Both are subclasses of one private base,
+`scgsim.palace.simulation.core.PalaceSimulation`, which holds what they share:
+`set_plan`, `set_output_dir`, `set_route`, `set_mesh`, `input_summary()`,
+`mesh()`, `simulation_drc`, `mesh_summary()` and `prepare_handoff()`. Each
+problem file (`simulation/electrostatic.py`, `simulation/eigenmode.py`) adds
+only its setters, its numerical defaults and its `write_config()`. The vacuum
+region and the Surface-EPR specs are the plan's
+(`GeometryPlan.set_vacuum_region`, `GeometryPlan.set_surface_epr`); the
+simulation reads them from the snapshot it is bound to.
+
+The lifecycle is one table, `scgsim.palace.simulation.lifecycle`:
+
+| Stage | Reached by | A setter falls back here when |
+|---|---|---|
+| `UNBOUND` | creating the simulation | |
+| `BOUND` | `set_plan` | `mesh()` reads its value: output folder, route, mesh controls, Eigenmode ports |
+| `MESHED` | `mesh()` | only `write_config()` reads its value |
+| `CONFIG_WRITTEN` | `write_config()` | |
+| `HANDED_OFF` | `prepare_handoff()` | |
+
+A call made before the stage it needs is refused with a message that names
+the call to make first. Route B is the default for both problems, and Surface
+EPR is computed only when the plan was given specs.
+
+`mesh()` and `write_config()` first fall back, discarding what they will
+rebuild, and only then check what they need. `write_config()` writes each
+metadata file through a temporary file and `config.json` last
+(`config.files.persist_problem_files`), so a run folder whose `config.json`
+is new has every metadata file it needs and no stale one. This holds file by
+file; it is not one transaction for the whole folder, and falling back in
+memory does not delete an older file on disk.
+
+A simulation holds its settings as frozen values, each checked when it is
+built and defined in the stage that reads it first:
+
+| Attribute | Type | Stage | Read by |
+|---|---|---|---|
+| `numerical` | `NumericalControls` | `config.numerical` | `write_config()`, `mesh_summary()` (FEM order) |
+| `surface_epr_specs` (from the bound plan) | `SurfaceEprSpecs` | `source.surface_epr` | `mesh()` (the bands), `write_config()` (the `Dielectric` rows) |
+| `epr_request` (Eigenmode) | `EprRequest` | `config.index` | `write_config()` (`check_epr_request` and the index map) |
+
+`write_config()` gives the config builder a `ConfigInput` (the mesh, the
+materials, the Surface-EPR specs and the numerical controls) and the problem's
+`EigenmodeSettings` or `ElectrostaticSettings`. The builder returns one index
+record per config section (`PortEntry`, `TerminalEntry`, `EnergyEntry`,
+`SurfaceEprEntry`), which `palace_index_map.json` holds.
+
+Every stage takes the run folder's layout from one module,
+`scgsim.contracts.palace_run_folder`: the path and schema of each file, the
+handoff identity (`HandoffIdentity`) that the handoff writes and
+`resolve_palace_result` checks, and one record per problem (`PalaceProblem`:
+`EIGENMODE`, `ELECTROSTATIC`). Code that differs by problem reads that record
+instead of comparing problem names; its `written_families` decides which
+tables a run must return. Palace writes a port table only when a port's
+circuit gives it a column (`PortTable`): `port-EPR` for a port with an
+inductance, `port-Q` for one with a resistance. The module imports only the
+standard library, so `palace/run` can copy it into the run folder: the receipt recorder
+(`metadata/record_palace_return.py`) and, for a run with a convergence
+declaration, the convergence runner (`metadata/run_palace_until_converged.py`)
+need only a Python interpreter on the solver host.
+
+After the run, `palace/results` reads the returned folder into checked
+records (`ResolvedRunData`), and `palace/reports` builds what a person reads
+(`resolve_palace_result` returns `ResolvedPalaceResult`, with its trust,
+physics and benchmark views). Every public name is imported from
+`scgsim.palace`.
+
+## AEDT execution lifecycle {#aedt-execution-lifecycle}
+
+`python -m scgsim.aedt.run` calls `scgsim.aedt.runtime.transaction.main`.
+One transaction runs one prepared handoff, in this order:
+
+1. validate the handoff before the receipt changes;
+2. start the receipt, record the runtime source, import PyAEDT and open the
+   Desktop it owns;
+3. dispatch one solver family (HFSS, Q3D or Q2D), which imports the SGB model
+   where the request has one, solves and exports;
+4. record the result, release the Desktop and finish the receipt. A failure
+   of the family is kept as the run's failure even when the release fails too.
+
+The families do not import the transaction and do not start a Desktop; the
+shared native calls below them are in `aedt/runtime/native`. HFSS Eigenmode
+and EPR share one setup-control mapping; the
+[setup-control contract](../reference/specs/aedt-runtime.qmd#aedt-family-setup-controls)
+lists the controls of each family. A Q3D run can be asked to stop or abort and
+save its project (`request_q3d_stop_and_save`, `request_q3d_abort_and_save`);
+the rules are in the
+[AEDT runtime](../reference/specs/aedt-runtime.qmd#q3d-user-requested-stopabort-and-save).
+
+### Request-scoped AEDT version selection
+
+A request names its AEDT version, `"2023.2"` or `"2024.2"`, with no default
+and no fallback to the other; the version belongs to that request and its
+transaction, not to the process. `versions.py` holds the pinned transport
+profile of each; the
+[version contract](../reference/specs/aedt-runtime.qmd#aedt-version-selection)
+gives the transport settings.
+
+### Prepared-native HFSS EPR batch workflow
+
+An HFSS EPR model can be prepared on a workstation and solved on another host:
+
+prepare and release the native model (transaction) → package one model
+(`aedt/batch.py`, `prepare_native_batch`) → solve it with the standalone
+runner, without a PyAEDT Desktop (`run_native_batch`) → collect the returned
+project on an owned copy, in a new transaction (`collect_native_batch`) →
+resolve and present offline.
+
+Each package, attempt and result belongs to one model; a sweep is several
+packages. `aedt/runtime/batch_protocol.py` is the standard-library file
+protocol, and `aedt/runtime/batch_runner.py` is copied into the package and
+runs the solver without importing PyAEDT or SCGSim. The
+[batch contract](../reference/specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch)
+defines the package, the attempt and the collection.
+
+### Receipts and runtime source {#receipts-and-runtime-source}
+
+A handoff declares receipt schema `scgsim.aedt.receipt.v3`, and preparation
+and execution each record the runtime source they ran
+(`aedt/results/provenance.py`, `aedt/results/runtime_inventory.py`). What a
+receipt and a runtime source hold, and which older formats are refused, is in
+[Provenance](provenance.qmd) and
+[Current formats](../reference/specs/aedt-runtime.qmd#current-formats); how an
+EPR run binds the native mode and its pass cache is in
+[Mode binding and pass cache](../reference/specs/aedt-runtime.qmd#mode-binding-and-pass-cache).
+
+See [Ownership by area](ownership.qmd) for what each area must not take over,
+and [Preview the geometry](../guides/preview-the-geometry.qmd) for the static
+and connected geometry previews.

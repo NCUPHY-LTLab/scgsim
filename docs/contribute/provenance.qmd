@@ -1,0 +1,56 @@
+---
+title: "Provenance and data boundaries"
+description: "What identities a run and a report record, and what public documentation and fixtures may contain."
+scgsim-kind: "contract"
+scgsim-status: "STABILIZED"
+scgsim-id: "docs/provenance"
+aliases:
+  - ../provenance.html
+---
+
+A result carries enough identity to show which code, inputs and solver
+produced it. This page lists what a run and its report record, for anyone who
+reads a run record or changes what one holds, and what public documentation
+may contain.
+
+## What a run records {#public-provenance-contract}
+
+A run or report binds, as they apply:
+
+- the SCGSim distribution version and the measured identity of the runtime
+  source (its modules and their content);
+- the SCGSim Git revision when it is truthfully known, and the backend's
+  revision;
+- the identity of the geometry source and its topology;
+- the solver and schema versions;
+- the machine profile and the run receipt;
+- the identities of the config, mesh, handoff, result and report files;
+- the validation and failure state.
+
+Read a returned run folder together with the source and model records of its
+preparation. A distribution version alone does not identify the code bytes,
+layout, settings or native result of a study; the runtime-source manifest and
+its content digest identify the module bytes that ran.
+
+AEDT computes its runtime source on each use: the import closure of every
+module under `scgsim/aedt` and the two AEDT visualization loaders, recorded as
+`scgsim.aedt.runtime-source.v30`. Preparation and execution record their
+module bytes and digest separately. A result whose runtime source has an
+earlier schema is refused; read it with the SCGSim commit that wrote it
+([AEDT runtime source](../reference/specs/aedt-runtime.qmd#runtime-source)).
+
+The Palace handoff and mesh manifest have a field `scgsim_sgb`. It holds the
+name of the geometry builder that made the model, today
+`scgsim.geometry.sgb`; the field's name is historical and asks for no import.
+An older receipt keeps the module names it recorded; they are not rewritten
+to today's paths.
+
+## What public documentation may contain {#publication-boundary}
+
+Public SCGSim documentation and fixtures contain no private names, paths,
+dimensions, screenshots, meshes, configs, receipts, data or artifacts.
+Removing identifying details does not by itself make material publishable.
+
+Validation on private data may support a public aggregate statement only when
+that statement has its own permission to publish and contains no private
+identity or payload.

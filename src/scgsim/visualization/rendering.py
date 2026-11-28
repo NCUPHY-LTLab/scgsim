@@ -8,23 +8,52 @@ import os
 import shutil
 import tempfile
 import textwrap
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple, cast
 
-from .scene import _MODE_TITLES, _VIEWS, _Part
-from .loaders._common import _sha256
+from scgsim.refusal import ENVIRONMENT, Declared, found_text, internal
+
+from .loaders.common import file_sha256
+from .scene import MODE_TITLES, VIEWS, ScenePart
+
+_WHERE_EGL = "this host's VTK EGL setup"
 
 
-def _render_mode(
-    *, root: Path, mode_name: str, parts: tuple[_Part, ...]
-) -> tuple[Path, list[dict[str, Any]]]:
+@dataclass(frozen=True)
+class _ImageTools:
+    """Optional Pillow operations needed only while assembling a sheet."""
+
+    image: Any
+    draw: Any
+    font: Any
+
+
+class RenderedMode(NamedTuple):
+    """One rendered preview mode: its contact sheet and a record (path, size, SHA-256) of every image."""
+
+    contact_sheet: Path
+    artifacts: list[dict[str, Any]]
+
+
+def render_mode(
+    *, root: Path, mode_name: str, parts: tuple[ScenePart, ...]
+) -> RenderedMode:
+    """Render all fixed views, build their contact sheet and record artifacts."""
     if not parts:
-        raise ValueError(f"available preview mode {mode_name} has no geometry")
+        raise ValueError(
+            internal(f"available preview mode {mode_name} has no geometry")
+        )
     try:
-        import pyvista as pv
-        from PIL import Image, ImageDraw, ImageFont
+        # PyVista and Pillow are optional until a preview is actually rendered.
+        import pyvista as pv  # noqa: PLC0415 - optional renderer, loaded on demand
+        from PIL import Image, ImageDraw, ImageFont  # noqa: PLC0415 - optional renderer
     except ImportError as exc:
-        raise RuntimeError("geometry rendering requires scgsim[visualization]") from exc
+        raise RuntimeError(
+            Declared("geometry rendering", ENVIRONMENT).refusal(
+                "requires scgsim[visualization]"
+            )
+        ) from exc
 
     final_dir = root / "previews/geometry" / mode_name
     final_dir.parent.mkdir(parents=True, exist_ok=True)
@@ -32,85 +61,11 @@ def _render_mode(
         prefix=f".{mode_name}-", dir=final_dir.parent
     ) as raw:
         temporary = Path(raw)
-        bounds = _combined_bounds(parts)
-        center = (
-            (bounds[0] + bounds[1]) / 2,
-            (bounds[2] + bounds[3]) / 2,
-            (bounds[4] + bounds[5]) / 2,
-        )
-        span = max(bounds[1] - bounds[0], bounds[3] - bounds[2], bounds[5] - bounds[4])
-        _configure_headless_rendering()
-        for filename, label, direction, clip in _VIEWS:
-            plotter = pv.Plotter(off_screen=True, window_size=(1600, 1200))
-            plotter.set_background("white")
-            _add_parts(plotter, parts, clip=clip, center=center)
-            plotter.add_axes(line_width=3, labels_off=False)
-            plotter.add_text(label, position="upper_left", font_size=12, color="black")
-            vector = _unit(direction)
-            distance = max(span * 2.5, 1.0)
-            plotter.camera.position = tuple(
-                center[i] + vector[i] * distance for i in range(3)
-            )
-            plotter.camera.focal_point = center
-            plotter.camera.up = _camera_up(vector)
-            plotter.camera.parallel_projection = True
-            plotter.camera.parallel_scale = max(span * 0.62, 1.0)
-            plotter.reset_camera_clipping_range()
-            plotter.screenshot(temporary / f"{filename}.png")
-            plotter.close()
-
-        sheet = Image.new("RGB", (4800, 4200), "white")
-        draw = ImageDraw.Draw(sheet)
-        title_font = _font(ImageFont, 74)
-        header_font = _font(ImageFont, 42)
-        body_font = _font(ImageFont, 31)
-        draw.text(
-            (120, 70),
-            f"{_MODE_TITLES[mode_name]} — Geometry Preview",
-            fill="black",
-            font=title_font,
-        )
-        draw.text(
-            (120, 170),
-            "Color is presentation; semantic authority is solver metadata.",
-            fill="#444444",
-            font=body_font,
-        )
-        legend = _legend(parts)
-        columns = 4
-        column_width = 1140
-        rows = max(math.ceil(len(legend) / columns), 1)
-        row_height = min(220, 1080 // rows)
-        for index, item in enumerate(legend):
-            column = index % columns
-            row = index // columns
-            x = 120 + column * column_width
-            y = 270 + row * row_height
-            draw.rectangle(
-                (x, y + 8, x + 54, y + 62),
-                fill=item["color"],
-                outline="#333333",
-            )
-            wrapped = textwrap.wrap(item["label"], width=42) or [item["label"]]
-            semantic = textwrap.wrap(item["semantic_id"], width=42) or [
-                item["semantic_id"]
-            ]
-            text = "\n".join([*wrapped, *semantic, f"{item['role']} · {item['count']}"])
-            draw.multiline_text(
-                (x + 72, y), text, fill="black", font=body_font, spacing=2
-            )
-        draw.text(
-            (120, 1360),
-            "CURATED12 — cutaways are visualization clips, not solver boundaries",
-            fill="#333333",
-            font=header_font,
-        )
-        for index, (filename, _, _, _) in enumerate(_VIEWS):
-            tile = Image.open(temporary / f"{filename}.png").convert("RGB")
-            tile.thumbnail((1200, 900))
-            x = (index % 4) * 1200
-            y = 1500 + (index // 4) * 900
-            sheet.paste(tile, (x, y))
+        center, span = _scene_camera(parts)
+        configure_headless_rendering()
+        _render_views(pv, temporary, parts, center, span)
+        image_tools = _ImageTools(Image, ImageDraw, ImageFont)
+        sheet = _build_contact_sheet(image_tools, temporary, mode_name, parts)
         sheet.save(temporary / "contact-sheet.png")
         if final_dir.exists():
             shutil.rmtree(final_dir)
@@ -122,24 +77,133 @@ def _render_mode(
             {
                 "path": path.relative_to(root).as_posix(),
                 "size": path.stat().st_size,
-                "sha256": _sha256(path),
+                "sha256": file_sha256(path),
             }
         )
-    return final_dir / "contact-sheet.png", artifacts
+    return RenderedMode(final_dir / "contact-sheet.png", artifacts)
 
 
-def _add_parts(
+def _scene_camera(
+    parts: tuple[ScenePart, ...],
+) -> tuple[tuple[float, float, float], float]:
+    bounds = _combined_bounds(parts)
+    center = (
+        (bounds[0] + bounds[1]) / 2,
+        (bounds[2] + bounds[3]) / 2,
+        (bounds[4] + bounds[5]) / 2,
+    )
+    span = max(bounds[1] - bounds[0], bounds[3] - bounds[2], bounds[5] - bounds[4])
+    return center, span
+
+
+def _render_views(
+    pyvista: Any,
+    temporary: Path,
+    parts: tuple[ScenePart, ...],
+    center: tuple[float, float, float],
+    span: float,
+) -> None:
+    for filename, label, direction, clip in VIEWS:
+        plotter = cast(Any, pyvista.Plotter(off_screen=True, window_size=[1600, 1200]))
+        plotter.set_background("white")
+        add_parts(plotter, parts, clip=clip, center=center)
+        plotter.add_axes(line_width=3, labels_off=False)
+        plotter.add_text(label, position="upper_left", font_size=12, color="black")
+        vector = _unit(direction)
+        distance = max(span * 2.5, 1.0)
+        plotter.camera.position = tuple(
+            center[i] + vector[i] * distance for i in range(3)
+        )
+        plotter.camera.focal_point = center
+        plotter.camera.up = _camera_up(vector)
+        plotter.camera.parallel_projection = True
+        plotter.camera.parallel_scale = max(span * 0.62, 1.0)
+        plotter.reset_camera_clipping_range()
+        plotter.screenshot(temporary / f"{filename}.png")
+        plotter.close()
+
+
+def _build_contact_sheet(
+    image_tools: _ImageTools,
+    temporary: Path,
+    mode_name: str,
+    parts: tuple[ScenePart, ...],
+) -> Any:
+    sheet = image_tools.image.new("RGB", (4800, 4200), "white")
+    draw = image_tools.draw.Draw(sheet)
+    title_font = _font(image_tools.font, 74)
+    header_font = _font(image_tools.font, 42)
+    body_font = _font(image_tools.font, 31)
+    draw.text(
+        (120, 70),
+        f"{MODE_TITLES[mode_name]} — Geometry Preview",
+        fill="black",
+        font=title_font,
+    )
+    draw.text(
+        (120, 170),
+        "Color is presentation; semantic authority is solver metadata.",
+        fill="#444444",
+        font=body_font,
+    )
+    _draw_legend(draw, body_font, parts)
+    draw.text(
+        (120, 1360),
+        "CURATED12 — cutaways are visualization clips, not solver boundaries",
+        fill="#333333",
+        font=header_font,
+    )
+    _paste_views(sheet, image_tools.image, temporary)
+    return sheet
+
+
+def _draw_legend(draw: Any, body_font: Any, parts: tuple[ScenePart, ...]) -> None:
+    legend_entries = legend(parts)
+    columns = 4
+    rows = max(math.ceil(len(legend_entries) / columns), 1)
+    row_height = min(220, 1080 // rows)
+    for index, item in enumerate(legend_entries):
+        column = index % columns
+        row = index // columns
+        x = 120 + column * 1140
+        y = 270 + row * row_height
+        draw.rectangle(
+            (x, y + 8, x + 54, y + 62), fill=item["color"], outline="#333333"
+        )
+        wrapped = textwrap.wrap(item["label"], width=42) or [item["label"]]
+        semantic = textwrap.wrap(item["semantic_id"], width=42) or [item["semantic_id"]]
+        text = "\n".join([*wrapped, *semantic, f"{item['role']} · {item['count']}"])
+        draw.multiline_text((x + 72, y), text, fill="black", font=body_font, spacing=2)
+
+
+def _paste_views(sheet: Any, image_module: Any, temporary: Path) -> None:
+    for index, (filename, _, _, _) in enumerate(VIEWS):
+        tile = image_module.open(temporary / f"{filename}.png").convert("RGB")
+        tile.thumbnail((1200, 900))
+        x = (index % 4) * 1200
+        y = 1500 + (index // 4) * 900
+        sheet.paste(tile, (x, y))
+
+
+def add_parts(
     plotter: Any,
-    parts: tuple[_Part, ...],
+    parts: tuple[ScenePart, ...],
     *,
     clip: tuple[str, float] | None = None,
     center: tuple[float, float, float] | None = None,
 ) -> None:
+    """Add semantic scene datasets to a PyVista plotter."""
     for part in parts:
         dataset = part.dataset
         if clip is not None:
             if center is None:
-                raise ValueError("visualization clip requires a scene center")
+                raise ValueError(
+                    internal(
+                        "visualization clip requires a scene center"
+                        + ": "
+                        + found_text(clip)
+                    )
+                )
             normal = (1.0, 0.0, 0.0) if clip[0] == "x" else (0.0, 1.0, 0.0)
             dataset = dataset.clip(normal=normal, origin=center, invert=False)
         if dataset.n_cells:
@@ -153,7 +217,8 @@ def _add_parts(
             )
 
 
-def _interactive_legend(mode_name: str, parts: tuple[_Part, ...]) -> str:
+def interactive_legend(mode_name: str, parts: tuple[ScenePart, ...]) -> str:
+    """Format scene metadata as an escaped notebook legend table."""
     rows = "".join(
         "<tr>"
         f"<td><span style='display:inline-block;width:1.1rem;height:1.1rem;"
@@ -163,11 +228,11 @@ def _interactive_legend(mode_name: str, parts: tuple[_Part, ...]) -> str:
         f"<td>{html.escape(item['role'])}</td>"
         f"<td style='text-align:right'>{item['count']}</td>"
         "</tr>"
-        for item in _legend(parts)
+        for item in legend(parts)
     )
     return (
         "<div style='margin:0.4rem 0 0.8rem'>"
-        f"<strong>{html.escape(_MODE_TITLES[mode_name])} — Interactive Geometry</strong>"
+        f"<strong>{html.escape(MODE_TITLES[mode_name])} — Interactive Geometry</strong>"
         "<div style='color:#555;margin:0.2rem 0 0.5rem'>"
         "Color is presentation; semantic authority is solver metadata."
         "</div>"
@@ -178,7 +243,8 @@ def _interactive_legend(mode_name: str, parts: tuple[_Part, ...]) -> str:
     )
 
 
-def _legend(parts: tuple[_Part, ...] | list[_Part]) -> list[dict[str, Any]]:
+def legend(parts: tuple[ScenePart, ...] | list[ScenePart]) -> list[dict[str, Any]]:
+    """Aggregate displayed entity counts by semantic identity and appearance."""
     aggregated: dict[tuple[str, str, str, str], int] = {}
     for part in parts:
         key = (part.semantic_id, part.label, part.role, part.color)
@@ -195,10 +261,16 @@ def _legend(parts: tuple[_Part, ...] | list[_Part]) -> list[dict[str, Any]]:
     ]
 
 
-def _combined_bounds(parts: tuple[_Part, ...]) -> tuple[float, ...]:
+def _combined_bounds(parts: tuple[ScenePart, ...]) -> tuple[float, ...]:
     bounds = [part.dataset.bounds for part in parts if part.dataset.n_points]
     if not bounds:
-        raise ValueError("preview geometry has no points")
+        raise ValueError(
+            internal(
+                "preview geometry has no points"
+                + ": "
+                + found_text([part.label for part in parts])
+            )
+        )
     result = (
         min(item[0] for item in bounds),
         max(item[1] for item in bounds),
@@ -208,11 +280,16 @@ def _combined_bounds(parts: tuple[_Part, ...]) -> tuple[float, ...]:
         max(item[5] for item in bounds),
     )
     if not all(math.isfinite(value) for value in result):
-        raise ValueError("preview geometry bounds are non-finite")
+        raise ValueError(
+            internal(
+                "preview geometry bounds are non-finite" + ": " + found_text(result)
+            )
+        )
     return result
 
 
-def _configure_headless_rendering() -> None:
+def configure_headless_rendering() -> None:
+    """Select the available EGL device when rendering without a display."""
     if os.environ.get("DISPLAY"):
         return
     window_name = os.environ.setdefault(
@@ -223,14 +300,20 @@ def _configure_headless_rendering() -> None:
     if "VTK_DEFAULT_EGL_DEVICE_INDEX" in os.environ:
         return
     try:
-        from vtkmodules.vtkRenderingOpenGL2 import vtkEGLRenderWindow
+        from vtkmodules.vtkRenderingOpenGL2 import vtkEGLRenderWindow  # noqa: PLC0415 - EGL is optional until headless rendering
     except ImportError as exc:
         raise RuntimeError(
-            "headless geometry preview requires VTK EGL support"
+            Declared("headless geometry preview", _WHERE_EGL).refusal(
+                "requires VTK EGL support"
+            )
         ) from exc
     device_count = vtkEGLRenderWindow().GetNumberOfDevices()
     if device_count < 1:
-        raise RuntimeError("headless geometry preview found no EGL rendering device")
+        raise RuntimeError(
+            Declared(
+                "headless geometry preview found no EGL rendering device", _WHERE_EGL
+            ).refusal(found_text(device_count))
+        )
     os.environ["VTK_DEFAULT_EGL_DEVICE_INDEX"] = str(device_count - 1)
 
 

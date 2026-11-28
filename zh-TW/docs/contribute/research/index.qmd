@@ -1,0 +1,23 @@
+---
+lang: zh-TW
+title: "研究"
+description: "依模型與版本閱讀數值研究、方法比較及重現設定。"
+sidebar: contribute
+scgsim-kind: "research"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/research/index"
+aliases:
+  - ../../research/index.html
+---
+
+這裡有一項研究：[幾何建構效能](geometry-build/index.qmd)。它顯示 SCGSim 的幾何建構器 SGB 以單一序列行程推導並驗證一顆有 20,000 個特徵的晶片的模型，只要 61.6 s；時間隨特徵數近乎線性成長；在 2,000 個特徵時，直接寫出模型比透過 Gmsh API 建構快約 80 倍。每個 case 都只在一台機器上跑一次。
+
+[]{#研究與工具文件}研究頁針對一個模型，依序寫出問題、設定、結果與解讀，結論放在最前面。SCGSim 一般支援的行為寫在[參考](../../reference/index.qmd)，不在這裡。
+
+## 研究項目 {#研究項目}
+
+| 研究 | 問題 | 範圍 |
+|---|---|---|
+| [幾何建構效能](geometry-build/index.qmd) | SGB 的建構時間與記憶體如何隨晶片大小成長？直接寫出模型比 Gmsh API 省下多少？檢查花多少成本？ | 最多 20,000 個特徵的隨機多邊形 layout，一台機器，每個 case 只跑一次 |
+
+較早一項圓形 pad 的 Palace Eigenmode 研究，它的設定保留在「歷史」：[Circular Pad：研究設定](../history/curved-source-installation.qmd)。它已不適用於 SCGSim 3。

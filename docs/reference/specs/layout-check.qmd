@@ -1,0 +1,211 @@
+---
+title: "Layout check"
+description: "What simulation_drc measures: the classes of fine structure and their limits, the owner of a finding, the check inside mesh(), the inputs each class adds, and the AEDT Eigenmode check."
+scgsim-kind: "contract"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/reference/specs/layout-check"
+---
+
+This page is the reference of the layout check, `simulation_drc`. How to run
+it and read its report is in [Check a layout](../../guides/check-a-layout.qmd).
+
+The Palace check runs in two stages and never meshes:
+
+1. **Geometry stage.** The same preparation and geometry build that the class's
+   `mesh()` runs. A layout that cannot be built is refused with the error the
+   build raises. The stage stops at its first refusal.
+2. **Meshing stage.** Only a model that built goes on. The check measures every
+   edge and face of the built model and reports those too fine for the mesher,
+   all at once. A refusal raises `SimulationDrcError`, whose `report` is the
+   `SimulationDrcReport` of both stages; warnings alone return that report.
+
+## Fine structure the mesher cannot use {#what-the-meshing-stage-reports}
+
+The mesher cannot fill an edge or face a few grid steps long with usable
+tetrahedra: it refines around it, and new badly shaped elements appear. Such
+geometry is valid, so the geometry stage passes it. The meshing stage reads the
+built model's record of its faces and edges, and sorts each such edge or face
+into a class:
+
+| Class | What is measured | Found when | Action |
+|---|---|---|---|
+| A | The column gap of a wall face: the length of the outline edge it stands on, between its two side-wall columns, measured along the edge (an arc's length for a curved wall) | Below 10 grid steps | Refuse |
+| B | The width 2A/P of a horizontal face (A its area, P its perimeter), or its sharpest corner | Below 10 grid steps, or sharper than 1° | Refuse |
+| C | The length of a horizontal edge that bounds no wall | Below 25 grid steps | Warn |
+
+Limits are in grid steps, so they scale with the layout's grid: on a 1 nm grid,
+class A finds a wall face narrower than 10 nm. Each finding gives its size in
+µm and in grid steps. For example, a 200 µm square pad drawn with a 5 nm gap to
+its ground (the refused example in
+[Check a layout](../../guides/check-a-layout.qmd#read-a-refused-report)) has a
+gap face whose width 2A/P is 0.00499997 µm, 5 grid steps: class B, refused.
+The limits and actions are fixed, held in `scgsim.meshing.FineStructureLimits`;
+`simulation_drc` takes no limits of its own.
+
+### Surface-EPR bands {#band-widths}
+
+Every band of a Surface-EPR request must be at least as wide as the class B
+limit, 10 grid steps. The first band is as wide as the first margin, and each
+next band is the difference of two margins: `(0.5, 1.0)` µm gives two bands of
+0.5 µm. A narrower band is refused with `ValueError` before anything is built;
+the message names the spec (or the conductor of `inset_margins_by_entity_um`),
+the band, its width in µm and grid steps, and the limit. A band right at the
+limit can still be refused as class B where it is cut open, for example at the
+die edge: the width 2A/P of a piece that ends is a little less than the band's
+width. Choose bands wider than the limit.
+
+::: {.callout-tip title="Keep each conductor's core wide"}
+With Surface-EPR bands, keep each conductor's core, the region beyond its
+largest margin, much wider than its bands. Where a conductor narrows to exactly
+twice its largest margin, the bands meet down its middle: the model is still
+the exact erosion and meshes, with class C warnings for the short band edges at
+that neck. A little wider, the conductor keeps a sliver of core that class B
+refuses; see [Surface-EPR margins](../supported-scope.qmd#rules-margins).
+:::
+
+### What a finding says {#finding}
+
+Each finding names its stage, class, measure and size, the model's face or
+edge and its physical group, the layout objects and band requests it comes
+from and the layers those objects were drawn on, its location and box in µm,
+why the mesher fails on it, and the fix. Its owner comes from the drawn edges
+and band requests the face or edge was made from:
+
+- **layout**: the feature is bounded only by drawn edges, or it is a band curve
+  within the band's widest margin of such a feature, which the band repeats.
+  Whoever draws the layout fixes it. A fine edge or face that the model builder
+  did not cause is a layout problem: SCGSim reports it and does not repair it.
+- **erosion**: the band offsets of two drawn edges that are not neighbours meet
+  here, as when a conductor is barely wider than twice the margin. The exact
+  erosion has this structure. Change the inset margins given to
+  `plan.set_surface_epr` or the conductor's width. Also a short band edge that
+  offsets a straight drawn edge shorter than its band margin, such as one chord
+  of a curve drawn as a polygon: the fix names that drawn edge, where it runs
+  and how long it is. Declare the arc exactly, or draw it with longer chords.
+- **sgb**: a band curve where the layout has no fine structure. This is a
+  defect of SGB, SCGSim's model builder; report it to SCGSim with the finding.
+  The layout needs no change.
+
+Two drawn edges are neighbours when they share a vertex, including the last
+and first edges of a closed outline.
+
+## The same check inside `mesh()` {#the-same-check-inside-mesh}
+
+`EigenmodeSim.mesh()` and `ElectrostaticSim.mesh()` build the geometry, run
+this meshing stage on the model they built, and only then start the mesher:
+
+- **A refusing finding** raises `SimulationDrcError` before any meshing. Its
+  `report` holds the same findings `simulation_drc` gives for the same model.
+  The built geometry stays in the output folder, and no mesh path is returned.
+- **Warnings only** do not stop `mesh()`; it meshes the model as usual.
+
+`mesh()` checks the model of the plan and of the simulation's own settings,
+such as its route and ports, while `simulation_drc` checks the model of the
+plan it is given, on the route it is given, with the inputs of
+[What the check uses](#what-the-check-uses). For the same plan, the same route
+and profile build the same model in both; when the two models differ, so can
+their findings.
+
+`mesh()` also reports in the same terms when its repair loop stops without a
+clean mesh. The error and the text quality report first give what the meshing
+stage found anywhere in the model: for each class and measure, the number of
+findings and whether they refuse or warn, the smallest size in µm and grid
+steps, the count per owner, and the smallest finding in full with its owner and
+fix. Fine structure can cost the repair loop rounds wherever it is, so these
+findings can matter even at a place that has none of its own. The JSON quality
+report lists every finding under `meshing_stage`. Then come the µm locations of
+the remaining bad elements (`stop_places`) and the findings at those places,
+with their owner and fix. A place is the reach of the refinement the loop
+applied there. A place with no finding is SCGSim's to answer for; when the
+model has findings elsewhere, act on those as well.
+[Tetrahedral mesh quality](mesh-quality.qmd) describes the quality report.
+
+## What the check uses {#what-the-check-uses}
+
+The plan is used as the simulation uses it: its Nets, vacuum region,
+Surface-EPR specs, coupon padding, port sheets and lumped elements. The rest
+is the call's or fixed:
+
+- the route and profile given as `route` and `approximation_profile`, as
+  [`set_route`](physical-representation.qmd#palace-caller-profile) takes them,
+  with its defaults and refusals, and Route B when they are not given;
+- for `EigenmodeSim`, the plan's lumped elements as its lumped ports; a port
+  sheet the plan declares nothing on is not in the model and is not checked;
+- for `ElectrostaticSim`, no terminals, which are not needed before meshing,
+  and no lumped element, which it leaves open.
+
+The report, returned or carried by a refusal, ends with one line per lumped
+element of the plan, under `lumped elements:`, saying what the simulation makes
+of it, and one per port sheet it leaves out.
+
+Without `route`, the check is Route B; `route="A"` alone uses the `thin_film`
+profile, and `route="A"` with a `substrate_face` or `metal_gap_equivalent`
+profile uses that profile and its `film_bindings`. A profile the plan's films
+do not fit is refused by the geometry build, with the error `mesh()` raises.
+Route C is not a Palace route and is refused, as `set_route` refuses it; a
+refusal of the route or the profile names the `simulation_drc` call. A layout
+meant for both routes calls the check once for each.
+
+Without Nets no conductor has one, so any two conductors that touch are refused
+as a contact between different Nets: a flip-chip layout whose indium bumps join
+the two ground planes is refused until both planes and every bump are in one
+Ground Net. A plan with no vacuum region, from the plan or from the stack's
+`VACUUM_REGION`, is refused with the error the simulation raises for it. A
+vacuum padded by (0, 0, 1000) µm ends at the layout's planar extent, so draw
+what sets the extent, such as the die outline or a ground plane. A conductor
+that reaches the extent only at a point, such as a lone round pad with nothing
+drawn around it, is refused with `NonManifoldError`;
+[A conductor that touches the boundary at one point](../known-geometry-problems.qmd#boundary-point-pinch)
+explains why and what to draw.
+
+`simulation_drc()` writes into a temporary folder and removes it. The geometry
+stage adds no rules of its own, so its error is the one that class's `mesh()`
+raises for the same plan and settings. The meshing stage's rules are the
+classes above.
+
+## The AEDT Eigenmode check {#aedt-eigenmode-check}
+
+`scgsim.aedt.EigenmodeSim` builds its model from the same SGB geometry and
+imports it into HFSS as a STEP file, so it has its own `simulation_drc()`. It
+checks the part of that simulation's pipeline that runs before AEDT starts,
+and needs no AEDT, only `scgsim[aedt]` (the STEP export uses the OCP CAD
+kernel):
+
+```python
+from scgsim.aedt import EigenmodeSim
+
+report = EigenmodeSim.simulation_drc(plan, modeling="solid")  # or "thin_film"; no default
+print(report.render_text())
+```
+
+It takes the same plan as the Palace check, with `modeling` in place of `route`
+and `approximation_profile`: `"thin_film"` makes each conductor a sheet (Route
+A), and `"solid"` makes each conductor a solid of its film's thickness (Route
+C). A layout meant for both calls the check once for each. It runs, in the
+order the simulation runs them:
+
+1. the plan's SGB model on the route `modeling` gives, with its Surface-EPR
+   bands;
+2. the STEP export and the check of it before import, the AEDT Region against
+   the plan's vacuum region, and the AEDT names of the Nets and of the lumped
+   elements: two IDs that would become one AEDT name are refused, naming both;
+3. the import's first step: every boundary placed on the faces the import
+   keeps, and every port sheet;
+4. the selection of every Surface-EPR row on those faces.
+
+A step that refuses raises the error that same step raises in
+`prepare_handoff()`, unchanged, so read it as you read a refusal of
+`prepare_handoff()`. AEDT's Region is the plan's vacuum box, so a plan without
+a vacuum region is refused. AEDT meshes the model itself, so there is no meshing stage: the
+`SimulationDrcReport` of `scgsim.aedt` has the geometry stage only, and its
+lumped-element lines. Each lumped element of the plan is checked as the
+simulation realizes it, its sheet cut to the rectangle between its two
+conductors; a port sheet the plan declares nothing on is not in the model.
+An element's values do not shape the geometry. A pass means the model can be built and imported. It does not
+promise the other `modeling`, nor that AEDT meshes or solves the model.
+
+HFSS Driven Terminal and Q3D have no simulation class:
+`prepare_hfss_driven_from_geometry` and `prepare_q3d_from_geometry` build the
+model from the plan's snapshot and run the import's first step on it before
+they write the handoff, so a model the import cannot realize is refused
+there, without AEDT.

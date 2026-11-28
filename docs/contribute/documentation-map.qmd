@@ -1,0 +1,32 @@
+---
+title: "Documentation map"
+description: "Which area of the site holds which kind of page, and the folder each area lives in."
+sidebar: contribute
+scgsim-id: "docs/documentation-map"
+scgsim-kind: "contribution"
+scgsim-status: "CONVERGING"
+---
+
+This page tells you which area of the site holds which kind of page, so a new
+page goes where a reader looks for it. The site has five areas, one per navbar
+item, each with one sidebar; a page belongs to the area of the folder it lives
+in. The Chinese pages have the same paths under `zh-TW/docs/`.
+
+## Areas of the site {#areas}
+
+| Area | What it holds | Folder |
+| --- | --- | --- |
+| Get started | The home page (`README.md`, shown by `index.qmd`), installing, the first simulation and choosing a simulation | `docs/start/` |
+| Guides | One task per page: preparing and checking a layout, computing a quantity with one solver, convergence and reports, running elsewhere, working with a finished run, the flip-chip Xmon worked example and upgrading | `docs/guides/` |
+| Concepts | The physical problem and the model behind each calculation, in plain words | `docs/concepts/` |
+| Reference | What is supported, terms and units, the API index and the detailed specifications | `docs/reference/` |
+| Contribute | The entry page and its reading order, the code map, architecture, ownership by area, provenance, the notebook contract, the internals of each area (`internals/`), research and history; in Chinese only, the SGB design pages | `docs/contribute/` |
+
+A page that moves keeps its old URL and its old section anchors, as
+[DOCS_STYLE.md](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/DOCS_STYLE.md)
+section 3 states; links between pages always use the current path. The PDK
+notebook for each calculation is listed on
+[Choose a simulation](../start/choose-a-simulation.qmd).
+<span id="orcapen-to-scgsim-topics"></span>An OrcaPen page that needs an
+SCGSim topic links the section of the [Reference overview](../reference/index.qmd)
+that covers it.

@@ -1,0 +1,187 @@
+---
+title: "Reading a run: the three views"
+description: "What the run, physics and cost views of a Palace or AEDT result show, how the convergence table is laid out, and what an unknown loss or a missing value looks like."
+scgsim-kind: "contract"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/report-model"
+aliases:
+  - ../../report-model.html
+---
+
+After a run, `show_all_results()` shows three views, in the order you ask
+about a run: **is it trustworthy** (which run, did it converge), **what physics
+came out**, and **what it cost**. This page is the reference of what each view
+shows. [Convergence and reports](../../guides/convergence-and-reports.qmd) is
+the task page: it declares convergence, runs, and reads a real report.
+
+## The three views {#common-envelope}
+
+A resolved Palace run (`ResolvedPalaceResult`) has one call per view:
+
+| Call | Shows |
+|---|---|
+| `show_run_trustworthiness()` | Which run it is and whether it converged: the trust report, [below](#declared-convergence) |
+| `show_physics_quantities()` | The capacitance matrix or the mode frequencies, and Surface EPR |
+| `show_simulation_benchmark()` | The time and size of each pass |
+| `show_all_results()` | All three, in this order |
+
+A resolved AEDT run (`ResolvedRun`) has `show_all_results()`, in the order
+identity (project, setup, requested modes, the last pass and whether it
+completed), numerical evidence, benchmark, physics and details, and
+`show_simulation_benchmark()` on its own
+([AEDT time and memory](aedt-runtime.qmd#native-simulation-benchmark)).
+
+Every view takes `theme="light"` (the default) or `theme="dark"` for its
+figures, and `show_all_results(theme=...)` passes it on. `show_details=True`
+opens the full run record (the receipt, the artifact hashes and the long
+tables) and changes nothing in what is selected. It is taken by
+`show_all_results`, `show_run_trustworthiness` and `show_simulation_benchmark`
+of a Palace run, and by `show_all_results` and `show_simulation_benchmark` of
+an AEDT run; `show_physics_quantities` and `inspect_run_trustworthiness` do
+not take it. For the full details of a run, call
+`show_all_results(show_details=True)`.
+Without Plotly the tables are still shown, and each missing plot is named.
+
+`resolve_palace_result(run_dir, expected_handoff_id=...)` reads only a run
+that completed and whose files match its handoff and receipt. For a run that
+failed or came back in part, use `inspect_run_trustworthiness(run_dir)`: it
+shows what the folder holds and keeps the run's recorded state, so an
+incomplete run is never shown as complete.
+
+## The trust report {#declared-convergence}
+
+This is the view you open to place a Palace run and judge its convergence. It
+shows, in order:
+
+1. **Run Identity**: the problem, the route, the profile, the passes recorded,
+   and the MPI and OpenMP counts. A run that is not complete says so here; a
+   failed run adds a notice with its category.
+2. **Convergence**, when the simulation [declared](palace-electrostatic-sgb.qmd#convergence-declaration)
+   its criteria: one table laid out as AEDT's convergence table. A row is a
+   pass, with its solved elements. A column is a criterion, headed by its name
+   and threshold (`C diagonal`, `≤ 0.5 %`), so each number is read against the
+   threshold above it; a cell holds the criterion's number at that pass and
+   whether it holds (`N/A` for a change at pass 1, which has nothing to compare
+   with). Surface-EPR criteria at one inset stand together under the inset's
+   name, `Surface EPR, inset 0.5 um` over `MA`, `MS` and `SA`: the part of the
+   surfaces 0.5 µm or more from a gap edge. The last column counts the passes
+   in a row at which every criterion held.
+3. **Each quantity against the pass**, then its declared change on a log axis
+   with the threshold as a dashed line. A change carries the name AEDT gives
+   it: `Delta %` for a capacitance, `Max Delta Freq. %` for a mode frequency,
+   `Max Percent Delta` for a participation. The error-indicator figure carries
+   the declared `ErrorIndicator` threshold, or Palace's `Tol` when nothing is
+   declared.
+4. **Surface EPR Convergence**: for each mode or excitation, one figure per
+   interface type, since their participations differ by orders of magnitude,
+   with a line for the whole surfaces and one for each inset; then the
+   declared changes.
+
+A pass is one Palace solve: pass 1 solves the input mesh. A change is measured
+only between two passes read one after the other. How result reading decides
+which folder of `results/palace` holds which pass is in
+[the internals](../../contribute/internals/report-records.qmd#pass-folders).
+
+With `show_run_trustworthiness(show_details=True)`, or
+`show_all_results(show_details=True)`, the report also states the verdict as a
+sentence above the table. For a run [stopped at convergence](palace-electrostatic-sgb.qmd#convergence-stop)
+it reads, for example:
+
+> Converged at pass 4, of the 4 passes read (passes 1 to 4): every criterion
+> held at passes 3 to 4, 2 in a row. Last to hold: C diagonal, from pass 3. No
+> pass was read after it. SCGSim stopped Palace after pass 4: 2 of the 6 passes
+> its limit allows were not run.
+
+A run that did not converge says which criterion fails at the last pass read,
+its worst number, the threshold and how many times the threshold that is, and
+ends: "Palace ended by itself at its limit of 6 passes." A stopped run has no
+final solve of its own: its result, benchmark and cost are those of its last
+pass. A stop that did not complete is a failed run, with the failure category
+`convergence_stop`. `ResolvedPalaceResult.convergence` holds the same verdict
+for a program.
+
+For a run that came back in part, `inspect_run_trustworthiness()` shows the
+same table for the passes the folder holds, and the verdict counts the passes
+read, for example "3 passes read (passes 1, 4 and 5)".
+
+## Physics quantities {#physics-quantities}
+
+Each quantity stays the solver's, with its own units, conductor or port order
+and failure meaning: an electrostatic capacitance matrix, mode frequencies, a
+driven network response, field-energy participation, a Q3D matrix and Q2D
+per-unit-length values are not interchangeable.
+
+### Surface EPR {#eigenmode-epr-presentation}
+
+`show_epr(result, mode=...)` returns a Plotly figure of one mode of an existing
+result; it reads no files and starts no solver. For an AEDT adaptive-history
+result (`ResolvedRun.epr_result()`), `native_pass=` also picks the pass; a
+saved-field result from `analyze_epr` has one evaluation per mode, so `mode=`
+is its only selection. It shows surface and bulk participation apart.
+AEDT shows a junction's inductive and capacitive participation together on a
+junction axis; Palace shows its signed native port participation, which
+depends on the phase convention and is not AEDT's pair. Each surface bar names
+its owner, its interface and whether it is the whole surface or a margin; the
+hover text keeps the source members, the field side and the loss assumptions.
+The colours are fixed per interface: MA, MS and SA.
+
+In the integrated AEDT report, each requested mode at the last pass has a
+ranking of surface owners, separate bulk and junction plots, and a surface
+table with owner, interface, margin, participation, loss and inverse-Q.
+
+[]{#palace-margin-rows}**Margin rows are alternatives, not parts.** A margin
+row covers the part of a surface beyond that margin, so it overlaps the
+whole-surface row and every other margin row of that surface. Read each on its
+own and never add them. `show_physics_quantities()` plots the latest margin
+participation against the margin for each mode or excitation and interface.
+A participation of zero means the native contribution is zero; on its own it
+does not show that a region was left out of the geometry.
+
+The inverse-Q subtotal counts only known whole-surface terms. Unknown losses
+are counted as unknown and margin rows are not added. The views show the evidence;
+they do not claim a total device Q or a lifetime.
+
+When Palace reports an infinite Q for a mode (`+inf` in `eig.csv`), the report
+labels it **native-reported infinite Q** and gives no finite Q for it; the
+frequency and energies of that mode are shown as usual
+([Eigenmode reference](palace-eigenmode.qmd#native-eigenmode-q)).
+
+### Unknown loss is not zero loss {#honesty-rule}
+
+When you give no loss tangent, Palace's configuration still needs a number and
+gets `LossTan=0.0`, but SCGSim records the loss tangent as unknown and shows
+that inverse-Q contribution as unavailable. A loss tangent you give as `0`
+is a known zero and gives a contribution of zero. For example, an MA film with
+no `loss_tangent` shows its participation and no inverse-Q; the same film with
+`loss_tangent=0` shows an inverse-Q of 0. [Surface EPR](../../concepts/surface-epr.qmd)
+explains the loss assumptions, and [Change loss assumptions without
+solving](../../guides/offline-loss.qmd) changes them on a finished result.
+
+## Mesh in the report {#palace-mesh-context}
+
+The Palace report shows the run's mesh summary (`mesh_summary()`): the sizing
+recipe and its settings, the quality threshold and the lowest element quality
+(minSICN, measured on the linear mesh), the node, element and region counts,
+the order of the delivered mesh and the edge lengths. The Eigenmode
+degree-of-freedom number is an estimate, not Palace's count;
+[Tetrahedral mesh quality](mesh-quality.qmd) explains the numbers.
+
+::: {#palace-run-schemas .callout-important title="Palace run folders of older schemas are not read"}
+Result reading reads mesh manifest `schema_version` 2, Palace index map
+`schema_version` 3 and detached EPR results `scgsim.palace.epr-result.v3`. A
+run folder or detached result of an older schema is refused with an error that
+names its version. To read such a study again, prepare it with the current
+package and run it again.
+:::
+
+## What the views do not judge {#research-interpretation-and-retained-observations}
+
+The views report the solver's status and your criteria. Whether a result
+answers your research question is your judgement; keep your criteria and any
+change to them with the run. [Convergence and reports](../../guides/convergence-and-reports.qmd)
+says how to read them for a study.
+
+## Not available {#current-palace-scope}
+
+Palace Driven and Magnetostatic reports, a plot of Palace's `domain-E.csv`
+volume energy, and an export format for a report.

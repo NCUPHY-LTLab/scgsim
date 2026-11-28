@@ -4,15 +4,22 @@ project:
   resources:
   - askr-versions.json
   - MAINTAINING.md
+  - docs/contribute/sgb-design/figures/plotly.min.js
   render:
   - index.qmd
-  - docs/*.qmd
-  - docs/specs/*.qmd
-  - docs/course/*.qmd
-  - docs/tutorials/*.qmd
-  - docs/history/*.qmd
+  - docs/start/*.qmd
+  - docs/guides/*.qmd
+  - docs/guides/xmon/*.qmd
   - docs/concepts/*.qmd
-  - '!docs/concepts/geometry-en.qmd'
+  - docs/reference/*.qmd
+  - docs/reference/api/*.qmd
+  - docs/reference/specs/*.qmd
+  - docs/contribute/*.qmd
+  - docs/contribute/internals/*.qmd
+  - docs/contribute/research/*.qmd
+  - docs/contribute/research/*/*.qmd
+  - docs/contribute/history/*.qmd
+  - docs/contribute/sgb-design/*.qmd
 execute:
   enabled: false
 lang: zh-TW
@@ -28,7 +35,12 @@ askr:
       href: /zh-TW/
 website:
   title: SCGSim
-  description: 從具名版圖、材料與物理模型，準備求解器輸入並解讀電磁計算結果。
+  description: >-
+    以 Python 模擬超導量子位元與量子晶片版圖的電磁特性：用 Palace 與 Ansys HFSS、Q3D、Q2D
+    計算電容矩陣、本徵模態、Q 值與能量參與比（EPR）。
+  image: /docs/assets/scgsim-overview-orca-penguin.png
+  open-graph: true
+  twitter-card: true
   page-navigation: true
   search:
     location: navbar
@@ -40,23 +52,23 @@ website:
   page-footer:
     right:
     - text: 貢獻
-      href: docs/contributing.qmd
+      href: docs/contribute/index.qmd
     left:
     - icon: github
       aria-label: GitHub 原始碼
       href: https://github.com/NCUPHY-LTLab/scgsim
   navbar:
     left:
-    - text: 總覽
+    - text: 開始
       href: index.qmd
-    - text: 教學
-      href: docs/examples.qmd
+    - text: 使用指南
+      href: docs/guides/prepare-a-layout.qmd
     - text: 概念
       href: docs/concepts/problems.qmd
-    - text: 契約
-      href: docs/reference.qmd
+    - text: 參考
+      href: docs/reference/index.qmd
     - text: 貢獻
-      href: docs/contributing.qmd
+      href: docs/contribute/index.qmd
     tools-collapse: false
     tools:
     - icon: github
@@ -64,105 +76,146 @@ website:
       text: GitHub 原始碼
       aria-label: GitHub 原始碼
   sidebar:
-  - id: overview
+  - id: start
     title: 頁面
     style: floating
     collapse-level: 1
     contents:
-    - text: SCGSim overview
+    - text: 首頁
       href: index.qmd
-  - id: tutorial
+    - docs/start/install.qmd
+    - docs/start/first-simulation.qmd
+    - docs/start/choose-a-simulation.qmd
+  - id: guides
     title: 頁面
     style: floating
     collapse-level: 1
     contents:
-    - docs/examples.qmd
-    - docs/course/installation.qmd
-    - section: 依模擬目標
+    - section: 準備與檢查
       contents:
-      - docs/tutorials/capacitance.qmd
-      - docs/tutorials/resonance.qmd
-      - docs/tutorials/resonance-epr.qmd
-      - docs/tutorials/scattering.qmd
-      - docs/tutorials/transmission-line.qmd
-    - section: 準備與檢視模型
+      - docs/guides/prepare-a-layout.qmd
+      - docs/guides/check-a-layout.qmd
+      - docs/guides/inspect-the-source.qmd
+      - docs/guides/inspect-the-prepared-model.qmd
+      - docs/guides/preview-the-geometry.qmd
+    - section: 計算
       contents:
-      - docs/course/working-model.qmd
-      - docs/course/source-observations.qmd
-      - docs/course/aedt-inputs.qmd
-      - docs/course/solver-observations.qmd
-    - section: 執行並讀取結果
+      - docs/guides/capacitance-palace.qmd
+      - docs/guides/capacitance-q3d.qmd
+      - docs/guides/modes-palace.qmd
+      - docs/guides/aedt-cpw-inputs.qmd
+      - docs/guides/modes-hfss.qmd
+      - docs/guides/s-parameters-hfss.qmd
+      - docs/guides/line-parameters-q2d.qmd
+    - section: 結果
       contents:
-      - docs/course/execute.qmd
-      - docs/course/returned-results.qmd
-      - docs/course/aedt-saved-fields.qmd
-      - docs/course/offline-epr.qmd
-    - section: 後端範例
+      - docs/guides/convergence-and-reports.qmd
+    - section: 在其他電腦執行
       contents:
-      - docs/course/palace-electrostatic.qmd
-      - docs/course/aedt-eigenmode.qmd
-      - docs/course/aedt-q3d.qmd
-      - docs/course/aedt-hpc-sweep.qmd
-    - section: 覆晶 Xmon 範例
+      - docs/guides/run-elsewhere.qmd
+      - docs/guides/hpc-sweep.qmd
+    - section: 執行之後
       contents:
-      - docs/tutorial-xmon-input.qmd
-      - docs/tutorial-xmon-palace.qmd
-      - docs/tutorial-xmon-aedt.qmd
-    - section: 歷史參考
+      - docs/guides/saved-fields.qmd
+      - docs/guides/offline-loss.qmd
+    - section: 完整範例：覆晶 Xmon
       contents:
-      - docs/history/aedt-capacitance-pre-v3.qmd
-      - docs/course/palace-surface-bands.qmd
-  - id: concept
+      - docs/guides/xmon/inputs.qmd
+      - docs/guides/xmon/palace.qmd
+      - docs/guides/xmon/aedt.qmd
+    - section: 升級
+      contents:
+      - docs/guides/upgrade.qmd
+  - id: concepts
     title: 頁面
     style: floating
     collapse-level: 1
     contents:
     - docs/concepts/problems.qmd
     - docs/concepts/geometry.qmd
-    - docs/eigenmode-epr.qmd
+    - docs/concepts/routes.qmd
+    - docs/concepts/surface-epr.qmd
     - docs/concepts/model-and-numerics.qmd
-  - id: contract
+  - id: reference
     title: 頁面
     style: floating
     collapse-level: 1
     contents:
-    - docs/reference.qmd
-    - docs/backend-support.qmd
-    - section: 幾何與物理模型
+    - docs/reference/index.qmd
+    - docs/reference/supported-calculations.qmd
+    - docs/reference/supported-scope.qmd
+    - docs/reference/supported-geometry.qmd
+    - docs/reference/known-geometry-problems.qmd
+    - docs/reference/terms-and-units.qmd
+    - docs/reference/api-index.qmd
+    - docs/reference/api/analyze-epr.qmd
+    - section: 詳細規格
       contents:
-      - docs/geometry-sgb.qmd
-      - docs/geometry-preview.qmd
-      - docs/specs/physical-representation.qmd
-      - docs/specs/palace-electrostatic-sgb.qmd
-      - docs/specs/palace-eigenmode.qmd
-    - section: 執行與結果
-      contents:
-      - docs/specs/aedt-runtime.qmd
-      - docs/execution-profiles.qmd
-      - docs/mesh-quality.qmd
-      - docs/report-model.qmd
-      - docs/api-migration.qmd
-      - docs/notebook-ux.qmd
-  - id: contribution
+      - docs/reference/specs/geometry-plan.qmd
+      - docs/reference/specs/physical-representation.qmd
+      - docs/reference/specs/palace-electrostatic-sgb.qmd
+      - docs/reference/specs/palace-eigenmode.qmd
+      - docs/reference/specs/aedt-runtime.qmd
+      - docs/reference/specs/execution-profiles.qmd
+      - docs/reference/specs/mesh-quality.qmd
+      - docs/reference/specs/report-model.qmd
+      - docs/reference/specs/layout-check.qmd
+  - id: contribute
     title: 頁面
     style: floating
     collapse-level: 1
     contents:
-    - docs/contributing.qmd
-    - docs/documentation-map.qmd
-    - docs/ownership.qmd
-    - section: 專案背景
+    - docs/contribute/index.qmd
+    - docs/contribute/code-map.qmd
+    - docs/contribute/architecture.qmd
+    - docs/contribute/ownership.qmd
+    - section: 內部實作
       contents:
-      - docs/architecture.qmd
-      - docs/goals-and-upstream.qmd
-      - docs/provenance.qmd
-      - docs/roadmap.qmd
-    - section: 維護紀錄
+      - docs/contribute/internals/geometry.qmd
+      - docs/contribute/internals/api-owners.qmd
+      - docs/contribute/internals/aedt-runtime.qmd
+      - docs/contribute/internals/geometry-plan.qmd
+      - docs/contribute/internals/report-records.qmd
+    - section: SGB 設計
       contents:
-      - docs/errors.qmd
-      - docs/convergence-status.qmd
+      - docs/contribute/sgb-design/index.qmd
+      - docs/contribute/sgb-design/why-plan-first.qmd
+      - docs/contribute/sgb-design/layered-model.qmd
+      - docs/contribute/sgb-design/arrangement.qmd
+      - docs/contribute/sgb-design/labels-and-dissolution.qmd
+      - docs/contribute/sgb-design/assembly.qmd
+      - docs/contribute/sgb-design/routes.qmd
+      - docs/contribute/sgb-design/cut-families.qmd
+      - docs/contribute/sgb-design/inset-imprint.qmd
+      - docs/contribute/sgb-design/identity.qmd
+      - docs/contribute/sgb-design/slivers.qmd
+      - docs/contribute/sgb-design/validation.qmd
+      - docs/contribute/sgb-design/emission.qmd
+      - docs/contribute/sgb-design/brep-format.qmd
+      - docs/contribute/sgb-design/consumer-contract.qmd
+      - docs/contribute/sgb-design/pipeline-reference.qmd
+      - docs/contribute/sgb-design/decisions.qmd
+    - docs/contribute/provenance.qmd
+    - docs/contribute/notebook-contract.qmd
+    - docs/contribute/documentation-map.qmd
+    - docs/contribute/goals-and-upstream.qmd
+    - section: 研究
+      contents:
+      - docs/contribute/research/index.qmd
+      - section: 幾何建構效能
+        contents:
+        - docs/contribute/research/geometry-build/index.qmd
+        - docs/contribute/research/geometry-build/scaling.qmd
+        - docs/contribute/research/geometry-build/emission-and-load.qmd
+        - docs/contribute/research/geometry-build/validation-cost.qmd
+        - docs/contribute/research/geometry-build/reproduction.qmd
+    - section: 歷史
+      contents:
+      - docs/contribute/history/aedt-capacitance-pre-v3.qmd
+      - docs/contribute/history/curved-source-installation.qmd
 format:
   askr-html:
+    canonical-url: true
     html-math-method: mathjax
     respect-user-color-scheme: true
     toc: true
@@ -170,5 +223,5 @@ format:
     toc-location: right
     page-layout: article
     code-copy: true
-    code-overflow: wrap
+    code-overflow: scroll
     smooth-scroll: true
